@@ -184,8 +184,9 @@ Each space hears about each signal at most once per `repeat_minutes`. Agents
 started later are warned at the next sample.
 
 Warnings stop and remove nothing, and a failed reading warns about nothing.
-Shoal does not check warning thresholds against stop thresholds. A warning at
-or above a stop threshold arrives with the stop.
+Shoal does not check the warning thresholds of memory in use, CPU and disk
+against stop thresholds. A warning at or above a stop threshold arrives with
+the stop.
 
 ## Work slice
 

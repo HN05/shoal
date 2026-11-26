@@ -1,139 +1,287 @@
 # Overload protection
 
-This file covers how the daemon protects the machine's memory, CPU and disk, by
-warnings and by stopping work in one order.
+This file covers how the daemon protects the machine's memory, CPU and disk:
+the signals it reads, the warnings it sends and the order it stops work in.
+[Overload protection and stops](../reference/load.md) says what each threshold
+and stop does, and the
+[configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#overload)
+gives each option.
 
-Overload protection is configured machine-wide: memory is enabled by default,
-CPU is opt-in and requires sustained aggregate busy time, which leaves out niced
-time: more work on a busy CPU only runs slower, and work at low priority, such
-as CI jobs or the user's own niced work, takes only cores nothing else wants.
-One `load` setting (`light`, `balanced`, `full`) sets the default CPU and memory
-thresholds, so a user chooses how hard to load the machine without tuning each
-percentage; explicit thresholds override it. On Linux, memory protection acts on
-stall time, not only on available memory: with swap, the kernel keeps
-`MemAvailable` just short of any threshold while swap fills and the machine
-thrashes, so the threshold came with the OOM, if at all. Pressure stall
-information is the main signal; a measure of RAM and swap on disk in use
-together is the backstop, for an allocation too fast to stall first and for
-kernels without it. Zram swap is not capacity: RAM holds its compressed pages,
-so counting it as memory would put the backstop's level past the point where the
-machine stops responding.
-Either signal counts: critical when either is, safe only when both are. Stall
-stops work only once it has held, so one burst stops nothing. Its window ends
-only at a reading below the stop level, never because a sample came late: the
-kernel's ten-second average stays valid however late Shoal reads it, and a
-thrashing machine is where samples come late. A late sample does end the
-windows of CPU use and of health, since CPU use is a delta between samples and
-a starved daemon is no healthy one. The monitor samples and decides on an OS
-thread of its own, which reads no store, and hands each stop and warning to
-the async runtime without waiting on it: on a thrashing machine the runtime
-is starved too, and a decision that waited on store reads came too late. It
-hands over one stop at a time and, once that stop has stopped something,
-waits out the cooldown with fresh windows. A stop that waited for the runtime
-acts on the pressure the latest sample found, and stops nothing once a sample
-found none, or once a reload changed protection since that sample. While memory is pressed it logs
-the readings it decides on, rate-limited, so the daemon log traces an
-incident. Protection stops
-work in one stop order, by what a stop loses, which `shoal-schedule` computes
-beside the queue order from the same snapshot, so one policy defines both: CI
-jobs first, newest first, since a rerun loses nothing and the newest has done
-the least; then demos, which Shoal restarts; then connected tracked agents,
-stopped through their execution wrappers, preserving work and leases. An agent
-comes only after every running agent below it in the space tree, light ones
-included, so a coordinator never stops while its children work. Among the agents
-free to go, heavy ones go before light ones, then the queue's rank reversed: the
-agent the user interacted with longest ago, or never, first, since the user is
-likely working with the one they touched last, then idle ones, since an idle
-agent loses no turn, and working ones only when no idle one is left, each the
-lowest priority and rank first, so the work the queue would start last gives way
-first; within a space the agent idle longest, or the newest working one. The
-daemon, places and workers are never in it. Each consumer takes the first entry
-that frees what it needs: load the first holding memory worth freeing, passing
-over a light agent or a space with negligible memory for its own sake; disk
-every agent; making room an idle agent with a slot and no running agent below
-it, since putting an idle agent to sleep must never stop working ones. Stopping
-an agent stops every running agent below it first. A CI job load stops ends as
-one whose runner outlived its run does and reruns on its forge once its run has
-finished, whatever this machine's readings: the forge offers it to every runner,
-each admitting it through its queue's normal admission, so load never costs a
-job, only time. On Linux the kernel's OOM killer follows the same order: it
-picks its victim by `oom_score_adj`, which left alone put the daemon's service
-at 200 above agents' builds at 100, so it killed a small shoal process before a
-large rustc. The daemon maps places in the order onto scores from 900 down to
-200 and lowers its own to the floor its service manager allows without
-privilege, which differs between machines, so the unit cannot state one; a CI
-job's scope has the kernel kill the whole job, which fails anyway, and so frees
-all of it. `memory_limit` caps Shoal's work, not the machine: on Linux
-the kernel enforces it on `shoal-work.slice`, with `MemoryHigh` at the limit, so
-work above it is throttled, reclaimed and swapped out before anything dies, and
-`MemoryMax` a twentieth above it as the last resort, whose kills stay inside the
-slice, so the desktop and the daemon keep their memory whatever work does. The
-daemon sets both at runtime rather than in a unit file, so the cap follows
-`shoal config reload` and nothing outlives the boot. On Linux, where a machine
-is protected only under a limit, `load` sets one where the config leaves it
-out, a share of RAM that leaves room for zram, whose compressed pages RAM holds
-outside the slice; `"none"` is the only way to run without one. macOS has no
-default, since its kernel enforces nothing and protection already reads its
-own memory pressure, so a default there would only make admission count less
-memory; nor has a development build, which leaves the slice to the installed
-Shoal. Protection and admission
-count the limit as the machine's memory, and read the slice's own stall, so
-Shoal warns and stops work before the kernel throttles it; the slice's memory
-leaves out its page cache, which throttling reclaims first and which would
-otherwise read as full. macOS has no such control, so there the limit holds only
-through protection and admission, on the usage Shoal samples. The wrapper, not
-the daemon, reads its command's scope, since it learns of the command's end
-first, and polls it rather than watching it: a scope the kernel kills whole is
-gone in moments however it is watched, so a SIGKILL that comes with a kill
-counted on the slice since the last read names the kill instead. A scope's peak
-is read as what it holds beside its page cache, not from `memory.peak`, which
-counts the cache a build reads and would make every job look as large as the
-files it touched. Whether a terminal shows an agent plays no part, since a host
-such as Herdr may count every agent as shown and a user who attaches may walk
-away. An idle agent with a running subagent, which its hooks report, or
-processes outside its process group counts as working, since their completion
-may start its next turn, and so does one without turn reports. A subagent whose
-stop is lost counts until the agent's session starts again or it exits, or,
-where the agent's proxy has passed its subagents' requests in the current
-session, until none has for an hour, which leaves room for a long tool call. Its
-hook waiting for the next update runs there too, marked so that it does not
-count. Once the wrapper reports the stop, the daemon also stops the agent's
-identity-verified processes outside its process group, such as background shell
-commands, since automatic and manual restores both require the execution proven
-stopped. When the proof fails, the waiting wrapper stays connected and restores
-once it holds, instead of leaving an unknown execution.
+## Signals
 
-The daemon also samples what each workspace's processes use, attributed by the
-workspace identity in their environment, so the user can see which workspace
-loads the machine; admission learns a settled agent's memory from it, and
-protection and warnings do not use it yet. A workspace's containers count in its
-usage, read from the runtime's stats by the project name Shoal gave them, so a
-settled agent's memory includes the services its work started; other processes
-that leave the workspace's environment, such as work handed to a shared server,
-count for the machine only. Warnings come first: below each enabled protection's
-stop threshold, the daemon queues an alert for every space with a running agent,
-so agents know of the load before anything stops. A memory or CPU warning is a
-heads-up that asks for no action, so agents keep to their work. Warnings repeat
-per signal and space only after an interval and never stop, clean up or notify.
-A memory or CPU warning never wakes an idle agent, since it gives the agent
-nothing to do and a woken turn costs tokens; it waits for the agent's next
-update or turn. A disk warning wakes a workspace's agent, since deleting files
-frees space, but only in its own worktree and only whole build outputs: other
-workspaces' files and the preset files beside them are in use by agents it
-cannot see, and part of a build's output leaves records the build tool takes as
-fresh for files that are gone. A chat's agent, with no worktree, has nothing to
-delete, so its disk warning waits for its next turn too. Their thresholds are
-not validated against stop thresholds, so lowering a stop threshold never
-invalidates an existing configuration. Disk protection reads available space on
-filesystems holding workspaces or daemon state. Below its cleanup threshold it
-first deletes the copies of files fetched from other machines and the Xcode data
-that removed workspaces left. It then removes idle cleanup candidates there
-without their idle delay, through the same removal path and repository
-settings. After that it empties shared caches nothing uses, then deletes the
-results removed workspaces handed back. When that cannot keep space above its stop
-threshold, it stops every agent as overload protection does and every other
-tracked execution as manual stop does, since any of them may be writing. Agents
-restore once space reaches the cleanup threshold, so restores cannot refill the
-disk at once; commands stay explicit. A failed reading authorizes nothing on its
-filesystem and blocks recovery; readings of other filesystems still protect
-them.
+Protection is configured for the whole machine. Memory protection is on by
+default. CPU protection is opt-in.
+
+One `load` setting, `light`, `balanced` or `full`, sets the default CPU and
+memory thresholds. A user thus chooses how hard to load the machine without
+tuning each percentage. An explicit threshold overrides it.
+
+### CPU
+
+CPU protection acts only on busy time that lasts. More work on a busy CPU only
+runs slower, so a short peak is no reason to stop anything.
+
+CPU busy time leaves out niced time. Work at low priority, such as CI jobs or
+the user's own niced work, takes only the cores nothing else wants.
+
+### Memory
+
+On Linux, memory protection acts on stall time, not only on available memory.
+With swap, the kernel keeps `MemAvailable` just short of any threshold while
+swap fills and the machine thrashes. A threshold on it thus triggers with the
+OOM kill, if at all.
+
+Pressure stall information is the main signal. Memory in use, RAM and swap on
+disk together, is the backstop. It catches an allocation too fast to stall
+first, and it serves kernels without stall information.
+
+Zram swap is no capacity, since RAM holds its compressed pages. Counting it as
+memory would put the backstop's level past the point where the machine stops
+responding.
+
+Either signal counts. Memory is critical when either signal is, and safe only
+when both are.
+
+### Windows and late samples
+
+Stall stops work only once it has held for its window, so one burst stops
+nothing. Only a reading below the stop level ends that window, never a late
+sample. The kernel's ten-second average stays valid however late Shoal reads
+it, and a thrashing machine is where samples come late.
+
+A late sample does end the windows of CPU use and of health. CPU use is a
+difference between two samples, and a daemon starved of time is not healthy.
+
+## The monitor
+
+The monitor samples the machine and decides on an OS thread of its own, which
+reads no store. On a thrashing machine the async runtime is starved too, and a
+decision that waited on store reads came too late. The monitor hands each stop
+and warning to the runtime without waiting on it.
+
+The monitor hands over one stop at a time. Once a stop has stopped something,
+the monitor waits out the cooldown and starts its windows again.
+
+A stop that waited for the runtime acts on the pressure the latest sample
+found. It stops nothing once a sample found no pressure, or once a reload
+changed protection since that sample.
+
+While memory is under pressure, the monitor logs the readings it decides on,
+at a limited rate. The daemon log then traces how an incident built up.
+
+## Stop order
+
+Protection stops work in one stop order, by what each stop loses.
+`shoal-schedule` computes it beside the queue order from the same snapshot, so
+one policy defines both.
+
+The order holds three kinds of work:
+
+1. CI jobs, newest first. A rerun loses nothing, and the newest job has done
+   the least.
+2. Demos, which Shoal restarts.
+3. Connected tracked agents. A stop goes through the agent's execution wrapper
+   and keeps its work and leases.
+
+The daemon, places and workers are never in the order. A one-shot run, such as
+a review, stops before anything in it, as [Reviews](reviews.md) says.
+
+### Agents
+
+An agent comes only after every running agent below it in the space tree,
+light ones included. A coordinator thus never stops while its children work.
+
+Among the agents free to go, each rule decides only where the ones before it
+tie:
+
+- A heavy agent goes before a light one.
+- The queue's rank decides in reverse, so the work the queue would start last
+  gives way first:
+  - The agent the user interacted with longest ago, or never, goes first. The
+    user is likely working with the agent they touched last.
+  - An idle agent goes before a working one, since an idle agent loses no
+    turn.
+  - The agent of the lowest priority and rank goes first.
+- Within a space, the agent idle longest goes first, or else the newest
+  working one.
+
+The order reads the user's [interaction](agent-lifecycle.md#interaction), never
+whether a terminal shows the agent. A host such as Herdr may count every agent
+as shown, and a user who attaches may walk away.
+
+### Idle and working
+
+An idle agent counts as working while its work may start its next turn. That
+holds while a subagent runs, as its hooks report, or while a process of the
+agent runs outside its process group.
+[Subagents](../reference/agents.md#subagents) says how long a subagent whose
+stop is lost counts. The agent's hook that waits for the next update runs
+outside its process group too, marked so that it does not count.
+
+An agent without turn reports counts as working.
+
+### What each stop must free
+
+Each consumer of the order takes the first entry that frees what it needs:
+
+- Load protection takes the first entry that holds memory worth freeing. It
+  never stops a light agent for its own sake, nor a space whose processes use
+  negligible memory at the latest usage sample.
+- Disk protection takes every agent.
+- [Making room](agent-lifecycle.md#making-room) takes an idle agent with a
+  slot and no running agent below it. Putting an idle agent to sleep must
+  never stop working ones.
+
+Stopping an agent stops every running agent below it first.
+
+## Stopping an agent
+
+The wrapper ends the agent's process group. Once the wrapper reports the stop,
+the daemon stops the agent's processes outside that group, such as background
+shell commands, that it verifies by their identity. Automatic and manual
+restores both need the execution proven stopped.
+
+When that proof fails, the waiting wrapper stays connected. It restores the
+agent once the proof holds, instead of leaving an execution nobody knows.
+
+## Stopped CI jobs
+
+A CI job that load protection stops reruns on its forge once its run has
+finished, whatever this machine's readings. The forge offers the job to every
+runner, and each runner's queue admits it as any other job. Load thus never
+costs a job, only time. [Runner and triggers](runner.md) says how Shoal ends
+the job without cancelling its run.
+
+## OOM scores
+
+On Linux, the kernel's OOM killer follows the stop order. The kernel picks its
+victim by `oom_score_adj`. Left alone, that put the daemon's service at 200,
+above agents' builds at 100, so the kernel killed a small `shoal` process
+before a large `rustc`.
+
+The daemon therefore maps the entries of the order onto scores from 900 down
+to 200. It lowers its own score to the floor its service manager allows
+without privilege. That floor differs between machines, so the service unit
+cannot state it.
+
+The kernel kills a CI job's scope whole. A job that loses a process fails
+anyway, so killing all of it frees all its memory.
+
+## Memory limit
+
+`memory_limit` caps Shoal's work, not the machine. On Linux the kernel enforces
+it on `shoal-work.slice`, where [Execution](execution.md#work-commands) puts the
+work:
+
+- `MemoryHigh` sits at the limit. Work above it is throttled, reclaimed and
+  swapped out before anything dies.
+- `MemoryMax` sits a twentieth above it, as the last resort. Its kills stay
+  inside the slice, so the desktop and the daemon keep their memory whatever
+  the work does.
+
+The daemon sets both at runtime rather than in a unit file. The cap thus
+follows `shoal config reload`, and nothing of it outlives the boot.
+
+### The default limit
+
+On Linux a machine is protected only under a limit. `load` therefore sets one
+where the config leaves it out. The limit is a share of RAM that leaves room
+for zram, whose compressed pages RAM holds outside the slice. `"none"` is the
+only way to run without a limit.
+
+macOS has no default limit. Its kernel enforces none, and protection already
+reads its own memory pressure, so a default would only make admission count
+less memory. A development build has none either, since it leaves the slice to
+the installed Shoal.
+
+### Protection under a limit
+
+Protection and admission count the limit as the machine's memory, and read the
+slice's own stall. Shoal thus warns and stops work before the kernel throttles
+it.
+
+The slice's memory leaves out its page cache. Throttling reclaims that cache
+first, and counting it would make the slice read as full.
+
+macOS has no such control. There the limit holds only through protection and
+admission, on the usage Shoal samples.
+
+## Work usage
+
+The daemon samples what each workspace's processes use, found by the workspace
+identity in their environment. The user can then see which workspace loads the
+machine. Admission learns a settled agent's memory from these samples, and
+load protection reads them to pass over a space that frees too little.
+
+A workspace's containers count in its usage. The daemon reads them from the
+container runtime's stats, by the project name Shoal gave them. A settled
+agent's memory thus includes the services its work started.
+
+Work that leaves the workspace's environment, such as work handed to a shared
+server, counts only for the machine.
+
+## Kills and peaks
+
+The wrapper, not the daemon, reads its command's scope, since the wrapper learns
+of the command's end first.
+
+The wrapper polls the scope rather than watching it. A scope the kernel kills
+whole is gone in moments, however it is watched. A SIGKILL that comes with a
+kill the slice counted since the last read therefore names the kill.
+
+A scope's peak is what it holds beside its page cache. `memory.peak` counts the
+cache a build reads, and would make every job look as large as the files it
+touched.
+
+## Warnings
+
+Warnings come before stops. Below each enabled protection's stop threshold,
+the daemon queues an alert for every space with a running agent. Agents thus
+know of the load before anything stops.
+
+A memory or CPU warning is a heads-up that asks for no action, so agents keep
+to their work. It never wakes an idle agent: it gives the agent nothing to do,
+and a woken turn costs tokens. It waits for the agent's next update or turn.
+
+A disk warning wakes a workspace's agent, since deleting files frees space. It
+asks the agent to delete only in its own worktree, and only whole build
+outputs:
+
+- Other workspaces' files, and the preset files beside them, are in use by
+  agents it cannot see.
+- Part of a build's output leaves records that the build tool takes as fresh
+  for files that are gone.
+
+A chat's agent has no worktree and nothing to delete, so its disk warning waits
+for its next turn.
+
+A warning repeats per signal and space only after an interval. Warnings never
+stop, clean up or notify.
+
+Shoal does not check the warning thresholds of memory in use, CPU and disk
+against stop thresholds. Lowering a stop threshold thus never invalidates
+their configuration.
+
+## Disk protection
+
+Disk protection reads the space available on each filesystem that holds
+workspaces or daemon state. A failed reading authorizes nothing on its
+filesystem and blocks recovery. The readings of other filesystems still
+protect them.
+
+### Disk cleanup
+
+Below its cleanup threshold, disk protection frees space in the order
+[Disk cleanup](../reference/load.md#disk-cleanup) gives. It removes idle
+cleanup candidates without waiting out their idle delay, through the same
+removal path and repository settings as idle cleanup.
+
+### Disk stops
+
+When cleanup cannot keep space above the stop threshold, disk protection stops
+every tracked execution. It stops agents as load protection does, and every
+other execution as `shoal stop` does, since any of them may be writing.
+
+Agents restore once space reaches the cleanup threshold, so restores cannot
+fill the disk again at once. Other commands stay stopped until the user runs
+them again.

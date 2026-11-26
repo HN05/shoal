@@ -95,7 +95,8 @@ A wrapper starts the command it runs for work in a scope of its own in
 `shoal-work.slice`, through `systemd-run --scope`, wherever the wrapper runs.
 An agent in a terminal host's place thus keeps that terminal but leaves the
 host's control group for one Shoal controls. The slice holds Shoal's work, and
-only that, for the [memory limit](protection.md) and the kernel's accounting.
+only that, for the [memory limit](protection.md#memory-limit) and the
+kernel's accounting.
 
 `systemd-run --scope` runs the command in its own place. The command's PID,
 process group, terminal and environment stay as a direct start leaves them.
@@ -110,7 +111,7 @@ what a command leaves there stays tied to the space after the command ends.
 The service and every scope Shoal starts set `OOMPolicy=continue`. An OOM kill
 then ends only the process the kernel chose, and only the daemon's own death
 fails the service. A CI job's scope is the exception: the kernel kills all of
-it with any one of its processes, as [overload protection](protection.md)
+it with any one of its processes, as [OOM scores](protection.md#oom-scores)
 explains.
 
 ## Process identity
