@@ -1,10 +1,4 @@
-//! What the spaces need of the rest of the daemon, which implements it: the
-//! operations it runs in workers, the forges of their repositories and the
-//! issues, PRs and CI runs they link, the agents that work in them and the
-//! queue that starts them, the registered repositories and their settings,
-//! the machines of the hub, the CI jobs and reviews that run in workspaces,
-//! their leases and demos, the coordination between spaces, and, in their
-//! own transactions, what other subsystems record of a space.
+//! What the spaces need of the rest of the daemon, which implements it.
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -72,55 +66,46 @@ use crate::scope::Caller;
 use crate::target_checks::TargetCheck;
 use shoal_core::launches::SpaceRepository;
 
-/// The operations the daemon runs in workers of their own, and how it
-/// answers a request that failed.
+/// The operations the daemon runs in workers of their own.
 pub trait Operations: Send + Sync {
-    /// The check of the space `operation` names, as its kind declares it;
-    /// none for a kind that never names one.
     fn target_check(&self, operation: &Operation) -> Option<TargetCheck>;
 
-    /// The error body of a request that failed with `error`.
     fn failure(&self, error: &anyhow::Error) -> Body;
 }
 
 /// The forges of the spaces' repositories, and the issues, PRs and CI runs
 /// spaces link on them.
 pub trait Links: Send + Sync {
-    /// The workspace's HEAD: its branch's commit, checking it is still on
-    /// the branch, or for a workspace at a commit its detached HEAD,
-    /// checking it is still detached.
+    /// Checks that the workspace is still on its branch, or still detached
+    /// for a workspace at a commit.
     fn current_head<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<CommitId>>;
 
-    /// The repository `space` acts in: its own, or the registered one a
-    /// chat without one acts in.
+    /// The space's own repository, or for a chat without one the registered
+    /// repository it acts in.
     fn acting_repository<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<RepositoryId>>;
 
-    /// Where the forge of `space` is read: the checkout of the repository a
-    /// chat without one acts in, the checkout a workspace whose worktree is
-    /// still to be created reads in its place, or else where it works.
+    /// Where the space's forge is read: for a chat without a repository the
+    /// checkout it acts in, for a workspace without its worktree yet its
+    /// checkout, and else where the space works.
     fn origin_path<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<PathBuf>>;
 
-    /// The title of the PR `input` names in the repository whose origin
-    /// `checkout` has, read with the user's logins.
+    /// Reads the PR with the user's logins.
     fn read_pull_title<'a>(
         &'a self,
         checkout: &'a Path,
         input: &'a ItemInput,
     ) -> BoxFuture<'a, Result<String>>;
 
-    /// The warning for merging the HEAD of the workspace `selector` names
-    /// into the default branch, as its last conflict check found it.
+    /// The warning the workspace's last conflict check found; no new check
+    /// runs.
     fn branch_merge_warning<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Option<MergeWarning>>>;
 
-    /// The forge of the repository `space` acts in.
     fn space_forge<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<ForgeRepo>>;
 
-    /// The state of the PRs `pr_cleanup` watches and of the assigned
-    /// `issues`, looked up on the forge of `remote`, the space's origin
-    /// remote.
+    /// `remote` is the space's origin remote.
     fn linked_states<'a>(
         &'a self,
         remote: &'a Result<Option<String>>,
@@ -128,16 +113,13 @@ pub trait Links: Send + Sync {
         issues: &'a [issue::Registration],
     ) -> BoxFuture<'a, (Vec<PrStatus>, Vec<IssueStatus>)>;
 
-    /// The settings of `space` in the repository it acts in.
     fn acting_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>>;
 
-    /// Settle the agent account on the issues of the space `id` once it
-    /// can be.
+    /// Runs in the background and settles once the account can be.
     fn settle_agents(&self, id: &SpaceId);
 
-    /// Apply `action` as `account` to the item `number` of `kind`, at
-    /// `url`, on `forge`, for the space `id`, recording it as the space's
-    /// own change.
+    /// Records the action as the space's own change, which its watch leaves
+    /// out.
     fn apply_own<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -147,9 +129,8 @@ pub trait Links: Send + Sync {
         action: &'a Action,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Add to each mark what its item leaves out of the repository's
-    /// conventions, read as the workspace's agent account. Its description
-    /// was checked when Shoal opened it, so only its labels are.
+    /// Reads as the workspace's agent account. Only labels are checked: Shoal
+    /// checked the description when it opened the item.
     fn check_conventions<'a>(
         &'a self,
         space: &'a Space,
@@ -157,25 +138,20 @@ pub trait Links: Send + Sync {
         marks: &'a mut [ReviewMark],
     ) -> BoxFuture<'a, ()>;
 
-    /// The explicitly selected item, linked or not, of the repository whose
-    /// origin `checkout` has, or of a CI run of any.
+    /// The item may be linked or not, and a CI run may be of any repository.
     fn explicit_item<'a>(
         &'a self,
         checkout: &'a Path,
         selection: &'a Selection,
     ) -> BoxFuture<'a, Result<Option<ItemRef>>>;
 
-    /// Look up the runs of the commit `pushed` left, as the read that sees
-    /// a PR merge does, where `[pr] watch_merge_runs` is on.
+    /// Does nothing unless `[pr] watch_merge_runs` is on.
     fn follow_pushed_merge(&self, pushed: PushedMerge) -> BoxFuture<'_, Result<()>>;
 
-    /// Hand the assignees the space `id` stands for to the machine it moved
-    /// to: forget them for it, and Shoal's assignments no other space here
-    /// links, so ending it here takes none off the forge.
+    /// Forgets the space's assignees, and Shoal's assignments no other space
+    /// here links, so that ending the space here takes none off the forge.
     fn hand_over_assignees<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
-    /// The open issues the forge records as blocking the issue `item` names
-    /// in the repository of `context`, by number or URL.
     fn issue_blockers<'a>(
         &'a self,
         context: &'a ItemContext,
@@ -183,8 +159,7 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<Blocker>>>;
 
-    /// The open issue `item` names in the repository of `context`, by
-    /// number or URL, or with `closed` one in any state.
+    /// Refuses a closed issue unless `closed` is set.
     fn issue_details<'a>(
         &'a self,
         context: &'a ItemContext,
@@ -193,48 +168,42 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<IssueDetails>>;
 
-    /// The forge of the repository whose origin `checkout` has, with the
-    /// number and canonical URL of the issue `input` names there.
     fn issue_forge<'a>(
         &'a self,
         checkout: &'a Path,
         input: &'a ItemInput,
     ) -> BoxFuture<'a, Result<(ForgeRepo, ItemRef)>>;
 
-    /// The space's assigned issues in the order they were assigned.
+    /// In the order they were assigned.
     fn issue_registrations<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Vec<issue::Registration>>>;
 
-    /// Hold the PR gates of the space `id`, of every space below it and of
-    /// `others`, from before a change the space makes through Shoal.
+    /// Locks the gates of the space, every space below it and `others`. Take
+    /// them before a change the space makes through Shoal.
     fn lock_change_gates<'a>(
         &'a self,
         id: &'a SpaceId,
         others: &'a [&'a SpaceId],
     ) -> BoxFuture<'a, Result<shoal_daemon_base::gates::PrGuard>>;
 
-    /// Whether the space `id` looks for the runs of a merge or follows one
-    /// it linked that has not finished.
     fn awaits_merge_runs<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
-    /// Whether a PR whose merges the space `id` follows merged on the forge
-    /// while no read of Shoal's own has seen it.
+    /// Whether a PR whose merges the space follows merged on the forge
+    /// before any read of Shoal's saw it.
     fn merged_unseen<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
-    /// How the space `selector` names merges its work, from the state the
-    /// forge reports for each PR it links as assigned or opened.
+    /// Decided from the forge state of each PR the space links as assigned
+    /// or opened.
     fn merge_path<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<MergePath>>;
 
-    /// The PR registration of the space `id`, refusing an unreadable one.
+    /// Refuses an unreadable registration.
     fn pr_registration<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Option<pr::Registration>>>;
 
-    /// The PR `item` names in the repository of `context`, with where its
-    /// head is.
     fn pull_request<'a>(
         &'a self,
         context: &'a ItemContext,
@@ -242,9 +211,7 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<PullRequest>>;
 
-    /// The CI run a launch starts on, which `run` names by its URL or the
-    /// number in it, read from the repository of `context` as `caller` may
-    /// link it.
+    /// `run` is a URL or the number in it, read as `caller` may link it.
     fn launch_run<'a>(
         &'a self,
         context: &'a ItemContext,
@@ -252,8 +219,6 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Run>>;
 
-    /// Link the CI run `run` to the space `selector` names as related, as
-    /// `caller` links it.
     fn link_related_run<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -261,21 +226,18 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// The canonical URL, title and labels of the open issue `input` names
-    /// in the repository whose origin `checkout` has, read with the user's
-    /// logins. A closed or unknown issue is refused.
+    /// Reads the issue with the user's logins and refuses a closed or
+    /// unknown one.
     fn read_open_issue<'a>(
         &'a self,
         checkout: &'a Path,
         input: &'a ItemInput,
     ) -> BoxFuture<'a, Result<OpenIssue>>;
 
-    /// Take the user's logins `dropped` names off their issues where Shoal
-    /// added them and no space links the issue for the same login any
-    /// longer. Returns why each one that stays did.
+    /// Leaves a login that another space still links the issue for. Returns
+    /// why each kept login stays.
     fn release_assignees(&self, dropped: Vec<Dropped>) -> BoxFuture<'_, Vec<String>>;
 
-    /// Link `links` to the space `id` again, as `caller` assigns them.
     /// Each failure becomes a warning.
     fn relink_space<'a>(
         &'a self,
@@ -284,18 +246,16 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Vec<String>>;
 
-    /// Stack `stacked` past the base `restack` names: retarget its PRs that
-    /// still target a merged head, record its new base and queue a
-    /// `base_merged` update for its next watch.
+    /// Retargets the PRs that still target a merged head, records the new
+    /// base and queues a `base_merged` update for the next watch.
     fn restack<'a>(
         &'a self,
         stacked: &'a WorkspaceRef,
         restack: &'a Restack<'_>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// The items `selection` names in the `target` repository; with
-    /// `elsewhere`, an issue, PR or CI run URL of another repository selects
-    /// that item.
+    /// With `elsewhere`, an issue, PR or CI run URL of another repository
+    /// selects that item.
     fn select_context_items<'a>(
         &'a self,
         target: &'a RepoTarget,
@@ -304,7 +264,7 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Selected>>;
 
-    /// The explicitly selected item, or the space's linked items of the
+    /// The explicitly selected item, or else the space's linked items of the
     /// selected kind, with every linked run.
     fn selected_items<'a>(
         &'a self,
@@ -312,8 +272,7 @@ pub trait Links: Send + Sync {
         selection: &'a Selection,
     ) -> BoxFuture<'a, Result<Vec<ItemRef>>>;
 
-    /// Move the space's open PRs at `urls` into or out of draft as its
-    /// agent account. The caller holds the gates
+    /// Acts as the space's agent account. The caller holds the gates
     /// [`Self::lock_change_gates`] takes for the space.
     fn set_draft<'a>(
         &'a self,
@@ -322,10 +281,8 @@ pub trait Links: Send + Sync {
         draft: bool,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Link the issue `input` names to the space `selector` names as
-    /// `caller` assigns it, an agent for a scoped one and else the user,
-    /// assigning it on the forge where no assignee is recorded for it;
-    /// returns the warnings that gives.
+    /// Assigns it on the forge where no assignee is recorded for it. A scoped
+    /// `caller` assigns as an agent, else as the user.
     fn set_issue<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -334,25 +291,21 @@ pub trait Links: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<Vec<String>>>;
 
-    /// Change the PR registration of the space `selector` names under its
-    /// PR gate.
+    /// Runs under the space's PR gate.
     fn set_pr<'a>(
         &'a self,
         selector: &'a SpaceSelector,
         action: pr::Action,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Settle the agent account on `issues`, which the removed `space`
-    /// linked as assigned. Returns why each one that could not be settled
-    /// was not.
+    /// Returns why each issue that could not be settled was not.
     fn settle_removed_agents<'a>(
         &'a self,
         space: &'a Space,
         issues: &'a [ItemRef],
     ) -> BoxFuture<'a, Result<Vec<String>>>;
 
-    /// Unlink the relation's items of `kind`, or only the one `input` names;
-    /// one must be linked.
+    /// Refuses when nothing is linked.
     fn unlink_items<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -364,21 +317,18 @@ pub trait Links: Send + Sync {
 
 /// The agents that work in spaces and the queue that starts them.
 pub trait Agents: Send + Sync {
-    /// Whether the agent queue holds back every start, as for a shutdown or
-    /// a daemon stop.
+    /// Whether the queue holds back every start, as for a shutdown or a
+    /// daemon stop.
     fn agents_suspended(&self) -> bool;
 
-    /// Whether the blockers of the launch waiting to open the workspace `id`
-    /// let it start; none without one.
+    /// None when no launch waits to open the workspace.
     fn opening_readiness<'a>(&'a self, id: &'a SpaceId)
     -> BoxFuture<'a, Result<Option<Readiness>>>;
 
-    /// Close the agent sessions and places whose spaces are gone.
     fn cleanup_orphan_sessions(&self) -> BoxFuture<'_, ()>;
 
-    /// Queue `launch` as the agent of `space`, waiting for its preparation
-    /// when it awaits one, linking `pr` as it starts once `blockers` are
-    /// done.
+    /// Waits for the space's preparation when it awaits one, and links `pr`
+    /// once `blockers` are done and the agent starts.
     fn queue_start_agent<'a>(
         &'a self,
         place: (&'a Space, bool),
@@ -386,82 +336,68 @@ pub trait Agents: Send + Sync {
         follows: (Option<ItemInput>, Vec<Blocker>),
     ) -> BoxFuture<'a, Result<QueueAdmission>>;
 
-    /// Give the queue entry `id` the space `space` names.
     fn queue_attach<'a>(
         &'a self,
         id: &'a QueueEntryId,
         space: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Whether disk space holds back new starts.
     fn disk_holds_back_starts(&self) -> BoxFuture<'_, Result<bool>>;
 
-    /// Hold off agent admissions, as while a workspace's conversion into a
-    /// chat is recorded.
+    /// Held while a workspace's conversion into a chat is recorded.
     fn lock_agent_admissions(&self) -> BoxFuture<'_, MutexGuard<'_, ()>>;
 
-    /// Hold the executions' connections, as registering or stopping one
-    /// does.
+    /// Held while registering or stopping an execution.
     fn lock_connections(&self) -> BoxFuture<'_, Box<dyn Send + '_>>;
 
-    /// Whether the execution `id` is connected.
     fn execution_connected<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, bool>;
 
-    /// Forget what is tracked of the executions of the workspace `id`,
-    /// which is gone.
     fn forget_workspace_executions<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 
-    /// The turn the agent of `space` is in, by the execution `execution`
-    /// when it names one: its execution and agent.
+    /// Looks the turn up by `execution` when it names one.
     fn agent_turn<'a>(
         &'a self,
         space: &'a Space,
         execution: Option<&'a ExecutionId>,
     ) -> BoxFuture<'a, Result<(ExecutionId, Agent)>>;
 
-    /// What was kept of the agents' environment for the repository with
-    /// `id`, which may be removed already.
+    /// The repository may be removed already.
     fn agent_environments<'a>(
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Vec<BTreeMap<String, String>>>>;
 
-    /// The wrappers of the executions that run agents, each of which owns
-    /// its agent wherever the process that started it runs.
+    /// Each wrapper owns its agent, wherever the process that started it
+    /// runs.
     fn agent_wrappers(&self) -> BoxFuture<'_, Result<Vec<Identity>>>;
 
-    /// Mark each of `executions` whose agent protection stopped while its
-    /// wrapper waits to restore it.
+    /// Marks each execution whose agent protection stopped and whose wrapper
+    /// waits to restore it.
     fn annotate_stops<'a>(&'a self, executions: &'a mut [Execution]) -> BoxFuture<'a, ()>;
 
-    /// The agent a request from `caller` comes from, and the space and
-    /// execution it runs in.
     fn caller_agent<'a>(&'a self, caller: &'a Caller) -> BoxFuture<'a, Option<CallerAgent>>;
 
-    /// Cancel the restores of `workspace_id`'s stopped agents, which stay
-    /// stopped until `shoal resume`.
+    /// The stopped agents stay stopped until `shoal resume`.
     fn cancel_stopped_restores<'a>(
         &'a self,
         workspace_id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// The environment a process that joins the agent of `chat` gets.
     fn chat_environment<'a>(
         &'a self,
         chat: Chat,
     ) -> BoxFuture<'a, Result<BTreeMap<String, OsString>>>;
 
-    /// Refuse `blockers` when they name work of `repository` that a queued
-    /// launch could not wait for.
+    /// Refuses blockers that name work of `repository` a queued launch could
+    /// not wait for.
     fn check_blockers<'a>(
         &'a self,
         repository: &'a Selector,
         blockers: Vec<Blocker>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// What cleared the space or issue blocker `target` of a space in
-    /// `repository`, as admission decides for a launch; none while it
-    /// blocks, or for the other kinds, which only the forge clears.
+    /// Decides as admission does for a launch. None while the blocker blocks,
+    /// and for the other kinds, which only the forge clears.
     fn cleared_locally<'a>(
         &'a self,
         repository: Option<&'a RepositoryId>,
@@ -469,13 +405,10 @@ pub trait Agents: Send + Sync {
         target: &'a str,
     ) -> BoxFuture<'a, Result<Option<String>>>;
 
-    /// End the places of the space `id`, named `name`, which every removal
-    /// runs once it committed.
+    /// Every removal runs this once it has committed.
     fn close_space_places<'a>(&'a self, id: &'a SpaceId, name: &'a SpaceName) -> BoxFuture<'a, ()>;
 
-    /// Refuse the scoped `caller` a launch that `replaces` the stopped
-    /// agent of the workspace `selector` names, unless it may discard that
-    /// agent.
+    /// Refuses the scoped `caller` unless it may discard the stopped agent.
     fn ensure_may_replace<'a>(
         &'a self,
         caller: &'a Caller,
@@ -483,65 +416,52 @@ pub trait Agents: Send + Sync {
         replaces: bool,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Refuse a launch in `space` that replaces its stopped agent while an
-    /// agent of its own runs there or waits in the agent queue.
+    /// Refuses while an agent of the space's own runs there or waits in the
+    /// agent queue.
     fn ensure_replaceable<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 
-    /// Discard the stopped or asleep agent of `space`, with its last
-    /// sessions and stopped commands, as a launch that replaces it does,
-    /// refusing one that runs or waits in the agent queue.
+    /// Discards the agent's last sessions and stopped commands too, and
+    /// refuses an agent that runs or waits in the agent queue.
     fn discard_replaced_agent<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 
-    /// Refuse a launch in `space` while it has an agent of its own. Requires
-    /// the queue gate, which keeps another launch out until this one is
-    /// recorded.
+    /// Requires the queue gate, which keeps another launch out until this
+    /// one is recorded.
     fn ensure_takes_worker<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<()>>;
 
-    /// Delete an execution record whose processes the caller proved stopped.
+    /// The caller must have proved the execution's processes stopped.
     fn forget_execution<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<()>>;
 
-    /// Forget the last sessions of the space, which a new agent or a
-    /// finished assignment replaces.
+    /// A new agent or a finished assignment replaces them.
     fn forget_last_sessions(&self, workspace_id: &SpaceId);
 
-    /// Forget the order and times of the state reports of the space `id`,
-    /// which is gone.
     fn forget_reports(&self, id: &SpaceId);
 
-    /// Whether an agent launch in the space waits in the queue or starts.
     fn has_queued_launch<'a>(&'a self, space_id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;
 
-    /// The executions of the workspace whose agent, stopped between turns,
-    /// waits idle to be restored.
+    /// The executions whose agent stopped between turns and waits idle to
+    /// be restored.
     fn idle_restores<'a>(
         &'a self,
         workspace_id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<HashSet<ExecutionId>>>;
 
-    /// Record that the user interacted with the agent of the space
-    /// `selector` names now.
     fn note_interaction<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, ()>;
 
-    /// Record that the user interacted with the agent of the space
-    /// `selector` names, when `caller` is the user.
+    /// Records nothing unless `caller` is the user.
     fn record_user_interaction<'a>(
         &'a self,
         caller: Option<&'a Caller>,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, ()>;
 
-    /// The places Shoal created for `space`, or for every space, with the
-    /// space each belongs to.
+    /// For `space`, or for every space when it is `None`.
     fn owned_places(&self, space: Option<SpaceId>)
     -> BoxFuture<'_, Result<Vec<(SpaceId, Origin)>>>;
 
-    /// The retry the proxy of one of `executions`, the space's running
-    /// ones, waits to make.
     fn proxy_retry(&self, executions: &[Execution]) -> Option<ProxyRetry>;
 
-    /// Queue the worker of the ready `workspace` that `launch` asks for,
-    /// once `blockers` are done and it can run there, linking `pr` as it
-    /// starts.
+    /// Starts it once `blockers` are done and it can run there, linking
+    /// `pr` as it starts.
     fn queue_agent<'a>(
         &'a self,
         workspace: &'a SpaceSelector,
@@ -550,8 +470,8 @@ pub trait Agents: Send + Sync {
         pr: Option<ItemInput>,
     ) -> BoxFuture<'a, Result<QueueEntry>>;
 
-    /// Queue `message` for the agent of the space `id`, which waits for
-    /// its next turn or update instead of starting one.
+    /// The message waits for the agent's next turn or update instead of
+    /// starting one.
     fn queue_agent_message_next_turn<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -559,18 +479,16 @@ pub trait Agents: Send + Sync {
         message: String,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Every agent that runs or may run, by the execution it ran as.
     fn running_agents(&self) -> BoxFuture<'_, Result<Vec<RunningAgent>>>;
 
-    /// The executions whose stopped agents the existing space `selector`
-    /// names saved for `shoal resume`.
+    /// The executions whose stopped agents the space saved for `shoal
+    /// resume`.
     fn saved_executions<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Vec<ExecutionId>>>;
 
-    /// Queue the restore of the stopped `execution` of the space
-    /// `workspace` names and start it at once, regardless of the limits.
+    /// Starts it at once, regardless of the limits.
     fn start_stopped_restore<'a>(
         &'a self,
         workspace: &'a SpaceSelector,
@@ -578,8 +496,8 @@ pub trait Agents: Send + Sync {
         env: BTreeMap<String, String>,
     ) -> BoxFuture<'a, Result<QueueEntry>>;
 
-    /// Ask the connected wrappers of the space `id` to stop and signal the
-    /// survivors of disconnected ones.
+    /// Asks the connected wrappers to stop and signals the survivors of
+    /// disconnected ones.
     fn stop_executions<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -587,24 +505,21 @@ pub trait Agents: Send + Sync {
         request: &'a StopRequest,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Stop every execution of the space `selector` names, cancelling its
-    /// agents' waiting restores.
+    /// Cancels its agents' waiting restores too.
     fn stop_space<'a>(
         &'a self,
         selector: &'a SpaceSelector,
         request: StopRequest,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Stop the agent executions of the space `id`.
     fn stop_space_agent_executions<'a>(
         &'a self,
         id: &'a SpaceId,
         request: &'a StopRequest,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Stop the space `selector` names as `shoal stop` does, keeping the
-    /// stopped agents as last sessions, and cancel its waiting launches as
-    /// `launches` says.
+    /// Stops as `shoal stop` does: the stopped agents stay as last
+    /// sessions, and `launches` says which waiting launches to cancel.
     fn stop_space_manually<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -612,12 +527,11 @@ pub trait Agents: Send + Sync {
         launches: QueuedLaunches,
     ) -> BoxFuture<'a, Result<StoppedSpace>>;
 
-    /// Record `place`, which the started chat `chat` runs in, as the chat's.
     fn take_chat_place<'a>(&'a self, chat: &'a SpaceId, place: Origin)
     -> BoxFuture<'a, Result<()>>;
 
-    /// Whether the agent of the space `id` ended its turn: it reported
-    /// itself idle, or no agent `runs` matches runs any longer.
+    /// The agent reported itself idle, or no agent `runs` matches runs any
+    /// longer.
     fn turn_ended<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -627,8 +541,8 @@ pub trait Agents: Send + Sync {
 
 /// The registered repositories and the settings of the spaces in them.
 pub trait Repositories: Send + Sync {
-    /// Start a new worktree from its repository's seed snapshot when the
-    /// worktree's own settings describe the build that made it.
+    /// Applies the snapshot only when the worktree's own settings describe
+    /// the build that made it.
     fn apply_seed<'a>(
         &'a self,
         repo: &'a Repository,
@@ -636,61 +550,53 @@ pub trait Repositories: Send + Sync {
         settings: &'a Effective,
     ) -> BoxFuture<'a, ()>;
 
-    /// How the background sync of the repository went, once it was tried.
+    /// None until the sync was tried.
     fn checkout_sync(&self, repository_id: &RepositoryId) -> Option<CheckoutSync>;
 
-    /// Destroy the subvolumes among the seed outputs `workspace`'s settings
-    /// name, so removing the worktree need not delete their files one by
-    /// one.
+    /// Destroys the subvolumes among the seed outputs, so that removing the
+    /// worktree need not delete their files one by one.
     fn destroy_seed_outputs<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, ()>;
 
-    /// Refuse the repository `id` while a removal or move of it is under
-    /// way or unfinished.
+    /// Refuses while a removal or move of the repository is under way or
+    /// unfinished.
     fn ensure_available<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<()>>;
 
-    /// Fetch the default branch's remotes now, for a decision that needs
-    /// what they have.
     fn fetch_default_branch<'a>(
         &'a self,
         repository_id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Whether the default branch of the repository `id` was fetched
-    /// recently enough for a decision that needs what its remotes have,
-    /// fetching it now otherwise.
+    /// Fetches it now when the last fetch is too old for a decision that
+    /// needs what the remotes have.
     fn default_branch_fresh<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, bool>;
 
-    /// Empty the caches of `repo`, or with `dry_run` say what that would
-    /// empty; none without any.
+    /// With `dry_run`, only says what it would empty.
     fn empty_caches<'a>(
         &'a self,
         repo: &'a Repository,
         dry_run: bool,
     ) -> BoxFuture<'a, Result<Option<Emptying>>>;
 
-    /// Forget the rejected config file of the workspace `id`, which is gone.
     fn forget_rejected_config(&self, id: &SpaceId);
 
-    /// The repository `selector` names with its Git gate held, once it is
-    /// available.
+    /// Waits until the repository is available.
     fn lock_repository(
         &self,
         selector: Selector,
     ) -> BoxFuture<'_, Result<(Repository, OwnedMutexGuard<()>)>>;
 
-    /// The worktree of the seed of `repo`, under its workspace directory
-    /// `root`, once it verifies as Shoal's.
+    /// None unless the worktree under `root` verifies as Shoal's.
     fn verified_seed_worktree<'a>(
         &'a self,
         repo: &'a Repository,
         root: &'a Path,
     ) -> BoxFuture<'a, Option<PathBuf>>;
 
-    /// The configured `root_dir`, where a chat without a repository runs,
-    /// prepared as registering a repository prepares it.
+    /// Prepares `root_dir`, where a chat without a repository runs, as
+    /// registering a repository prepares it.
     fn prepare_chat_root(&self) -> BoxFuture<'_, Result<PathBuf>>;
 
-    /// Register a local checkout in place, or clone a URL.
+    /// Registers a local checkout in place, or clones a URL.
     fn register_repository(
         &self,
         source: Selector,
@@ -698,82 +604,72 @@ pub trait Repositories: Send + Sync {
         clone_path: Option<PathBuf>,
     ) -> BoxFuture<'_, Result<Repository>>;
 
-    /// The repository's settings after every layer.
     fn repository_settings<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Effective>>;
 
-    /// [`Self::repository_settings`] with the mode and rule files beside the
-    /// global config.
+    /// Adds the mode and rule files beside the global config.
     fn repository_settings_with_templates<'a>(
         &'a self,
         id: &'a RepositoryId,
     ) -> BoxFuture<'a, Result<Effective>>;
 
-    /// The settings of `space` after every layer.
     fn space_settings<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<Effective>>;
 
-    /// [`Self::space_settings`] with the mode and rule files beside the
-    /// global config, in `repository` for a space without one of its own.
+    /// Adds the mode and rule files beside the global config. A space without
+    /// a repository of its own reads `repository`.
     fn space_settings_with_templates<'a>(
         &'a self,
         space: &'a Space,
         repository: Option<&'a RepositoryId>,
     ) -> BoxFuture<'a, Result<Effective>>;
 
-    /// Fetch the repository's default branch and fast-forward the local one,
-    /// as the background syncs do.
+    /// Fast-forwards the local default branch as the background syncs do.
     fn sync_repository<'a>(
         &'a self,
         selector: &'a Selector,
     ) -> BoxFuture<'a, Result<SyncedRepository>>;
 
-    /// The settings of `target` with the mode and rule files beside the
-    /// global config.
+    /// Adds the mode and rule files beside the global config.
     fn target_settings_with_templates(
         &self,
         target: ConfigTarget,
     ) -> BoxFuture<'_, Result<Effective>>;
 
-    /// The config file the checkout of `repository` tracks, as TOML.
     fn tracked_config<'a>(&'a self, repository: &'a Repository) -> BoxFuture<'a, Result<String>>;
 
-    /// The settings of a repository this machine has none of, whose
-    /// `tracked` config another machine sent, over the global config.
+    /// For a repository this machine does not have: `tracked` is the config
+    /// another machine sent, applied over the global config.
     fn tracked_settings(&self, tracked: &str) -> Result<Effective>;
 
-    /// The layers of `workspace`, without a worktree file the current format
-    /// rejects.
+    /// Leaves out a worktree file the current format rejects.
     fn workspace_layers<'a>(
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<ConfigLayers>>;
 
-    /// The workspace's settings after every layer.
     fn workspace_settings<'a>(
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>>;
 
-    /// [`Self::workspace_settings`] over a global snapshot the caller also
-    /// reads.
+    /// Reads `global`, which the caller also reads, instead of a new
+    /// snapshot.
     fn workspace_settings_from<'a>(
         &'a self,
         config: &'a Config,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>>;
 
-    /// [`Self::workspace_settings`] with the mode and rule files beside the
-    /// global config.
+    /// Adds the mode and rule files beside the global config.
     fn workspace_settings_with_templates<'a>(
         &'a self,
         workspace: &'a Workspace,
     ) -> BoxFuture<'a, Result<Effective>>;
 }
 
-/// The machines of the hub this machine is in, which coordination's
-/// interface also asks.
+/// The machines of the hub this machine is in. Coordination's interface
+/// asks for them too.
 pub trait Hub: Send + Sync {
-    /// Send `file` to `machine` with `operation`, from `caller`, and the
-    /// answer it gives once it took the file.
+    /// Returns the answer `machine` gives once it took the file.
     fn deliver_file<'a>(
         &'a self,
         machine: &'a Member,
@@ -782,32 +678,29 @@ pub trait Hub: Send + Sync {
         file: &'a Path,
     ) -> BoxFuture<'a, Result<Body>>;
 
-    /// Claim the space `id` at the hub for the move `ticket` through it,
-    /// which this machine imports.
+    /// Claims the space for this machine's import of the move `ticket`.
     fn claim_moved<'a>(
         &'a self,
         id: &'a SpaceId,
         ticket: &'a MoveTicket,
     ) -> BoxFuture<'a, Result<(), ClaimFailure>>;
 
-    /// Claim the space `id` at the hub, which this machine imports as
-    /// another moves it here.
+    /// Claims the space for this machine's import as another machine moves
+    /// it here.
     fn claim_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 
-    /// Claim the space `id` at the hub for this machine's takeover of it
-    /// from the package the hub keeps of it.
+    /// Claims the space for this machine's takeover from the package the
+    /// hub keeps.
     fn claim_taken_over<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<(), ClaimFailure>>;
 
-    /// Whether a space above the space `id` on another machine has an
-    /// agent, which may work in it.
+    /// Whether a space above the space on another machine has an agent,
+    /// which may work in it.
     fn coordinator_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, bool>;
 
-    /// The spaces below the space `id` on other machines, deepest first.
+    /// Deepest first.
     fn descendants_elsewhere<'a>(&'a self, id: &'a SpaceId)
     -> BoxFuture<'a, Result<Vec<SpaceRef>>>;
 
-    /// Refuse the space `parent`, which runs on another machine, as the
-    /// parent of the space `space` of `repository`.
     fn ensure_parent_elsewhere<'a>(
         &'a self,
         space: Option<&'a SpaceId>,
@@ -815,96 +708,83 @@ pub trait Hub: Send + Sync {
         parent: &'a SpaceId,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Write the package the hub keeps of the space `id` to the new file
-    /// `file`.
+    /// `file` must not exist yet.
     fn fetch_package<'a>(&'a self, id: &'a SpaceId, file: &'a Path) -> BoxFuture<'a, Result<()>>;
 
-    /// The other machines' spaces `caller` sees.
     fn hub_view<'a>(&'a self, caller: Option<&'a Caller>)
     -> BoxFuture<'a, Result<Option<HubView>>>;
 
-    /// The package the hub keeps of the space `id`, whose machine is
-    /// offline.
+    /// The hub keeps a package of a space whose machine is offline.
     fn kept_package<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<KeptPackage>>>;
 
-    /// Note that the space `id` is listed here now.
     fn listed<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, ()>;
 
-    /// The name this machine goes by in its hub, else its host name.
+    /// The hub name, else the host name.
     fn machine_name(&self) -> BoxFuture<'_, String>;
 
-    /// The joined machines other than this one; none in no hub.
+    /// Empty outside a hub.
     fn other_machines(&self) -> BoxFuture<'_, Vec<Member>>;
 
-    /// How many threads the space `id` opened on other machines wait for
+    /// Counts the threads the space opened on other machines that wait for
     /// their holder, as the hub lists them.
     fn waiting_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, usize>;
 
-    /// Have `machine` carry out `operation` for the user, once it and the
-    /// hub can be reached, which hold it until then; an error it answered.
+    /// The hub holds the operation until `machine` can be reached. Returns
+    /// an error `machine` answered.
     fn tell_machine<'a>(
         &'a self,
         machine: &'a Member,
         operation: Operation,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// The other joined machine whose space `selector` names, as the hub's
-    /// directory lists it.
+    /// As the hub's directory lists it.
     fn machine_of<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Option<(Member, Listed)>>>;
 
-    /// The other joined machine that keeps the removal record of the
-    /// space `selector` names by ID, as the hub's directory lists it.
+    /// The machine that keeps the space's removal record, as the hub's
+    /// directory lists it.
     fn record_keeper<'a>(
         &'a self,
         selector: &'a SpaceSelector,
     ) -> BoxFuture<'a, Result<Option<Member>>>;
 
-    /// The joined machine `named` names, by its ID or a name only one
-    /// machine has, and whether it is this machine.
+    /// Matches a machine's ID or a name only one machine has. The flag
+    /// says whether it is this machine.
     fn named_machine<'a>(&'a self, named: &'a str) -> BoxFuture<'a, Result<(Member, bool)>>;
 
-    /// The refusal of files attached here on what goes to `elsewhere`,
-    /// which names where it runs, as "machine desk".
+    /// `elsewhere` names where it runs, such as "machine desk".
     fn files_stay_here(&self, elsewhere: &str) -> anyhow::Error;
 
-    /// Whether `error` is of a call through the hub that never left this
-    /// side, which the other side never ran.
+    /// Whether `error` comes from a call through the hub that never left
+    /// this side, so the other side never ran it.
     fn never_sent(&self, error: &anyhow::Error) -> bool;
 
-    /// The URL the origin of the repository of the space `id`, which
-    /// another machine runs, is cloned from.
     fn origin_url_elsewhere<'a>(&'a self, id: &'a SpaceId)
     -> BoxFuture<'a, Result<Option<String>>>;
 
-    /// The space above the space `id` when it runs on another machine.
+    /// None unless the parent runs on another machine.
     fn parent_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<SpaceRef>>>;
 
-    /// Where a start of `request` goes among the hub's machines.
     fn place_start(&self, request: Request) -> BoxFuture<'_, Result<Option<Decision>>>;
 
-    /// Refuse to open the space `id` again while the hub lists it on
-    /// another machine.
     fn refuse_live_elsewhere<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
-    /// Remove the spaces directly below the space `id` that other machines
-    /// run as `below` asks, returning their names.
+    /// Removes only the spaces directly below, as `below` asks, and returns
+    /// their names.
     fn remove_children_elsewhere<'a>(
         &'a self,
         id: &'a SpaceId,
         below: BelowElsewhere<'a>,
     ) -> BoxFuture<'a, Result<Vec<SpaceName>>>;
 
-    /// The repository of the space `id`, which another machine runs.
     fn repository_elsewhere<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<SpaceRepository>>;
 
-    /// Settle this machine's move `ticket` of the space `id` to `machine`:
-    /// whether that machine claimed the space.
+    /// Returns whether `machine` claimed the space.
     fn settle_move<'a>(
         &'a self,
         id: &'a SpaceId,
@@ -912,44 +792,37 @@ pub trait Hub: Send + Sync {
         ticket: &'a MoveTicket,
     ) -> BoxFuture<'a, Result<bool>>;
 
-    /// This machine as the hub names it.
     fn this_machine(&self) -> BoxFuture<'_, Result<Option<Machine>>>;
 }
 
 /// The CI jobs this machine's runner runs in workspaces.
 pub trait Runner: Send + Sync {
-    /// Name the job each workspace among `spaces` that runs one runs.
     fn attach_jobs<'a>(&'a self, spaces: &'a mut [Space]) -> BoxFuture<'a, Result<()>>;
 
-    /// Cancel the job of the workspace `id` before its runner stops, as
-    /// `why` stops it.
+    /// Cancels the job before its runner stops, as `why` stops it.
     fn cancel_job_before_stopping<'a>(
         &'a self,
         id: &'a SpaceId,
         why: shoal_daemon_base::jobs::JobStop,
     ) -> BoxFuture<'a, ()>;
 
-    /// The workspaces of the jobs running for what the space `id` links.
     fn linked_job_workspaces<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Vec<Workspace>>>;
 
-    /// The entries of the jobs waiting to start for what the space `id`
-    /// links.
     fn linked_waiting_jobs<'a>(&'a self, id: &'a SpaceId)
     -> BoxFuture<'a, Result<Vec<QueueEntry>>>;
 
-    /// The job the runner runs in the workspace `id`, if any.
     fn workspace_job<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Option<Box<QueuedJob>>>>;
 }
 
-/// The reviews of workspaces and the gate agent.
+/// The reviews of workspaces, and the gate agent.
 pub trait Reviews: Send + Sync {
-    /// Refuse `caller`, where the setting for `gate` holds it, unless a
+    /// Refuses `caller` where the setting for `gate` holds it, unless a
     /// finished review covers `head`.
     fn check_review<'a>(
         &'a self,
@@ -959,7 +832,7 @@ pub trait Reviews: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// [`Self::check_review`], queueing the review it misses.
+    /// [`Self::check_review`], and queues the missing review.
     fn require_review<'a>(
         &'a self,
         workspace: &'a Workspace,
@@ -968,65 +841,59 @@ pub trait Reviews: Send + Sync {
         caller: Option<&'a Caller>,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// `error`, with a review of the workspace queued where it is a refusal
-    /// for want of one, which then says how that went.
+    /// Queues a review of the workspace when `error` refuses for want of
+    /// one, and says so in the error it returns.
     fn queue_unreviewed(&self, error: anyhow::Error) -> BoxFuture<'_, anyhow::Error>;
 
-    /// Refuse `request` without asking the gate when the gate decides it and
+    /// Refuses without asking the gate when the gate decides `request` and
     /// has denied the same action too often.
     fn ensure_gate_hears<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, Result<()>>;
 
-    /// The queued or running review of the workspace `id`, as a package
-    /// carries it to the machine that imports the workspace.
+    /// The review a package carries to the machine that imports the
+    /// workspace.
     fn pending_review<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Option<CarriedReview>>>;
 
-    /// Queue again on this machine the review the package of the space `id`
-    /// carried.
     fn queue_carried_review<'a>(
         &'a self,
         id: &'a SpaceId,
         review: CarriedReview,
     ) -> BoxFuture<'a, Result<()>>;
 
-    /// Stop the workspace's running review and the answers made for it.
+    /// Stops the answers made for the review too.
     fn stop_reviews<'a>(&'a self, workspace_id: &'a SpaceId) -> BoxFuture<'a, ()>;
 }
 
 /// The ports, simulators, containers and resource leases spaces hold.
 pub trait Leases: Send + Sync {
-    /// The container project of the workspace `id`.
     fn container_project<'a>(
         &'a self,
         id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<Option<ContainerProject>>>;
 
-    /// The resource leases of the space `selector` names, or of every one.
+    /// Of every space when `selector` is `None`.
     fn list_resources<'a>(
         &'a self,
         selector: Option<&'a SpaceSelector>,
     ) -> BoxFuture<'a, Result<Vec<ResourceLease>>>;
 
-    /// The managed simulators of `owner`, or every one.
     fn list_simulators<'a>(
         &'a self,
         owner: Option<&'a SpaceId>,
     ) -> BoxFuture<'a, Result<Vec<Simulator>>>;
 
-    /// Take the container project of `workspace` down with its volumes.
+    /// Takes the volumes down too.
     fn remove_containers<'a>(&'a self, workspace: &'a Workspace) -> BoxFuture<'a, Result<()>>;
 
-    /// Delete the simulators `owner` holds.
     fn remove_simulators<'a>(&'a self, owner: &'a SpaceId) -> BoxFuture<'a, Result<()>>;
 
-    /// The leases the asleep agent of the space `id` keeps, each running
-    /// one with when it stops; none while its agent is not asleep.
+    /// Each running lease comes with when it stops. Empty unless the agent
+    /// is asleep.
     fn kept_leases<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Vec<KeptLease>>>;
 
-    /// Run the release hook `command` of `workspace` for `lease`; a failure
-    /// keeps the lease.
+    /// A failure keeps the lease.
     fn run_resource_release_hook<'a>(
         &'a self,
         workspace: &'a Workspace,
@@ -1037,7 +904,7 @@ pub trait Leases: Send + Sync {
 
 /// The demos spaces run.
 pub trait Demos: Send + Sync {
-    /// Ask the space's demo `name`, or every demo there, to stop.
+    /// Stops every demo of the space when `name` is `None`.
     fn stop_demos<'a>(
         &'a self,
         selector: &'a SpaceSelector,
@@ -1045,20 +912,17 @@ pub trait Demos: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// What other subsystems record of a space, which the spaces read and write
-/// in their own transactions.
+/// What other subsystems record of a space. The spaces read and write it in
+/// their own transactions.
 pub trait Records: Send + Sync {
-    /// Fill in what other subsystems record of `workspace`: its latest
-    /// review, its agent's state, sleep, wake, restart and place in the
-    /// queue, and its links.
+    /// Fills in its latest review, its agent's state, sleep, wake, restart
+    /// and place in the queue, and its links.
     fn load_workspace(&self, db: &Connection, workspace: &mut Workspace) -> Result<()>;
 
-    /// Fill in what other subsystems record of `chat`: its agent's state,
-    /// sleep, wake, restart and place in the queue, and its links.
+    /// Fills in its agent's state, sleep, wake, restart and place in the
+    /// queue, and its links.
     fn load_chat(&self, db: &Connection, chat: &mut Chat) -> Result<()>;
 
-    /// The items of `kind`, or of every kind, the space `id` links as
-    /// assigned.
     fn assigned_items(
         &self,
         db: &Connection,
@@ -1066,7 +930,6 @@ pub trait Records: Send + Sync {
         kind: Option<shoal_forge_types::items::link::ItemKind>,
     ) -> Result<Vec<ItemRef>>;
 
-    /// The items the space `id` links in `relation`.
     fn recorded_items(
         &self,
         db: &Connection,
@@ -1074,42 +937,36 @@ pub trait Records: Send + Sync {
         relation: Relation,
     ) -> Result<Vec<LinkedItem>>;
 
-    /// The issues, PRs and runs the space `id` links.
     fn space_links(&self, db: &Connection, id: &SpaceId) -> Result<SpaceLinks>;
 
-    /// The state the agent of the space `id` last reported.
     fn agent_state(
         &self,
         db: &Connection,
         id: &SpaceId,
     ) -> Result<Option<shoal_protocol::state::AgentState>>;
 
-    /// Hand the alerts the space `id`'s agent did not read to the user, as
-    /// its removal does.
-    /// Returns the alert the user got for them, if any.
+    /// Hands the alerts the agent did not read to the user, as removal does.
+    /// Returns the alert the user got for them.
     fn hand_alerts_to_user(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<i64>>;
 
-    /// Forget the logins the removed space `id` stood for on its issues,
-    /// and its issue links, returning them.
+    /// Forgets the logins the removed space stood for on its issues, and its
+    /// issue links, and returns them.
     fn remove_issue_links(
         &self,
         tx: &Transaction<'_>,
         id: &SpaceId,
     ) -> Result<(Vec<Dropped>, Vec<ItemRef>)>;
 
-    /// Drop the pending reviews the removed space `id` writes, or of it,
-    /// with their comments.
+    /// Drops the pending reviews the removed space writes, or of it, with
+    /// their comments.
     fn drop_pending_reviews(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
 
-    /// Cancel the wake timer and the turn retry of the space `id`, whose
-    /// work finished.
+    /// Cancels the turn retry too.
     fn cancel_wake(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
 
-    /// The retry of the failed turn of the agent of the space `id`.
     fn turn_retry(&self, db: &Connection, id: &SpaceId) -> Result<Option<TurnRetry>>;
 
-    /// The executions, with their spaces, other than `own`, of the space
-    /// `space` or of every space.
+    /// Of `space`, or of every space when it is `None`.
     fn other_executions(
         &self,
         db: &Connection,
@@ -1117,123 +974,101 @@ pub trait Records: Send + Sync {
         own: Option<&ExecutionId>,
     ) -> Result<Vec<(SpaceId, ExecutionId)>>;
 
-    /// The executions of the space `id` that run an agent, other than
-    /// those whose restore waits in the queue.
+    /// Leaves out those whose restore waits in the queue.
     fn running_agents(&self, db: &Connection, id: &SpaceId) -> Result<Vec<ExecutionId>>;
 
-    /// The agent the newest queue entry of the space `id` starts.
+    /// From the space's newest queue entry.
     fn queued_agent(&self, db: &Connection, id: &SpaceId) -> Result<Option<Agent>>;
 
-    /// Whether a queued launch waits to open the workspace `id`.
     fn launch_waits_to_open(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
 
-    /// Forget the executions of the space `id` and the queue entries that
-    /// restore or opened them, as its kind changes under it.
+    /// Forgets the queue entries that restore or opened them too, as the
+    /// space's kind changes under it.
     fn forget_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
 
-    /// Forget the executions of the space `id` that run no agent.
     fn forget_command_executions(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()>;
 
-    /// Mark what other subsystems recorded as running when the daemon
+    /// Marks what other subsystems recorded as running when the daemon
     /// stopped as interrupted: executions and simulator clean requests.
     fn interrupt_operations(&self, tx: &Transaction<'_>) -> Result<()>;
 
-    /// Every registered repository.
     fn repositories(&self, db: &Connection) -> Result<Vec<Repository>>;
 
-    /// Record that the repository `id` was used last.
     fn touch_repository(&self, tx: &Transaction<'_>, id: &RepositoryId) -> Result<()>;
 
-    /// The workspaces that hold a lease of the pool or resource `name`.
     fn leasing_workspaces(&self, db: &Connection, name: &str) -> Result<Vec<SpaceId>>;
 
-    /// Take the number the hub's sequence gives the new space `id`, on a
-    /// machine that numbers its spaces from a hub's sequence.
+    /// None on a machine that does not number its spaces from a hub's
+    /// sequence.
     fn next_space_number(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>>;
 
-    /// Refuse to take files at `paths` while alerts hold more than fit.
+    /// Refuses while alerts hold more files than fit.
     fn ensure_holders_fit(&self, tx: &Transaction<'_>, paths: &[PathBuf]) -> Result<()>;
 
-    /// What coordination records of the spaces, as it reads and writes them
-    /// in its own transactions.
     fn coordination(&self) -> &dyn shoal_coordination::daemon::Records;
 }
 
-/// The agent a request comes from, and where it runs.
+/// The agent a request comes from, and the space it runs in.
 pub struct CallerAgent {
     pub execution: ExecutionId,
     pub name: Agent,
     pub space_id: SpaceId,
 }
 
-/// Why the claim of a space that a move through the hub brings failed.
+/// Why claiming a space that a move through the hub brings failed.
 #[derive(Debug)]
 pub enum ClaimFailure {
-    /// The hub took no claim.
     Refused(anyhow::Error),
-    /// The hub may have taken it, as when its answer never came.
+    /// The hub may have taken the claim, as when its answer never came.
     Unknown(anyhow::Error),
 }
 
 /// What a removal asks of the spaces directly below its space that other
-/// machines run, each of which its own machine removes as it removes a
-/// child of a space it removes.
+/// machines run. Each machine removes its own as it removes a child.
 pub struct BelowElsewhere<'a> {
     /// Leave the spaces the user holds, as a workspace process's removal
     /// does.
     pub refuse_holds: bool,
-    /// The IDs of the only spaces below it the removal takes, when the
-    /// caller confirmed those it saw.
+    /// When the caller confirmed the spaces it saw, the only ones the
+    /// removal takes.
     pub confirmed: Option<&'a [SpaceId]>,
-    /// The cause of the removal this one is part of.
     pub cause: EventCause,
 }
 
 /// Where the workspaces stacked on a base go once its work merged.
 pub struct Restack<'a> {
     pub base: &'a Workspace,
-    /// The base's HEAD, past which stacked branches rebase.
+    /// Stacked branches rebase past this commit.
     pub head: &'a CommitId,
-    /// The branches a stacked PR may still target, which it retargets.
+    /// Stacked PRs that still target one of these are retargeted.
     pub merged_heads: &'a [BranchName],
-    /// The branch the base's work merged into, which stacked ones rebase
-    /// onto and their PRs target.
+    /// Stacked branches rebase onto it and their PRs target it.
     pub target: &'a BranchName,
     pub onto: Onto,
-    /// The workspace stacked ones build on next; none for the default
-    /// branch.
+    /// None for the default branch.
     pub new_base: Option<SpaceId>,
     pub cause: EventCause,
-    /// The account retargeting goes out as.
     pub account: &'a Account,
 }
 
-/// Where the branch the base merged into is for a stacked branch to rebase
-/// onto.
+/// Where a stacked branch finds the branch its base merged into.
 #[derive(Clone, Copy)]
 pub enum Onto {
-    /// On the remote, fetched first.
+    /// Fetched first.
     Remote,
-    /// A local branch of the repository.
     Local,
-    /// The stacked branch has the base's work already, so it needs no
-    /// rebase.
+    /// The stacked branch has the base's work already and needs no rebase.
     Held,
 }
 
-/// A merge of a space's branch that `shoal merge` pushed to the default
-/// branch's upstream.
+/// A merge that `shoal merge` pushed to the default branch's upstream.
 pub struct PushedMerge {
     pub space: SpaceId,
-    /// The URLs it was pushed to.
     pub remotes: Vec<String>,
-    /// The remote's branch that took it.
     pub branch: BranchName,
-    /// The commit it left there.
     pub commit: CommitId,
 }
 
-/// An open issue a new workspace is assigned.
 #[derive(Debug, Clone)]
 pub struct OpenIssue {
     pub url: ItemRef,
@@ -1241,25 +1076,22 @@ pub struct OpenIssue {
     pub labels: Vec<String>,
 }
 
-/// The login a space stood for among an issue's assignees, until it
-/// dropped the issue's link.
+/// The login a space stood for among an issue's assignees until it dropped
+/// the issue's link.
 #[derive(Debug, Clone)]
 pub struct Dropped {
     pub url: String,
     pub login: String,
 }
 
-/// What a review gate guards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewGate {
-    /// `shoal ready`.
     Ready,
-    /// `shoal merge`.
     Merge,
 }
 
-/// Everything the spaces need of the rest of the daemon, which each of
-/// their operations that reaches beyond them takes.
+/// Everything the spaces need of the rest of the daemon. Each operation that
+/// reaches beyond the spaces takes it.
 pub trait Daemon:
     shoal_coordination::daemon::Daemon
     + Operations
@@ -1272,9 +1104,7 @@ pub trait Daemon:
     + Leases
     + Demos
 {
-    /// The spaces service.
     fn spaces(&self) -> &Spaces;
 
-    /// The coordination service, whose operations take this daemon.
     fn coordination(&self) -> &Coordination;
 }
