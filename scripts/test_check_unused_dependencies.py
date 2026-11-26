@@ -64,6 +64,14 @@ class CheckUnusedDependenciesTests(unittest.TestCase):
         self.assertEqual(self.unnamed(source, "anyhow", "serde", "ring", "hmac", "libc"),
                          ["hmac", "ring"])
 
+    def test_a_comment_names_no_dependency_and_hides_none(self):
+        source = ("//! Wraps hyper::Body.\n"
+                  "use { /* why */ anyhow as errors, serde::Serialize };\n"
+                  "/* ring::Key */ const URL: &str = \"https://x\"; fn f() { libc::getpid(); }\n"
+                  "const RAW: &str = r#\"say \"//\"\"#; fn g() { toml::from_str(\"\"); }\n")
+        self.assertEqual(self.unnamed(source, "hyper", "anyhow", "serde", "ring", "libc", "toml"),
+                         ["hyper", "ring"])
+
     def test_a_dependency_is_named_by_its_crate_name_or_its_rename(self):
         self.write("crates/core/tests/forge.rs", "use shoal_forge::Forge;\nfn f() { gx::open(); }\n")
         found = self.problems(package("core", "crates/core",

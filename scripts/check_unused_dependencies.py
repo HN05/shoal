@@ -12,9 +12,12 @@ from pathlib import Path
 from affected_packages import Workspace, cargo_metadata
 
 METADATA_KEY = "unnamed-dependencies"
-# A `use` declaration, which rustfmt starts on a line of its own; anchoring it
-# there keeps prose such as "callers use this" from reading as one.
+# A `use` declaration, which rustfmt starts on a line of its own.
 USE = re.compile(r"^[ \t]*(?:pub(?:\([^)]*\))?\s+)?use\s+([^;]*);", re.MULTILINE)
+# A comment, or a literal matched only so that `//` inside it starts none.
+COMMENT_OR_LITERAL = re.compile(
+    r"(?P<comment>//[^\n]*|/\*.*?\*/)|(?<!\w)b?r(#*)\".*?\"\2|\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])'",
+    re.DOTALL)
 
 
 def crate_name(dependency):
@@ -70,9 +73,16 @@ def stale_allowances(dependencies, allowed):
 def rust_sources(root, directories):
     """The text of every Rust file under *directories* of the workspace at
     *root*, leaving out build output."""
-    return [path.read_text() for directory in directories
+    return [without_comments(path.read_text()) for directory in directories
             for path in sorted((Path(root) / directory).rglob("*.rs"))
             if "target" not in path.relative_to(root).parts]
+
+
+def without_comments(source):
+    """Rust *source* with its comments, doc comments among them, blanked:
+    one that writes `hyper::Body` uses no `hyper`."""
+    return COMMENT_OR_LITERAL.sub(
+        lambda match: " " if match.group("comment") else match.group(0), source)
 
 
 def problems(metadata):
