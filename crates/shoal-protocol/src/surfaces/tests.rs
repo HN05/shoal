@@ -1025,6 +1025,12 @@ fn an_input_s_bound_reads_the_value_the_answer_gives_its_data() {
     answer("2026-12-01", "2026-12-05").unwrap();
     // It may not fall before the start the answer gives.
     assert!(answer("2026-12-20", "2026-12-15").is_err());
+    // Nor may the end it keeps, when it gives only the start.
+    let mut booked = range.clone();
+    booked.0["createSurface"]["dataModel"] = json!({"start": "2026-12-01", "end": "2026-12-05"});
+    let start_only = |start: &str| booked.resolve("book", values(&[("start", json!(start))]));
+    assert!(start_only("2026-12-20").is_err());
+    start_only("2026-12-02").unwrap();
     // An answer gives that start where the surface holds no data.
     let mut empty = range.clone();
     let body = empty.0["createSurface"].as_object_mut().unwrap();
