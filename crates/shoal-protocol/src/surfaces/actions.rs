@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::{Map, Value};
 
-use super::{Component, Placed, Surface, binding, dates::Dates, scoped};
+use super::{Placed, Surface, binding, dates::Dates, scoped};
 
 /// An action a surface offers.
 #[derive(Debug, Clone, PartialEq)]
@@ -163,7 +163,7 @@ impl Surface {
                 let at = (placed.iter()).position(|placed| entering(placed, &path))?;
                 let input = Input {
                     key: key.clone(),
-                    kind: self.entry(placed[at].component)?,
+                    kind: self.entry(&placed[at])?,
                     initial: self.data(&path).cloned(),
                 };
                 Some((at, input))
@@ -222,9 +222,10 @@ fn entering(placed: &Placed<'_>, path: &str) -> bool {
 }
 
 impl Surface {
-    /// What `component`, one of its inputs, enters into the data its value
+    /// What `placed`, one of its inputs, enters into the data its value
     /// binds.
-    fn entry(&self, component: Component<'_>) -> Option<InputKind> {
+    fn entry(&self, placed: &Placed<'_>) -> Option<InputKind> {
+        let component = placed.component;
         let number = |field| component.get(field).and_then(Value::as_f64);
         Some(match component.kind {
             "TextField" if component.literal("variant") == Some("number") => InputKind::Number {
@@ -237,7 +238,7 @@ impl Surface {
                 min: number("min").or(Some(0.0)),
                 max: number("max"),
             },
-            "DateTimeInput" => InputKind::DateTime(Dates::of(self, component)),
+            "DateTimeInput" => InputKind::DateTime(Dates::of(self, component, &placed.scope)),
             "ChoicePicker" => InputKind::Options {
                 options: (component
                     .get("options")

@@ -570,3 +570,22 @@ fn nested_list_items_give_their_buttons_ids_of_their_own() {
     marked.0["createSurface"]["components"][4]["action"]["event"]["name"] = json!("submit#1");
     assert!(refusal(marked, &[]).contains("holds #"));
 }
+
+#[test]
+fn a_date_input_in_a_list_item_reads_its_bounds_there() {
+    let booking = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "slot", "path": "/slots"}},
+            {"id": "slot", "component": "Column", "children": ["day", "book"]},
+            {"id": "day", "component": "DateTimeInput", "enableDate": true,
+             "min": {"@path": "opens"}, "value": {"@path": "day"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"day": {"@path": "day"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"slots": [{"opens": "2026-12-01", "day": ""}]}),
+    );
+    let answer = |day: &str| booking.resolve("book#1", values(&[("day", json!(day))]));
+    assert!(answer("2026-11-30").is_err());
+    answer("2026-12-01").unwrap();
+}
