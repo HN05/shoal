@@ -8,10 +8,10 @@ use tokio::time::Instant;
 
 use crate::{Hub, daemon::Daemon, log};
 
-/// How long a reading of the threads that wait elsewhere stands, so a
-/// cleanup pass or a status, which ask for every space or twice for one,
-/// read the hub's directory once; the reports it lists lag behind their
-/// machines about as long.
+/// How long a reading of the threads that wait elsewhere stands. A cleanup
+/// pass or a status asks for every space, or twice for one, and so reads
+/// the hub's directory once. The reports the directory lists lag behind
+/// their machines about as long.
 const FRESH: Duration = Duration::from_secs(5);
 
 /// How many threads each space opened on other machines wait for their
@@ -30,10 +30,10 @@ impl Waiting {
 }
 
 impl Hub {
-    /// How many threads the space `id` opened on other machines wait for
-    /// their holder, as the hub lists them, or as it last did while it
-    /// cannot be asked, read at most once every [`FRESH`]; none while
-    /// neither can be read.
+    /// How many threads the space `id` opened on other machines wait for their
+    /// holder. Reads the hub's list, or the last one while the hub cannot be
+    /// asked, at most once every [`FRESH`]. Returns none when neither can be
+    /// read.
     pub async fn waiting_elsewhere(&self, daemon: &dyn Daemon, id: &SpaceId) -> usize {
         if let Some(count) = self.waiting.of(id) {
             return count;

@@ -25,9 +25,9 @@ use crate::{
 /// How long the hub has to answer each step of opening a link.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(60);
 
-/// A link to open: where, what for, the key pair this machine proves, the
-/// pairing code a join proves, the key the hub must prove, and how this
-/// machine comes to run the hub's version.
+/// A link to open: where and what for, the key pair this machine proves,
+/// the pairing code a join proves, the key the hub must prove, and how this
+/// machine follows the hub's version.
 pub(super) struct Plan {
     pub route: Route,
     pub intent: Intent,

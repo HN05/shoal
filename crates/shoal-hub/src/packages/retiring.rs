@@ -62,11 +62,11 @@ impl Hub {
         Ok(())
     }
 
-    /// As a returning machine: end each of `spaces`, which other machines
-    /// took over from the hub's packages while this one was offline,
-    /// alerting the user to each whose copy here changed after the package
-    /// the takeover went by, and to each it could not end, which then runs
-    /// on both machines; the spaces it no longer has.
+    /// As a returning machine: end each of `spaces`, which other machines took
+    /// over from the hub's packages while this one was offline. The user hears
+    /// of each whose copy here changed after the package the takeover went by,
+    /// and of each that could not end, which then runs on both machines.
+    /// Returns the spaces it no longer has.
     pub(crate) async fn retire(&self, daemon: &dyn Daemon, spaces: Vec<SpaceId>) -> Vec<SpaceId> {
         let (mut found, mut retired) = found_spaces(daemon, spaces).await;
         // A chat in a workspace's worktree goes first, since the removal of

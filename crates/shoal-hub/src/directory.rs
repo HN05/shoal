@@ -33,11 +33,11 @@ pub(crate) struct Held {
 }
 
 impl Hub {
-    /// Record the machine `member`'s `report` of its spaces, what it
-    /// `held` without them, and its `repositories`, none when they did not
-    /// change, alerting the user to each space ID it reported that another
-    /// machine owns, deleting the packages of the spaces that ended there,
-    /// and return the numbers the hub keeps for the machine.
+    /// Record the machine `member`'s `report` of its spaces, what it `held`
+    /// without them, and its `repositories`, none when they did not change.
+    /// Alerts the user to each reported space ID another machine owns, and
+    /// deletes the packages of the spaces that ended there. Returns the numbers
+    /// the hub keeps for the machine.
     pub(super) async fn record_report(
         &self,
         daemon: &dyn Daemon,
@@ -84,12 +84,11 @@ impl Hub {
         Ok(())
     }
 
-    /// Record that the machine `member` claims the space `id`, which it
-    /// imports as another machine moves it there, and return the number
-    /// the space keeps there, if the directory lists it; refused for the
-    /// `ticket` of a move through the hub that its source settled, and for
-    /// a `takeover` of the space from the package the hub keeps of it once
-    /// the space's machine is connected again.
+    /// Record that the machine `member` claims the space `id`, which it imports
+    /// as another machine moves it there. Returns the number the space keeps,
+    /// if the directory lists it. The claim is refused for the `ticket` of a
+    /// move its source settled, and for a `takeover` once the space's machine
+    /// is connected again.
     pub(super) async fn record_space_claim(
         &self,
         member: &MemberId,

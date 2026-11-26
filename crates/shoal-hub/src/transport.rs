@@ -100,9 +100,9 @@ impl Sender {
         })
     }
 
-    /// Send `frame` and return once it is written to the transport, or
-    /// fail once the other side has read nothing for [`SILENCE`], whether
-    /// the frame waited to be queued or to be written.
+    /// Send `frame` and return once it is written to the transport. Fails once
+    /// the other side has read nothing for [`SILENCE`], whether the frame waited
+    /// to be queued or to be written.
     pub async fn send_written(&self, frame: &impl Serialize) -> Result<()> {
         let written = async {
             let (written, wrote) = oneshot::channel();
@@ -301,9 +301,9 @@ where
     }
 }
 
-/// Write each frame `to_send` passes to `wire`, sealed once it passes a
-/// sealer, telling each sender that waits once its frame is written, until
-/// the channel closes or a write fails.
+/// Write each frame `to_send` passes to `wire`, until the channel closes or
+/// a write fails. Seals frames once it receives a sealer, and tells each
+/// waiting sender once its frame is written.
 async fn write_frames(mut wire: impl Wire, mut to_send: mpsc::Receiver<Out>) {
     let mut sealer = None;
     while let Some(out) = to_send.recv().await {

@@ -67,9 +67,9 @@ impl Hub {
         }
     }
 
-    /// Whether the hub lists the space `id` on another machine, which a
-    /// space here may then have as its parent, or listed it when this
-    /// machine last learned the tree, while the hub cannot be asked.
+    /// Whether the hub lists the space `id` on another machine, so a space here
+    /// may have it as its parent. While the hub cannot be asked, the tree this
+    /// machine last learned decides.
     pub async fn runs_elsewhere(&self, daemon: &dyn Daemon, id: &SpaceId) -> bool {
         match self.directory_or_known(daemon).await {
             Ok(Some((machine, directory))) => (directory.spaces.iter())
@@ -173,11 +173,11 @@ impl Hub {
         }))
     }
 
-    /// Refuse the space `parent`, which runs on another machine, as the
-    /// parent of the space `space` of `repository`, none for a new one, by
-    /// what its machine last reported to the hub, as a parent here is
-    /// refused: it must be a ready workspace or a chat of the same
-    /// repository, by origin, or a chat without one, and not below `space`.
+    /// Refuse the space `parent`, which runs on another machine, as the parent
+    /// of the space `space` of `repository`, none for a new one. Decides by
+    /// what the parent's machine last reported to the hub, as a parent here is
+    /// refused. The parent must be a ready workspace or a chat of the same
+    /// repository by origin, or a chat without one, and not below `space`.
     pub async fn ensure_parent_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -221,13 +221,13 @@ impl Hub {
         Ok(())
     }
 
-    /// The effective permissions of the first space above the space `id`
-    /// that runs on another machine, as its machine reports them, or for a
-    /// chat without a repository, as its tree's modes resolve in
-    /// `repository`, where the action is; none when every space above it is
-    /// here or that space is gone. While the hub cannot be asked, what it
-    /// last reported stands; a machine that never read it refuses, rather
-    /// than leave the space wider than that parent allows.
+    /// The effective permissions of the first space above the space `id` that
+    /// runs on another machine, as its machine reports them. For a chat
+    /// without a repository, they are its tree's modes resolved in
+    /// `repository`, where the action is. Returns none when every space above
+    /// it is here or that space is gone. While the hub cannot be asked, what it
+    /// last reported stands. A machine that never read it refuses, rather than
+    /// leave the space wider than that parent allows.
     pub async fn permissions_elsewhere(
         &self,
         daemon: &dyn Daemon,

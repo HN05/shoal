@@ -41,9 +41,9 @@ impl Hub {
     }
 
     /// As the hub: write the other machines' alerts on `out`, the stream
-    /// `member` follows them on, every one at once and then each change,
-    /// until it stops reading or falls too far behind, which it opens the
-    /// stream again for.
+    /// `member` follows them on. Writes every alert at once, then each change,
+    /// until the member stops reading or falls too far behind. The member then
+    /// opens the stream again.
     pub(crate) fn serve_alert_copies(self: &Arc<Self>, member: MemberId, mut out: Outgoing) {
         let hub = self.clone();
         tokio::spawn(async move {

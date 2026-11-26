@@ -113,11 +113,11 @@ impl Hub {
         Ok(Answered { frames: frames? })
     }
 
-    /// Answer `request`, another machine's request whose answer goes on,
-    /// as this daemon answers its own callers, writing it on the stream
-    /// `stream` of `streams` as the daemon writes it until either side
-    /// ends, and on a duplex one passing on what the caller writes there;
-    /// refused for any other request.
+    /// Answer `request`, another machine's request whose answer goes on, as
+    /// this daemon answers its own callers. Writes the answer on the stream
+    /// `stream` as the daemon writes it, until either side ends. On a duplex
+    /// stream, it passes on what the caller writes there. Any other request is
+    /// refused.
     pub fn serve_streamed(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -133,13 +133,14 @@ impl Hub {
         Ok(())
     }
 
-    /// Write what this daemon answers `method` from `caller` with to `out`,
-    /// ending it as the answer ends, until no one reads `out` any longer,
-    /// and pass what comes `up` to the daemon. The token stands for
-    /// `caller` only until the answer starts, once the request was decided:
-    /// what its machine vouched then would otherwise outlast what that
-    /// machine vouches for its later requests, which it checks against the
-    /// scope as the answer goes on.
+    /// Write what this daemon answers `method` from `caller` with to `out`, and
+    /// end it as the answer ends or once no one reads `out`. Pass what comes
+    /// `up` to the daemon.
+    ///
+    /// The token stands for `caller` only until the answer starts, once the
+    /// request was decided. Otherwise what the caller's machine vouched then
+    /// would outlast what it vouches for its later requests. The daemon checks
+    /// those against the scope as the answer goes on.
     async fn stream_answer(
         &self,
         daemon: &dyn Daemon,

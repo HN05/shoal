@@ -210,9 +210,9 @@ impl Hub {
         }
     }
 
-    /// Hold for `to` what the hub held for the space `id` on `from`, which
-    /// `to` took over, and deliver it there, here for the hub's own machine,
-    /// which has no link to deliver it over.
+    /// Hold for `to` what the hub held for the space `id` on `from`, which `to`
+    /// took over, and deliver it there. The hub's own machine has no link, so
+    /// it delivers it here.
     async fn redirect_held(
         &self,
         daemon: &dyn Daemon,

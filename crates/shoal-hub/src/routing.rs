@@ -174,11 +174,12 @@ impl Hub {
             .ok_or_else(|| anyhow!("the hub has no machine {id}"))
     }
 
-    /// This machine's answer to `call`, which the hub passes it, or which
-    /// the hub's own machine answers itself: a forwarded request for one of
-    /// its spaces, an event for one, the expiry of what it sent, its
-    /// availability, the spaces it retires, one it continues or a CI job
-    /// another machine cut off, which it reruns.
+    /// This machine's answer to `call`, which the hub passes it, or which the
+    /// hub's own machine answers itself. Such a call carries a forwarded
+    /// request or an event for one of its spaces, or the expiry of what it
+    /// sent. It may also tell the machine its availability, the spaces it
+    /// retires, a space it continues, or a CI job to rerun that another
+    /// machine cut off.
     pub(super) async fn answer_hub_call(&self, daemon: &dyn Daemon, call: Call) -> Result<Reply> {
         match call {
             Call::Serve { request } => Ok(Reply::Answered(
@@ -222,10 +223,9 @@ impl Hub {
         }
     }
 
-    /// The answer a machine's daemon gives its link to the hub's `call`,
-    /// with the daemon operation it holds until the reply is written, so
-    /// an update never exits between a change and the reply that reports
-    /// it.
+    /// The answer a machine's daemon gives its link to the hub's `call`. It
+    /// comes with the daemon operation, held until the reply is written, so an
+    /// update never exits between a change and the reply that reports it.
     pub(super) async fn answer_from_hub(
         self: Arc<Self>,
         daemon: Arc<dyn Daemon>,
@@ -277,8 +277,8 @@ fn launch_machine(
 }
 
 /// Ask the machine whose link `calls` serves for the stream that answers
-/// `request`, and relay it to the caller's stream `stream` of `streams`,
-/// with what the caller writes on a duplex one relayed back.
+/// `request`, and relay it to the caller's stream `stream`. On a duplex
+/// stream, what the caller writes is relayed back.
 async fn relay_stream(
     calls: &Calls,
     request: Forwarded,

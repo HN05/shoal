@@ -117,8 +117,8 @@ impl Hub {
     }
 
     /// Look at each of `spaces` and send the hub a new package of each that
-    /// changed, all at once over `calls`, returning how long until the
-    /// first one held back since it sent one lately can go.
+    /// changed, all at once over `calls`. Returns how long until the first
+    /// package held back, since its space sent one lately, can go.
     async fn send_changed_packages(
         &self,
         daemon: &dyn Daemon,
@@ -244,10 +244,10 @@ impl Hub {
 }
 
 impl Hub {
-    /// Send the hub a package of each of `spaces` whose state changed since
-    /// the last that arrived there, or of every one when `every`, all at
-    /// once over `calls`, holding none back for one sent lately, as before
-    /// this machine sleeps.
+    /// Send the hub a package of each of `spaces` whose state changed since the
+    /// last one arrived, or of every space when `every`. Sends them all at once
+    /// over `calls` and holds none back for being recent, as before this
+    /// machine sleeps.
     pub(super) async fn send_current_packages(
         &self,
         daemon: &dyn Daemon,
@@ -285,10 +285,10 @@ impl Hub {
     }
 }
 
-/// When to look at every space again for the packages held back since
-/// their spaces sent one lately: when the pass that looked at every space
-/// `found` it, or else the earlier of that and when it was `due` before,
-/// since a pass over the spaces whose turns ended looks at only those.
+/// When to look at every space again for the packages held back as recent.
+/// A pass over every space sets it to what it `found`. A pass over only the
+/// spaces whose turns ended keeps the earlier of that and the time `due`
+/// before.
 fn next_due(due: Option<Instant>, found: Option<Instant>, every_space: bool) -> Option<Instant> {
     match (every_space, due, found) {
         (true, _, found) => found,

@@ -45,9 +45,9 @@ pub(crate) fn stale<S: Kind>(copy: &Copy<S>, agreed: Option<&Copy<S>>) -> bool {
     agreed.is_some_and(|agreed| agreed.revision >= copy.revision)
 }
 
-/// What the hub's `copy` does to the item that holds `item` here, given the
-/// copy of it the machine `agreed` on before and the edit of it the
-/// machine `sent` for this copy, if any.
+/// What the hub's `copy` does to the item that holds `item` here. `agreed`
+/// is the copy the machine agreed on before, and `sent` its edit for this
+/// copy, if any.
 pub(crate) fn taking<S: Kind>(
     copy: &Copy<S>,
     item: Option<&S::Value>,

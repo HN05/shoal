@@ -24,8 +24,9 @@ use capacity::Measured;
 pub(crate) const SETTLE: Duration = Duration::from_millis(500);
 
 /// How long a machine goes without a report before it reports that nothing
-/// changed, to hear of numbers the hub changed on its own, as when another
-/// machine ending a space makes this machine's copy of it the one listed.
+/// changed. The answer brings the numbers the hub changed on its own, as
+/// when another machine ending a space makes this machine's copy the listed
+/// one.
 pub(crate) const QUIET: Duration = Duration::from_secs(5 * 60);
 
 /// How long a machine waits to report all its spaces again after a report
@@ -130,12 +131,11 @@ impl Hub {
         }
     }
 
-    /// Wait until the hub took a report of this machine's space `id`, so
-    /// that the other machines find it there: as a machine that started it
-    /// for another one does before it answers that machine, which then
-    /// follows, attaches to and names it at once, and one that asks another
-    /// to start a space below it before it asks; after [`LISTED_WAIT`] it
-    /// stops waiting, as when the link went down meanwhile.
+    /// Wait until the hub took a report of this machine's space `id`, so other
+    /// machines find it there. A machine that started a space for another waits
+    /// before it answers, so that machine can follow, attach to and name it at
+    /// once. One that asks another to start a space below waits before it asks.
+    /// It stops waiting after [`LISTED_WAIT`], as when the link went down.
     pub async fn listed(&self, id: &SpaceId) {
         let mut reported = self.reported.0.subscribe();
         let listed = reported.wait_for(|reported| reported.contains(id));
@@ -213,9 +213,9 @@ impl Hub {
     }
 
     /// Send `report` to `sink`, with what this machine `measured` of its
-    /// capacity and power, what it `held` of the spaces it has not, and its
-    /// `repositories`, none when they are as it last sent them, and number
-    /// this machine's spaces from what the hub answers.
+    /// capacity and power, what it `held` of the spaces it does not have, and
+    /// its `repositories`, none when unchanged. Numbers this machine's spaces
+    /// from the hub's answer.
     async fn report(
         &self,
         daemon: &dyn Daemon,

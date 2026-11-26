@@ -67,9 +67,9 @@ pub(crate) trait Kind: Sized + Send + Sync + 'static {
         edits: Vec<Edit<Self>>,
     ) -> BoxFuture<'a, Vec<Edit<Self>>>;
 
-    /// Take the copies of the hub whose key is `key` into this machine's
-    /// items, given the copies it `agreed` on before and the edits it
-    /// `sent` for them, returning the copies it agrees on now.
+    /// Take the copies of the hub whose key is `key` into this machine's items,
+    /// given the copies it `agreed` on before and the edits it `sent` for them.
+    /// Returns the copies it agrees on now.
     fn take<'a>(
         hub: &'a Arc<Hub>,
         daemon: &'a Arc<dyn Daemon>,
@@ -99,7 +99,7 @@ pub(crate) type Agreed<S> = BTreeMap<<S as Kind>::Key, Copy<S>>;
 #[derive(Default)]
 pub(crate) struct Sharing {
     /// Held while the machine compares its items with the hub's copies and
-    /// takes them, so a copy the hub sends waits for a round that sent an
+    /// takes them. A copy the hub sends then waits for a round that sent an
     /// edit of its item.
     round: tokio::sync::Mutex<()>,
     /// Whether a copy the hub sent was not taken, so the next round reads
@@ -376,9 +376,9 @@ impl Hub {
         taken
     }
 
-    /// Take the hub's `copies` into this machine's items, given the copies
-    /// it `agreed` on with the hub whose key is `key` and the edits it
-    /// `sent` for them, and record those it agrees on now.
+    /// Take the hub's `copies` into this machine's items, given the copies it
+    /// `agreed` on with the hub whose key is `key` and the edits it `sent` for
+    /// them. Record the copies it agrees on now.
     async fn take_copies<S: Kind>(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,

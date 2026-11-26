@@ -30,13 +30,12 @@ pub(super) use state::Released;
 const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
 
 impl Hub {
-    /// Take the final package `sent` that a machine shutting down writes up
-    /// the duplex stream `stream` of `streams`, keeping it as
-    /// [`Self::keep_package`] does, then place its space for its start
-    /// among the other connected machines, or for a chat in a workspace's
-    /// worktree where it placed that workspace, write that placement on
-    /// this side of the stream and end it, for the machine to leave the
-    /// space there; refused at once as `keep_package` refuses a package.
+    /// Take the final package `sent` that a machine shutting down writes up the
+    /// duplex stream `stream`, and keep it as [`Self::keep_package`] does. Then
+    /// place its space among the other connected machines; a chat in a
+    /// workspace's worktree goes where that workspace went. Writes the
+    /// placement on this side of the stream and ends it, for the machine to
+    /// leave the space there. Refused at once as `keep_package` refuses.
     pub(crate) async fn take_handover(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -83,10 +82,10 @@ impl Hub {
         (self.place_among(daemon, start, |member| &member.id != from)).await
     }
 
-    /// Have the machine `decision` names continue the space `id`, which
-    /// the machine `from` handed over, alerting the user when it does not,
-    /// as the space then stays on `from`, and having `from` retire its
-    /// copy when it did while `from` stays.
+    /// Have the machine `decision` names continue the space `id`, which the
+    /// machine `from` handed over. When it does not, the space stays on `from`
+    /// and the user hears of it. When it does while `from` stays, `from`
+    /// retires its copy.
     async fn continue_handover(
         self: &Arc<Self>,
         daemon: &dyn Daemon,
@@ -156,17 +155,17 @@ impl Hub {
         }
     }
 
-    /// As the hub: take `member`'s word that the shutdown it handed spaces
-    /// over for was cancelled, so it stays and retires the spaces taken
-    /// over from it now, and those claimed later as each is.
+    /// As the hub: hear from `member` that the shutdown it handed spaces over
+    /// for was cancelled. It stays, and retires the spaces taken over from it
+    /// now and each one claimed later.
     pub(crate) fn hear_stay(self: &Arc<Self>, member: &MemberId) {
         self.handovers.stays(member);
         self.retire_while_staying(member);
     }
 
-    /// Have `member` retire the spaces taken over from it now, unless a
-    /// shutdown of it is under way or its link is down, when it retires
-    /// them once its link opens.
+    /// Have `member` retire the spaces taken over from it now. While a shutdown
+    /// of it is under way or its link is down, it retires them once its link
+    /// opens.
     fn retire_while_staying(self: &Arc<Self>, member: &MemberId) {
         if self.handovers.is_leaving(member) {
             return;

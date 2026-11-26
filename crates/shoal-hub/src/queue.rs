@@ -102,11 +102,10 @@ impl Hub {
         }
     }
 
-    /// Deliver what the hub holds for `recipient`, oldest first, until
-    /// none is left or its link closes. A call that never left stays for the next
-    /// link; one the machine received but never answered is not sent
-    /// again, since it may have run, and its sender hears that it went
-    /// unconfirmed, as of one the machine refused or that expired first.
+    /// Deliver what the hub holds for `recipient`, oldest first, until none is
+    /// left or its link closes. A call that never left stays for the next link.
+    /// A call the machine received but never answered is not sent again, since
+    /// it may have run. Its sender hears that it went unconfirmed.
     async fn deliver_held(
         &self,
         daemon: &dyn Daemon,
@@ -456,9 +455,9 @@ pub(super) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// One delivery per machine: a lock a delivery of what the hub holds for
-/// it takes, so a claim it finds was left by a hub that stopped, and what
-/// wakes it when the hub holds something new.
+/// One delivery per machine. A delivery takes this lock, so a claim it finds
+/// was left by a hub that stopped. It also wakes the delivery when the hub
+/// holds something new.
 #[derive(Default)]
 pub(super) struct Deliveries(std::sync::Mutex<std::collections::HashMap<MemberId, Arc<Delivery>>>);
 

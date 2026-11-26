@@ -108,9 +108,9 @@ impl Hub {
         Ok(())
     }
 
-    /// The file of the package the hub keeps of the space `id` for
-    /// `taker`, refused without one or while its machine is connected,
-    /// unless it handed the space over to `taker`.
+    /// The file of the package the hub keeps of the space `id` for `taker`.
+    /// Refused without one, or while its machine is connected, unless that
+    /// machine handed the space over to `taker`.
     async fn takeable_package_file(&self, id: &SpaceId, taker: &MemberId) -> Result<PathBuf> {
         match self.takeable_package(id, Some(taker)).await? {
             Some(_) => Ok(self.package_path(id)),
@@ -120,9 +120,9 @@ impl Hub {
         }
     }
 
-    /// The machine the directory lists the space `id` under and when it
-    /// built the package the hub keeps of it, while that machine is
-    /// offline or handed the space over to `taker`.
+    /// The machine the directory lists the space `id` under, and when it built
+    /// the package the hub keeps. Only while that machine is offline, or it
+    /// handed the space over to `taker`.
     async fn takeable_package(
         &self,
         id: &SpaceId,
@@ -156,9 +156,9 @@ fn owners_package(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<(MemberId
 }
 
 /// Record that `claimer`'s claim of the space `id` takes it over from the
-/// package the hub keeps of it, refused unless the machine the directory
-/// lists it under, which sent that package, is another than `claimer` and
-/// not among the `connected` ones, or `handed` the space over to it.
+/// hub's package. Refused unless the machine the directory lists it under
+/// is another than `claimer` and not among the `connected` ones, or it
+/// `handed` the space over to `claimer`.
 pub(crate) fn record_takeover(
     tx: &Transaction<'_>,
     id: &SpaceId,

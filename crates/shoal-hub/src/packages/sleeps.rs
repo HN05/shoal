@@ -183,10 +183,11 @@ pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     Ok(())
 }
 
-/// Count the package of the space `id` that `member` sent current, once it
-/// began to arrive at `arrived_at` no earlier than the notice of its sleep,
-/// both by the hub's clock, so a machine whose clock differs still catches
-/// up: one it sends for its sleep it builds after the notice.
+/// Count the package of the space `id` that `member` sent as current when
+/// it began to arrive, at `arrived_at`, no earlier than the notice of its
+/// sleep. Both times are by the hub's clock, so a machine whose clock
+/// differs still catches up: it builds a package for its sleep after the
+/// notice.
 pub(super) fn caught_up(
     tx: &Transaction<'_>,
     member: &MemberId,

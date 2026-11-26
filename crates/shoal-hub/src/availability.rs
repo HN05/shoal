@@ -88,8 +88,8 @@ fn by_history(spans: &[presence::Span], window: UnixTime, now: UnixTime) -> Clas
 }
 
 /// How long of `window` to `now` the machine was there through `spans`,
-/// oldest first, counting an absence since the last up to `now` as there
-/// while it is shorter than [`SHORT_GAP`].
+/// oldest first. An absence since the last span counts as there while it
+/// is shorter than [`SHORT_GAP`].
 fn there_for(spans: &[presence::Span], window: UnixTime, now: UnixTime) -> Duration {
     let last = spans.len().checked_sub(1);
     (spans.iter().enumerate())
@@ -262,10 +262,9 @@ impl Hub {
 }
 
 impl Hub {
-    /// Describe this machine to the hub over its link, keeping the
-    /// availability the hub answers, and again whenever what it says of
-    /// itself changes as its config does, for as long as the link stays
-    /// open.
+    /// Describe this machine to the hub over its link, and keep the
+    /// availability the hub answers. Describes it again whenever its config
+    /// changes what it says, while the link stays open.
     pub(super) async fn keep_describing(&self, calls: &Calls) -> Infallible {
         let mut reloaded = self.config.watch();
         loop {

@@ -99,9 +99,9 @@ impl Calls {
         }
     }
 
-    /// The duplex stream the other side writes in answer to the call
-    /// `call` makes of the new stream's number, once it replies that it
-    /// does, with this side's writer of it, which writes nothing before.
+    /// The duplex stream the other side writes in answer to `call`, which names
+    /// the new stream's number, once it replies that it does. Comes with this
+    /// side's writer of the stream, which writes nothing before then.
     pub async fn duplex(&self, call: impl FnOnce(u64) -> Call) -> Result<(Incoming, Outgoing)> {
         let (incoming, outgoing) = self.streams.open_duplex();
         match self.call(call(incoming.number())).await? {
@@ -180,8 +180,8 @@ pub enum End {
 
 /// Serve `channel` until it ends or `stop` resolves, answering the other
 /// side's calls with `answer` and passing replies to `calls`. An answer
-/// comes with what it holds until its reply is written, such as the daemon
-/// operation that keeps an update from exiting between a change and the
+/// comes with what it holds until its reply is written. The daemon
+/// operation it holds keeps an update from exiting between a change and the
 /// reply that reports it.
 pub async fn serve<A, F, H>(
     channel: Channel,

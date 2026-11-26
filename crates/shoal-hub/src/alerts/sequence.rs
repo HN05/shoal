@@ -10,9 +10,9 @@ use shoal_protocol::hub::alerts::{AlertNumbering, AlertRenumbering, AlertsReport
 /// How many spare alert numbers the hub keeps for each machine.
 const SPARES: usize = 20;
 
-/// Take `member`'s `report` of its alert numbers: take or renumber each it
-/// took on its own, drop the spares it used or never heard of, and return
-/// the numbers it keeps for the machine, its spares topped up.
+/// Take `member`'s `report` of its alert numbers. Takes or renumbers each
+/// number it took on its own, and drops the spares it used or never heard
+/// of. Returns the numbers kept for the machine, with its spares topped up.
 pub(crate) fn number(
     tx: &Transaction<'_>,
     member: &MemberId,
@@ -96,10 +96,9 @@ fn keep(tx: &Transaction<'_>, member: &MemberId, number: i64, spare: bool) -> Re
     Ok(())
 }
 
-/// Drop what the hub keeps for `member` that it no longer needs: the
-/// spares not `left` among those the machine reports, which it used or
-/// never heard of, and its alerts' numbers it no longer reports, which it
-/// heard of, but those it `kept` now.
+/// Drop what the hub keeps for `member` and no longer needs: the spares
+/// the machine does not report as `left`, and the numbers of its alerts
+/// that it no longer reports. Numbers it `kept` now stay.
 fn drop_heard(
     tx: &Transaction<'_>,
     member: &MemberId,

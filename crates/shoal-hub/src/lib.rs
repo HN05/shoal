@@ -207,11 +207,11 @@ impl Hub {
     }
 }
 
-/// Serve the hub's listener and keep its own machine's spaces and shared
-/// files in its directory while this daemon is the hub, and keep a link to
-/// the hub while it is a member of one, until the daemon stops; whether the daemon
-/// `restarts_on_update` decides what following the hub's version tells the
-/// user.
+/// Run the hub's work until the daemon stops. While this daemon is the hub,
+/// it serves the listener and keeps its own machine's spaces and shared
+/// files in its directory. While it is a member, it keeps its link to the
+/// hub. `restarts_on_update` decides what following the hub's version tells
+/// the user.
 pub async fn run(hub: Arc<Hub>, daemon: Arc<dyn Daemon>, restarts_on_update: bool) {
     hub.member.restarts_on_update(restarts_on_update);
     hub.connect_values(&daemon);

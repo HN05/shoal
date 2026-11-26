@@ -134,11 +134,11 @@ fn shared_registrations(repositories: Vec<Repository>) -> BTreeMap<Origin, Vec<R
     shared
 }
 
-/// This machine's shared local configs: the text of the local config of
-/// each origin it shares, its first registration's where several share
-/// one, and the copy it `agreed` on of each other origin, whose file is no
-/// longer shared and so no edit. The origins `joining` wait for the hub's
-/// copies, so their files are no edit yet either.
+/// This machine's shared local configs, by origin. Each origin it shares
+/// gives the text of its local config, that of its first registration
+/// where several share one. Each other origin gives the copy it `agreed`
+/// on, since its file is no longer shared and so no edit. The origins
+/// `joining` wait for the hub's copies, so their files are no edit yet.
 async fn local_configs(
     daemon: &dyn Daemon,
     agreed: &Agreed<SharedLocalConfigs>,
@@ -172,12 +172,11 @@ impl Hub {
         self.shared_local_configs.sharing.changed();
     }
 
-    /// Have the shared registration `id` of `origin`, which has just come
-    /// to be shared, take the hub's copy of its local config that this
-    /// machine agreed on, as a machine that joins the hub takes the shared
-    /// files: a file of its own that differs stays as its backup. Without
-    /// one, its file waits for the hub's copies, which the next round reads
-    /// at once.
+    /// Have the registration `id` of `origin`, which has just come to be
+    /// shared, take the hub's copy of its local config that this machine agreed
+    /// on. As when a machine joins the hub, a file of its own that differs
+    /// stays as its backup. Without an agreed copy, its file waits for the
+    /// hub's copies, which the next round reads at once.
     pub async fn shared_registration_joined(
         &self,
         daemon: &dyn Daemon,
@@ -214,11 +213,11 @@ impl Hub {
     }
 
     /// Write the hub's `copies` into this machine's shared registrations of
-    /// their origins, given the copies it `agreed` on with the hub and the
-    /// edits it `sent` for them, telling the user of each edit a copy
-    /// replaced; the copies it agrees on now, those of origins it shares
-    /// none of included. A copy one of the registrations could not take
-    /// is not agreed on, and the next round reads it again.
+    /// their origins, given the copies it `agreed` on and the edits it `sent`
+    /// for them. Tells the user of each edit a copy replaced. Returns the
+    /// copies it agrees on now, including those of origins it shares no
+    /// registration of. A copy a registration could not take is not agreed on,
+    /// so the next round reads it again.
     async fn take_local_config_copies(
         &self,
         daemon: &dyn Daemon,
@@ -337,7 +336,7 @@ struct Written {
 
 /// Write the hub's `copy` into the local config of each of
 /// `registrations`, given the copy this machine `agreed` on before and the
-/// edit it `sent` for this copy, logging each that could not take it.
+/// edit it `sent` for it. Logs each registration that could not take it.
 async fn take_into(
     daemon: &dyn Daemon,
     registrations: &[Repository],

@@ -27,11 +27,11 @@ pub(super) struct Measured {
 }
 
 impl Hub {
-    /// Measure this machine's capacity and power every [`MEASURE_EVERY`],
-    /// and at once when [told it changed](Self::capacity_changed), into
-    /// `measured`, whose receivers hear of it once its capacity moved
-    /// enough to place by or its power changed, first once it is measured
-    /// at all. A failed measurement of its capacity keeps the one before.
+    /// Measure this machine's capacity and power into `measured` every
+    /// [`MEASURE_EVERY`], and at once when [told it changed](Self::capacity_changed).
+    /// Receivers hear of a measurement when the capacity moved enough to place
+    /// by, when the power changed, and the first time. A failed measurement of
+    /// the capacity keeps the one before.
     pub(super) async fn keep_measuring(
         &self,
         daemon: &dyn Daemon,

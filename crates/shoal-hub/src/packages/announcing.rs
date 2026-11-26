@@ -98,10 +98,10 @@ impl Hub {
     }
 }
 
-/// How far the packages of the spaces `ids` lag: as `unsent` records for
-/// a machine that keeps them current, each space that has changes since
-/// then, and for one that keeps none, every space by an unknown lag, so
-/// the hub trusts no package it kept before.
+/// How far the packages of the spaces `ids` lag. On a machine that keeps
+/// them current, each space with changes since `unsent` lags from then. On
+/// any other, every space lags by an unknown time, so the hub trusts no
+/// package it kept before.
 fn lags<'a>(
     ids: impl Iterator<Item = &'a SpaceId>,
     unsent: Option<&HashMap<SpaceId, UnixTime>>,

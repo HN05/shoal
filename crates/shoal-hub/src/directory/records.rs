@@ -132,10 +132,10 @@ fn held(tx: &Transaction<'_>, member: &MemberId) -> Result<Vec<SpaceId>> {
     Ok(ids.collect::<rusqlite::Result<_>>()?)
 }
 
-/// Record `member`'s `space`: as the owner's when no other machine owns
-/// its ID or `member` claimed it, else as a copy, with the conflict a new
-/// copy raises unless another machine took the space over from `member`.
-/// A copy `member` handed over stays one until its space ends there, even
+/// Record `member`'s `space`. It is the owner's when no other machine owns
+/// its ID or `member` claimed it, and otherwise a copy. A new copy raises a
+/// conflict, unless another machine took the space over from `member`. A
+/// copy `member` handed over stays a copy until its space ends there, even
 /// once the machine that took it over ended its own.
 fn record(
     tx: &Transaction<'_>,
@@ -322,9 +322,9 @@ fn drop_copy(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()
     Ok(())
 }
 
-/// Make the earliest copy of the space `id`, which no machine owns now,
-/// its owner's, if any machine kept one other than a copy it handed over,
-/// which its machine retires.
+/// Make the earliest copy of the space `id`, which no machine owns now, the
+/// owner's. A copy its machine handed over does not count, since that
+/// machine retires it.
 fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
     let earliest: Option<(MemberId, String, UnixTime)> = tx
         .query_row(

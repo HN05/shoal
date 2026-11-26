@@ -27,10 +27,10 @@ pub(super) fn kept_for(tx: &Transaction<'_>, member: &MemberId) -> Result<Number
 }
 
 /// Settle the number of `member`'s space `id`, which the directory lists
-/// under it now: a spare or new number it took becomes the listing's,
-/// ending any renumbering of it, and one another machine's space or
-/// reservation held first has the hub keep a new one for it, unless it
-/// keeps one already.
+/// under it now. A spare or new number the space took becomes its listed
+/// number, which ends any renumbering. When another machine's space or
+/// reservation held the number first, the hub keeps a new one for the
+/// space, unless it keeps one already.
 pub(super) fn settle(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()> {
     let number = listed_number(tx, id)?;
     if took_kept(tx, member, id, number)? {
@@ -95,10 +95,10 @@ pub(super) fn reserve_held(
     Ok(())
 }
 
-/// Replace what the hub kept for `member` that `member` holds without a
-/// listed space of its own, as a number it reserves since it numbered a
-/// space above its highest with it and removed it, or a copy's: a spare
-/// goes, and a space's new number gives way to another.
+/// Replace what the hub kept for `member` that `member` now holds without a
+/// listed space of its own: a number it reserves for a removed space, or a
+/// copy's number. A spare goes, and a space's new number gives way to
+/// another.
 pub(super) fn replace_held(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
     let mut statement = tx.prepare(
         "SELECT number, space_id FROM hub_numbers WHERE member_id=?1
@@ -160,10 +160,10 @@ fn of_listed(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> 
         .optional()?)
 }
 
-/// Whether `number`, which `member`'s space `id` has, is held by another
-/// machine's listed space that keeps it, by what the hub keeps for another
-/// machine or another space, or by another machine without a listed space
-/// of its own, but for its copy of this space.
+/// Whether something other than `member`'s space `id` holds `number`:
+/// another machine's listed space, what the hub keeps for another machine
+/// or space, or another machine without a listed space of its own. That
+/// machine's copy of this space does not count.
 fn held_elsewhere(
     tx: &Transaction<'_>,
     member: &MemberId,

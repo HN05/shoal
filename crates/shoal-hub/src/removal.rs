@@ -17,8 +17,8 @@ use shoal_protocol::{
 use crate::{Hub, daemon::Daemon};
 
 /// What a removal asks of the spaces directly below its space that other
-/// machines run, each of which its own machine removes as it removes a
-/// child of a space it removes.
+/// machines run. Each one's own machine removes it, as it removes a child
+/// of a space it removes.
 pub struct BelowElsewhere<'a> {
     /// Leave the spaces the user holds, as a workspace process's removal
     /// does.
@@ -26,11 +26,10 @@ pub struct BelowElsewhere<'a> {
     /// The IDs of the only spaces below it the removal takes, when the
     /// caller confirmed those it saw.
     pub confirmed: Option<&'a [SpaceId]>,
-    /// The cause of the removal this one is part of, which the removal of
-    /// each child there takes, and which has the hub hold a child's
-    /// removal while its machine is offline for a removal someone asked
-    /// for; an unattended one tries again on its next round instead, so its
-    /// rounds pile up no removals.
+    /// The cause of the removal this one is part of, which each child's removal
+    /// takes. For a removal someone asked for, the hub holds a child's removal
+    /// while its machine is offline. An unattended removal tries again on its
+    /// next round instead, so its rounds pile up no removals.
     pub cause: EventCause,
 }
 

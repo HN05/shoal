@@ -20,9 +20,9 @@ use shoal_daemon_base::alerts::{About, NewAlert, Sender};
 /// something new.
 const OUTBOX_LOOK: std::time::Duration = std::time::Duration::from_secs(60);
 
-/// An event a space passes up: the space it is about, the kind of alert it
-/// is, whether the user receives it when no space above takes it, its
-/// message and the records of the files it sent.
+/// An event a space passes up: the space it is about, its alert kind, its
+/// message and the records of the files it sent. It says too whether the
+/// user receives it when no space above takes it.
 pub struct Event<'a> {
     pub name: &'a SpaceName,
     pub space: &'a SpaceId,
@@ -167,9 +167,9 @@ impl Hub {
         }
     }
 
-    /// Deliver `told` to the nearest space from `told.above` up with an
-    /// agent, pass it on to the machine where the tree goes on, or tell
-    /// the user what is for the user.
+    /// Deliver `told` to the nearest space with an agent from `told.above` up.
+    /// Otherwise pass it on to the machine where the tree goes on, or tell the
+    /// user what is for the user.
     pub(super) async fn deliver_told(&self, daemon: &dyn Daemon, told: Told) -> Result<()> {
         let receiver = daemon.receiver_from(&told.above).await?;
         let kind = told.record.kind();
@@ -204,9 +204,9 @@ impl Hub {
         }
     }
 
-    /// `files` as this machine reads them: those it keeps itself by their
-    /// copy's path, as when an event it passed up comes back to it, without
-    /// those whose record is gone, as an alert of its own space shows them.
+    /// `files` as this machine reads them. Those it keeps itself go by their
+    /// copy's path, as when an event it passed up comes back to it. Those whose
+    /// record is gone are left out, as an alert of its own space shows them.
     async fn files_here(&self, daemon: &dyn Daemon, files: &[SentFile]) -> Result<Vec<SentFile>> {
         let machine = self.machine_name(daemon).await;
         let (back, elsewhere): (Vec<_>, Vec<_>) =

@@ -166,10 +166,10 @@ pub(super) fn had_work(listed: &Listed, held: &HashSet<SpaceId>) -> bool {
         || held.contains(&space.id)
 }
 
-/// The alert that `machine`, last seen at `dropped_at` and unreachable
-/// for `away` since, as it `slept` or not, dropped while the `busy` spaces
-/// had something to do, of which the hub `kept` packages, with `others`
-/// requests waiting for it besides.
+/// The alert that `machine` dropped while its `busy` spaces had something
+/// to do. It names when the machine was last seen and how long it has been
+/// away, whether it `slept`, the packages the hub `kept`, and the `others`
+/// requests that wait for it.
 fn drop_message(
     machine: &Member,
     (dropped_at, away, slept): (UnixTime, Duration, bool),

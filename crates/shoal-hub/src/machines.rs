@@ -16,9 +16,9 @@ pub struct Named {
 }
 
 impl Hub {
-    /// The joined machine `named` names, by its ID or a name only one
-    /// machine has, as the hub lists them, or as this machine last learned
-    /// them while the hub cannot be asked; refused on a machine in no hub.
+    /// The joined machine `named` names, by its ID or a name only one machine
+    /// has. Reads the hub's list, or what this machine last learned while the
+    /// hub cannot be asked. Refused on a machine in no hub.
     pub async fn named_machine(&self, daemon: &dyn Daemon, named: &str) -> Result<Named> {
         let Some((own, directory)) = self.directory_or_known(daemon).await? else {
             bail!("this machine joined no hub, so --machine names no other machine; leave it out");

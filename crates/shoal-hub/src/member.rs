@@ -306,11 +306,10 @@ impl Hub {
         Ok(Ok(transport))
     }
 
-    /// Serve the open link on `transport` until it ends or `stop`
-    /// resolves, answering what the hub passes this machine, and sending
-    /// what waited for the link, then reporting this machine's spaces,
-    /// describing it, sending its packages and sharing its shared items,
-    /// meanwhile.
+    /// Serve the open link on `transport` until it ends or `stop` resolves. It
+    /// answers what the hub passes this machine and sends what waited for the
+    /// link. Meanwhile it reports this machine's spaces, describes the machine,
+    /// sends its packages and shares its shared items.
     async fn serve_hub(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,

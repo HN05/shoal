@@ -211,9 +211,9 @@ fn held(tx: &Transaction<'_>, number: SpaceNumber) -> Result<bool> {
     )?)
 }
 
-/// Stop numbering spaces and alerts from a hub's sequence unless this
-/// machine is a member of a hub that has not revoked it, as once it leaves
-/// one or gives up the hub role; whether it stopped.
+/// Stop numbering spaces and alerts from a hub's sequence, unless this
+/// machine is an unrevoked member of a hub. This applies once it leaves a
+/// hub or gives up the hub role. Returns whether it stopped.
 pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<bool> {
     let joined: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_membership WHERE revoked=0)",

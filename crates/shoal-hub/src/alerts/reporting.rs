@@ -88,9 +88,9 @@ impl Hub {
         Ok(Reported { numbers, users })
     }
 
-    /// Send `sink` `current`, with `users` for the user's alerts, and take
-    /// the numbers it answers with, returning what the machine reports
-    /// once it took them, with the user's alerts as the hub has them.
+    /// Send `sink` `current`, with `users` for the user's alerts, and take the
+    /// numbers it answers with. Returns what the machine reports once it took
+    /// them, with the user's alerts as the hub has them.
     async fn report_alerts_once(
         &self,
         daemon: &dyn Daemon,

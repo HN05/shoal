@@ -91,9 +91,9 @@ impl Kind for SharedRepositories {
     }
 }
 
-/// The shared items `repositories`, the registrations here, hold: each
-/// shared one by its origin, as the copy agreed on with the hub has it
-/// where there is one, so a name or URL of its own here is no edit.
+/// The shared items that `repositories`, the registrations here, hold. Each
+/// shared one is keyed by its origin, as the copy agreed on with the hub
+/// has it, so a name or URL of its own here is no edit.
 pub(crate) fn shared(
     repositories: &[Repository],
     agreed: &Agreed<SharedRepositories>,
@@ -243,9 +243,9 @@ impl Hub {
         });
     }
 
-    /// Register a clone of the shared repository of `origin`, as its
-    /// newest copy names it, and share it as the copy agreed on with the
-    /// hub whose key is `key`, telling the user when it cannot.
+    /// Register a clone of the shared repository of `origin`, as its newest
+    /// copy names it. Share it as the copy agreed on with the hub whose key is
+    /// `key`. Tell the user when it cannot.
     async fn register_shared(&self, daemon: &Arc<dyn Daemon>, key: &PublicKey, origin: Origin) {
         let cloning = &self.shared_repositories.cloning;
         let Some(SharedRepository { url, name }) = cloning.newest(&origin) else {
@@ -265,10 +265,10 @@ impl Hub {
         }
     }
 
-    /// Share `repository`, a clone of the shared repository `copy` names,
-    /// with the hub's copy of its local config, and agree on the copy with
-    /// the hub whose key is `key`, unless the machine agreed on a later
-    /// copy meanwhile, as one that unshares it.
+    /// Share `repository`, a clone of the shared repository `copy` names, with
+    /// the hub's copy of its local config. Agree on the copy with the hub whose
+    /// key is `key`, unless the machine agreed on a later copy meanwhile, such
+    /// as one that unshares it.
     async fn share_clone(
         &self,
         daemon: &Arc<dyn Daemon>,

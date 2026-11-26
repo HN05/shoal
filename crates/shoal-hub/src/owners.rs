@@ -54,12 +54,11 @@ impl Hub {
         )
     }
 
-    /// Claim the space `id` at the hub, which this machine imports as
-    /// another moves it here, so this machine's report of it takes the ID
-    /// over without a conflict, and keep the number the hub keeps for it
-    /// for when the import records it. A hub that cannot be asked takes no
-    /// claim, and the space shows as a conflict until the other machine
-    /// ends it.
+    /// Claim the space `id`, which this machine imports as another moves it
+    /// here, at the hub. The claim lets this machine's report take the ID over
+    /// without a conflict. Keeps the number the hub keeps for the space, for
+    /// the import to record. A hub that cannot be asked takes no claim, and the
+    /// space shows as a conflict until the other machine ends it.
     pub async fn claim_space(&self, daemon: &dyn Daemon, id: &SpaceId) {
         if let Err(error) = self.claim_if_joined(daemon, id).await {
             log!("hub: could not claim space {id}: {error:#}");
@@ -79,12 +78,11 @@ impl Hub {
         Ok(())
     }
 
-    /// Claim the space `id` at the hub for the move `ticket` through it,
-    /// which this machine imports, and keep the number the hub keeps for
-    /// it, without which the claim stands too. The hub refuses it while it
-    /// cannot be asked, or once the move's source settled the move without
-    /// it, so the import records nothing and the space stays where it was;
-    /// a claim whose answer never came may stand.
+    /// Claim the space `id` at the hub for the move `ticket`, which this machine
+    /// imports, and keep the number the hub keeps for it. The claim stands
+    /// without the number too. The hub refuses it while it cannot be asked, or
+    /// once the move's source settled the move without it; the import then
+    /// records nothing. A claim whose answer never came may stand.
     pub async fn claim_moved(
         &self,
         daemon: &dyn Daemon,
@@ -95,13 +93,11 @@ impl Hub {
         self.keep_claimed_number(id, claimed).await
     }
 
-    /// Claim the space `id` at the hub for this machine's takeover of it
-    /// from the package the hub keeps of it, which this machine imports,
-    /// and keep the number the hub keeps for it, without which the claim
-    /// stands too. The hub refuses it while it cannot be asked, or once
-    /// the space's machine is connected again, so the import records
-    /// nothing and the space stays there; a claim whose answer never came
-    /// may stand.
+    /// Claim the space `id` at the hub for this machine's takeover of it from
+    /// the hub's package, and keep the number the hub keeps for it. The claim
+    /// stands without the number too. The hub refuses it while it cannot be
+    /// asked, or once the space's machine is connected again; the import then
+    /// records nothing. A claim whose answer never came may stand.
     pub async fn claim_taken_over(
         &self,
         daemon: &dyn Daemon,

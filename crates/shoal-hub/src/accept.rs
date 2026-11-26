@@ -324,14 +324,16 @@ impl Hub {
             .await
     }
 
-    /// The refusal of a member that runs another version or speaks
-    /// `protocol`, with the hub's version signed over its nonce, after
-    /// recording an alert that names it, its version and the update it
-    /// needs, for one that follows the hub only once it has not for
-    /// [`FOLLOW_GRACE`]. What a peer sends here is not yet authenticated, so the alert
-    /// names only a member the hub recorded, holds the version it claims
-    /// short and printable, and comes at most once an hour for each member,
-    /// or for all joiners together.
+    /// The refusal of a member that runs another version or speaks `protocol`,
+    /// with the hub's version signed over its nonce. First it records an alert
+    /// that names the member, its version and the update it needs. For a member
+    /// that follows the hub, the alert waits until it has not followed for
+    /// [`FOLLOW_GRACE`].
+    ///
+    /// What a peer sends here is not yet authenticated. So the alert names only
+    /// a member the hub recorded, keeps the claimed version short and
+    /// printable, and comes at most once an hour for each member, or for all
+    /// joiners together.
     async fn refuse_version(&self, daemon: &dyn Daemon, opening: &Value, protocol: u32) -> Refusal {
         let theirs = claimed_version(opening);
         let (alerted, name) = self.refused_member(opening).await;

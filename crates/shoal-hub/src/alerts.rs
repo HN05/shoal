@@ -57,9 +57,9 @@ impl Hub {
     }
 
     /// Number this machine's alerts as `numbering`, the hub's answer to
-    /// `reported`, says, telling the agent of the space that sent each
-    /// unread alert it renumbers, and read or delete those to the user
-    /// other machines read or cleared.
+    /// `reported`, says. Tells the agent of the space that sent each unread
+    /// alert it renumbers. Reads or deletes the alerts to the user that other
+    /// machines read or cleared.
     async fn take_alert_numbering(
         &self,
         daemon: &dyn Daemon,

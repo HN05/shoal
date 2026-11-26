@@ -25,10 +25,10 @@ use crate::{
     time::UnixTime,
 };
 
-/// What an answer holds until its reply is written: the daemon operation,
-/// so an update never exits between a change and the reply that reports
-/// it, and for a member whose credential the call revoked, by leaving or
-/// revoking itself, the end of its link once it has read that it did.
+/// What an answer holds until its reply is written. It holds the daemon
+/// operation, so an update never exits between a change and the reply that
+/// reports it. When the call revoked the caller's own credential, it also
+/// holds the end of its link until the member has read that reply.
 pub(super) struct Held {
     _operation: Option<OwnedRwLockReadGuard<()>>,
     ends: Option<(Arc<Hub>, MemberId)>,
@@ -349,9 +349,9 @@ impl Hub {
         })
     }
 
-    /// Revoke the credential of the member `selector` names, ending its
-    /// link, unless it is the `caller`'s, which ends once the caller has
-    /// read the reply, with the settings it fetched from other machines.
+    /// Revoke the credential of the member `selector` names, and end its link.
+    /// The `caller`'s own link ends only once it has read the reply. The reply
+    /// names the settings the member fetched from other machines.
     pub(super) async fn revoke_member(
         &self,
         selector: &str,

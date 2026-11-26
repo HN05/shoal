@@ -33,10 +33,9 @@ impl Default for OwnReleases {
 
 impl Hub {
     /// As the paused hub's own machine `own`: keep the final package of
-    /// `space` as the hub, and where the hub sends it among the other
-    /// connected machines, or for a chat in the workspace `within`'s
-    /// worktree where it sent that workspace; none where no machine can
-    /// take it.
+    /// `space`, and place the space among the other connected machines. A chat
+    /// in the workspace `within`'s worktree goes where that workspace went.
+    /// Returns where it goes, none when no machine can take it.
     pub(super) async fn hand_over_own(
         &self,
         daemon: &dyn Daemon,
@@ -57,9 +56,8 @@ impl Hub {
     }
 
     /// Keep the package of `space`, which the hub's own machine `own` hands
-    /// over following the workspace `within`, as the hub keeps a package a
-    /// machine sends, with the state it was built from; the start its agent
-    /// would make.
+    /// over after the workspace `within`, as the hub keeps a package a machine
+    /// sends. Returns the start its agent would make.
     async fn keep_own_package(
         &self,
         daemon: &dyn Daemon,

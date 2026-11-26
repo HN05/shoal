@@ -41,9 +41,9 @@ pub(crate) struct Kept {
     refusal_alerted: AtomicBool,
 }
 
-/// A package `member` sends of `space`, which it built at `built_at` by its
-/// own clock, and which began to arrive at `arrived_at` by the hub's, with
-/// what continues the space from it elsewhere.
+/// A package `member` sends of `space`, with what continues the space from
+/// it elsewhere. `built_at` is by the machine's clock, and `arrived_at`,
+/// when it began to arrive, by the hub's.
 pub(crate) struct Sent {
     pub member: MemberId,
     pub space: SpaceId,
@@ -104,10 +104,10 @@ impl Hub {
         Ok((out, up.context("a package comes up a duplex stream")?))
     }
 
-    /// Read the package `sent` from `up` to its end and keep it, and how
-    /// that went, with the daemon operation it was kept in, which the
-    /// caller holds until it answered, so an update never exits between
-    /// the two; none once the daemon is exiting, which keeps nothing.
+    /// Read the package `sent` from `up` to its end, keep it, and return how
+    /// that went. It returns the daemon operation it kept the package in too,
+    /// which the caller holds until it answered, so an update never exits
+    /// between the two. Returns none once the daemon is exiting.
     pub(super) async fn take_package(
         &self,
         sent: Sent,
@@ -204,8 +204,8 @@ impl Hub {
     }
 
     /// Refuse a package while the disk of the hub's state directory has less
-    /// free space than the overload warning threshold, alerting the user
-    /// the first time since the hub last took one.
+    /// free space than the overload warning threshold. The user hears of it the
+    /// first time since the hub last took a package.
     pub(super) async fn ensure_package_room(&self, daemon: &dyn Daemon) -> Result<()> {
         let threshold = (self.config.current().machine.overload.warning).disk_free_bytes();
         let state = self.paths.state.clone();
@@ -260,8 +260,8 @@ fn lists_under(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<
 }
 
 /// Record `member`'s package of the space `id`, built at `built_at`, of
-/// `size` bytes, with what continues the space from it, in place of the
-/// one before, while the directory lists the space under `member`.
+/// `size` bytes, in place of the one before. It records what continues the
+/// space from it too, while the directory lists the space under `member`.
 fn record(
     tx: &Transaction<'_>,
     (member, id): (&MemberId, &SpaceId),

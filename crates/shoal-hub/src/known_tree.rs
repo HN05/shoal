@@ -144,10 +144,10 @@ impl Hub {
         }
     }
 
-    /// This machine's ID at the hub and the hub's directory, or the tree it
-    /// last learned while the hub cannot be asked, which a removal and a
-    /// restore go by rather than take the other machines' spaces for none;
-    /// a machine that never reached the hub knows of none.
+    /// This machine's ID at the hub and the hub's directory. While the hub
+    /// cannot be asked, the tree this machine last learned stands in for them,
+    /// so a removal or restore never takes the other machines' spaces for none.
+    /// A machine that never reached the hub knows of none.
     pub(super) async fn directory_or_known(
         &self,
         daemon: &dyn Daemon,

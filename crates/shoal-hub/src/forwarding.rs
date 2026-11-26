@@ -56,11 +56,10 @@ pub enum Elsewhere {
 }
 
 impl Hub {
-    /// The answer to `request`, which named `space` that this machine has
-    /// none of, from the other machine the hub lists that space on, or for
-    /// a removed space's record or files, the one that keeps what it acts
-    /// on; none when no other machine has it, so the request's own refusal
-    /// stands.
+    /// The answer to `request`, which named `space` that this machine does not
+    /// have, from the machine the hub lists the space on. For a removed space's
+    /// record or files, it asks the machine that keeps them. Returns none when
+    /// no other machine has it, so the request's own refusal stands.
     pub async fn answer_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -278,9 +277,9 @@ impl Hub {
         }
     }
 
-    /// What the offline `machine` last reported of the space `space` names,
-    /// as the hub lists it in `listed`, for `caller`, whose scope must reach
-    /// it, as the owning machine would check.
+    /// What the offline `machine` last reported of the space `space` names, as
+    /// the hub lists it in `listed`. `caller`'s scope must reach it, as the
+    /// owning machine would check.
     async fn reported(
         &self,
         daemon: &dyn Daemon,
@@ -351,12 +350,11 @@ impl Hub {
         }
     }
 
-    /// Have `machine` carry out `operation` for the user, through the hub,
-    /// which holds it while that machine is offline, keeping it in this
-    /// machine's outbox while the hub cannot be reached, so it goes once
-    /// it can; an error that machine answered fails it, and one it kept or
-    /// the hub holds succeeds, of which the user hears nothing should it
-    /// expire or fail there, since it only keeps that machine in step.
+    /// Have `machine` carry out `operation` for the user, through the hub. The
+    /// hub holds it while that machine is offline, and this machine's outbox
+    /// keeps it while the hub cannot be reached. An error that machine answers
+    /// fails it; one held or kept succeeds. The user hears nothing if a held
+    /// one expires or fails there, since it only keeps that machine in step.
     pub async fn tell_machine(
         &self,
         daemon: &dyn Daemon,
@@ -607,11 +605,11 @@ fn forwardable(
 /// The call that asks for a stream, on its number.
 type StreamCall = Box<dyn FnOnce(u64) -> Call + Send>;
 
-/// The request `method` as it goes to the machine of `listed`: without
-/// what belongs to this machine, such as an environment, which that
-/// machine has its own of, and naming the item it acts on as the hub lists
-/// it, where the caller named it by number alone; and whether it names
-/// every item it acts on so.
+/// The request `method` as it goes to the machine of `listed`, and whether
+/// it names every item it acts on as the hub lists it. It leaves out what
+/// belongs to this machine, such as an environment, which that machine has
+/// its own of. An item the caller named by number alone gets the name the
+/// hub lists it by.
 fn prepared(method: serde_json::Value, listed: &Listed) -> Result<(serde_json::Value, bool)> {
     let mut operation = caller_machine_left(method)?;
     operation.pin_item(&listed.space.approvals);

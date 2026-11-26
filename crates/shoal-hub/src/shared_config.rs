@@ -96,10 +96,10 @@ impl Kind for SharedFiles {
 }
 
 impl Hub {
-    /// Write the hub's `copies` into this machine's files, given the copies
-    /// it `agreed` on with the hub and the edits it `sent` for them, then
-    /// load the config they make and tell the user of each edit a copy
-    /// replaced; the copies it agrees on now.
+    /// Write the hub's `copies` into this machine's files, given the copies it
+    /// `agreed` on with the hub and the edits it `sent` for them. Then load the
+    /// config they make, and tell the user of each edit a copy replaced.
+    /// Returns the copies it agrees on now.
     async fn take_file_copies(
         &self,
         daemon: &dyn Daemon,

@@ -232,10 +232,10 @@ pub trait Packages: Send + Sync {
         file: &'a Path,
     ) -> BoxFuture<'a, Result<RemovedSpace>>;
 
-    /// End `space` here, which another machine took over from the hub's
-    /// package of it while this one was offline, keeping its work in its
-    /// removal record and its branch, and leaving the spaces below it;
-    /// what then opens that work, for the user to read.
+    /// End `space` here, which another machine took over from the hub's package
+    /// while this one was offline. Keeps its work in its removal record and its
+    /// branch, and leaves the spaces below it. Returns what opens that work,
+    /// for the user to read.
     fn retire_space<'a>(&'a self, space: &'a Space) -> BoxFuture<'a, Result<String>>;
 
     /// How placement reads a start of the agent of `space`, which a

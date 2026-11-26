@@ -122,10 +122,9 @@ fn confirmed(tx: &Transaction<'_>, number: i64) -> Result<()> {
     Ok(())
 }
 
-/// Give the alert numbered `from` the number `to`, unless it is gone, so
-/// its number waits no more, or an alert here holds `to`, so it waits for
-/// another, and return it when it is an unread alert a space sent, whose
-/// agent hears of it.
+/// Give the alert numbered `from` the number `to`. Nothing changes when the
+/// alert is gone, or when an alert here holds `to`, so it waits for another.
+/// Returns the alert when a space sent it unread, so its agent hears of it.
 fn renumber(
     tx: &Transaction<'_>,
     records: &dyn Records,

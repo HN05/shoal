@@ -154,12 +154,12 @@ impl Hub {
     }
 }
 
-/// What a summary reads besides a space's record: the spaces whose agent's
-/// stop saved work to restore, those that saved any stopped work or last
-/// sessions, those `shoal stop --all` stops, the agents queued to start or
-/// whose launch failed, the open threads and pending approval requests of every space, the space above
-/// each, which may run on another machine, the spaces with an agent, and
-/// the agent that runs in each.
+/// What a summary reads besides a space's record. It holds the spaces whose
+/// stop saved work to restore, those with any stopped work or last
+/// sessions, and those `shoal stop --all` stops. It holds the agents queued
+/// to start or whose launch failed, every space's open threads and pending
+/// approval requests, and the space above each, which may run elsewhere.
+/// It holds the spaces with an agent, and the agent that runs in each.
 struct Around {
     stopped: HashSet<SpaceId>,
     saved: HashSet<SpaceId>,

@@ -114,9 +114,9 @@ impl Hub {
         }
     }
 
-    /// Hand each of `spaces` over through the hub on `route` by
-    /// `deadline`, all at once, a chat in a workspace's worktree only once
-    /// this machine `left` that workspace to the hub, and where each went.
+    /// Hand each of `spaces` over through the hub on `route` by `deadline`, all
+    /// at once, and return where each went. A chat in a workspace's worktree
+    /// goes only once this machine `left` that workspace to the hub.
     async fn hand_over_all(
         &self,
         daemon: &dyn Daemon,
@@ -173,9 +173,9 @@ impl Hub {
         released_as(released, decision)
     }
 
-    /// Send the hub on `route` the final package of `space`, a chat in the
-    /// worktree of the workspace `within` when it names one, and where the
-    /// hub sends the space, none where no machine can take it.
+    /// Send the hub on `route` the final package of `space`, and return where
+    /// the hub sends it, none when no machine can take it. `within` names the
+    /// workspace a chat runs in.
     async fn send_final_package(
         &self,
         daemon: &dyn Daemon,
@@ -206,10 +206,10 @@ impl Hub {
         }
     }
 
-    /// Tell the hub that this machine stays after all, as once its shutdown
-    /// was cancelled or its user came back or unpaused it, so it retires
-    /// the spaces it handed over that other machines took; as the hub,
-    /// retire them here; nothing on a machine in no hub.
+    /// Tell the hub this machine stays after all, as once its shutdown was
+    /// cancelled or its user came back or unpaused it. The hub then has it
+    /// retire the spaces other machines took over. As the hub, retire them
+    /// here. A machine in no hub does nothing.
     pub async fn stay(&self, daemon: &dyn Daemon) {
         if self.is_hub(daemon) {
             return self.stay_own(daemon).await;
@@ -262,11 +262,11 @@ impl Hub {
     }
 }
 
-/// Where a space this machine released to the hub, which sends it as
-/// `decision`, went, as the hub's answer to the release says, none when it
-/// did not come in time: the hub continues it once it took the release,
-/// and may have when its answer never came; it surely did not when it
-/// refused the release or the release never left this machine.
+/// Where a space this machine released to the hub went, as the hub's
+/// answer says, with `decision` as the hub sent it. Returns none when the
+/// answer did not come in time. The hub continues the space once it took
+/// the release, and may have when its answer never came. It surely did not
+/// when it refused the release or the release never left this machine.
 fn released_as(released: Option<Result<Reply>>, decision: Decision) -> Handed {
     match released {
         Some(Ok(Reply::Delivered)) => Handed::Went(decision),
