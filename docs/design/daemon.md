@@ -82,6 +82,10 @@ A client follows an operation by its ID: its typed steps and output as they
 come, then a result or a typed failure. The CLI starts and follows operations
 through `shoal_client`, as an app does, so the CLI and apps cannot drift.
 
+The daemon keeps an operation in memory until ten minutes after it ends, so a
+client follows it again by its ID from any event. A restart forgets it, and
+setup and merges fail with their daemon.
+
 The worker acts with the caller's scope. From the CLI, it also takes the
 caller's environment, without the secrets an agent launch exported. It runs
 the tracked executions and hooks the CLI ran, under the same checks. What it

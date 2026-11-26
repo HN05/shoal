@@ -65,7 +65,8 @@ the forge serves it under, `refs/pull/<number>/head`, or
 `refs/merge-requests/<number>/head` on GitLab, and refuses the PR on a forge
 without one. Setup and the diff, `{diff_base}` included, compare against the
 PR's `origin/<base>`. The workspace's agent has no branch, so it cannot push or
-open a PR.
+open a PR. Such a start refuses `--path`, `--git-profile` and `--base`, which
+apply to a branch.
 
 A PR has at most one workspace: a start reuses the one made for it or linked to
 it. When the PR's head moved, the workspace moves to the new head; a workspace
