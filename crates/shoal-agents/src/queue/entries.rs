@@ -14,6 +14,7 @@ use super::{
     store::{
         Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, ensure_recordable, entry, insert_launch,
     },
+    worker::Replacement,
 };
 use crate::Agents;
 use crate::daemon::Daemon;
@@ -100,10 +101,7 @@ impl Agents {
             self.prepare_replacement(daemon, &space, &launch).await?;
         }
         let _gate = self.agent_queue.lock_admission().await;
-        if replace {
-            self.replace_for(daemon, &space, &launch).await?;
-        }
-        self.ensure_takes_worker(&space).await?;
+        self.take_worker(daemon, &space, &launch, replace).await?;
         let (records, removals) = (self.records.clone(), self.removals.clone());
         self.store
             .write(move |tx| insert_launch(tx, &*records, &*removals, &launch))
@@ -127,8 +125,11 @@ impl Agents {
     }
 
     /// Stop the wrappers that wait to restore the asleep agent of `space`
-    /// that `launch` replaces, once nothing but that agent would refuse to
-    /// record the launch, before the queue gate is taken.
+    /// that `launch` replaces, once recording the launch would not refuse
+    /// it, before the queue gate is taken. A waiting wrapper would refuse
+    /// the replacement's own check, so that check follows the stop: when it
+    /// refuses, such as for a launch queued meanwhile, the agent stays
+    /// stopped for `shoal resume`.
     async fn prepare_replacement(
         &self,
         daemon: &dyn Daemon,
@@ -139,18 +140,34 @@ impl Agents {
         self.stop_asleep_wrappers(daemon, space).await
     }
 
-    /// Discard the stopped or asleep agent of `space` that `launch`
-    /// replaces, once nothing but that agent would refuse to record the
-    /// launch, so a refused launch keeps it. Requires the queue gate, which
-    /// keeps another launch out until this one is recorded.
-    async fn replace_for(
+    /// Give `launch` the one agent of `space`: refuse it while the space has
+    /// an agent of its own, unless it `replaces` a stopped or asleep one,
+    /// which goes once nothing refuses the launch. Requires the queue gate,
+    /// which keeps another launch out until this one is recorded.
+    async fn take_worker(
         &self,
         daemon: &dyn Daemon,
         space: &crate::model::Space,
         launch: &Arc<Launch>,
+        replaces: bool,
     ) -> Result<()> {
+        if !replaces {
+            return self.ensure_takes_worker(space).await;
+        }
+        let replacement = self.check_replacement(space, launch).await?;
+        self.replace_stopped_worker(daemon, replacement).await
+    }
+
+    /// Plan the replacement of the stopped or asleep agent of `space` by
+    /// `launch`, refusing it wherever recording the launch or replacing the
+    /// agent would.
+    async fn check_replacement(
+        &self,
+        space: &crate::model::Space,
+        launch: &Arc<Launch>,
+    ) -> Result<Replacement> {
         self.ensure_launch_recordable(launch).await?;
-        self.replace_stopped_worker(daemon, space).await
+        self.plan_replacement(space).await
     }
 
     /// Refuse `launch` where recording it would refuse it.

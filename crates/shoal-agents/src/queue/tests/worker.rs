@@ -1,4 +1,5 @@
 use crate::{
+    model::Space,
     protocol::operations::QueuedLaunch,
     queue::worker::{HasAgent, HasStoppedAgent},
 };
@@ -17,6 +18,15 @@ async fn queue_worker(fixture: &Fixture, workspace: &Workspace) -> anyhow::Resul
 /// workspace.
 fn refusal(result: anyhow::Result<()>) -> String {
     format!("{:#}", result.expect_err("a second worker was queued"))
+}
+
+/// Replace the stopped or asleep agent of `space` as a replacing launch
+/// does, under the queue gate.
+async fn replace(fixture: &Fixture, space: &Space) -> anyhow::Result<()> {
+    let agents = &fixture.agents;
+    let _gate = agents.agent_queue.lock_admission().await;
+    let replacement = agents.plan_replacement(space).await?;
+    (agents.replace_stopped_worker(&*fixture.daemon, replacement)).await
 }
 
 /// Whether `refused` refuses a worker for the stopped agent it would
@@ -84,11 +94,56 @@ async fn an_agent_waiting_for_its_restore_refuses_another_worker() {
 
     // Replacing it takes its restore out of the queue.
     let space = fixture.space(&workspace.id);
-    (fixture.agents.replace_stopped_worker(daemon, &space))
-        .await
-        .unwrap();
+    replace(&fixture, &space).await.unwrap();
     assert!(live(&fixture).await.is_empty());
     queue_worker(&fixture, &workspace).await.unwrap();
+}
+
+/// An asleep agent whose restore the daemon took over from its wrapper.
+async fn asleep_agent(fixture: &Fixture, workspace: &Workspace) {
+    let daemon = &*fixture.daemon;
+    let (execution, _stop) = connected_agent(fixture, workspace).await;
+    assert!(
+        fixture
+            .agents
+            .stop_for_overload(daemon, Pressure::Memory)
+            .await
+    );
+    (fixture.agents.queue_agent_restore(daemon, &execution))
+        .await
+        .unwrap();
+    (fixture.agents.store)
+        .run(move |db| {
+            db.execute("DELETE FROM executions WHERE id=?1", [execution])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    dispatch(fixture).await;
+}
+
+/// A replacement that a live agent refuses discards nothing, so the asleep
+/// agent it would have replaced still waits for its restore.
+#[tokio::test]
+async fn a_refused_replacement_keeps_the_asleep_agent_s_restore() {
+    let fixture = Fixture::new().await;
+    let workspace = fixture.workspace("asleep").await;
+    asleep_agent(&fixture, &workspace).await;
+    let restores = live(&fixture).await;
+    assert_eq!(restores.len(), 1, "{restores:?}");
+    let _agent = connected_agent(&fixture, &workspace).await;
+
+    let refused = replace(&fixture, &fixture.space(&workspace.id)).await;
+
+    assert!(
+        refused.as_ref().is_err_and(|error| error.is::<HasAgent>()),
+        "{refused:?}"
+    );
+    let kept = live(&fixture).await;
+    assert_eq!(
+        kept.iter().map(|entry| &entry.id).collect::<Vec<_>>(),
+        [&restores[0].id]
+    );
 }
 
 /// An asleep agent whose wrapper waits to restore it runs no turn, so a
@@ -177,11 +232,7 @@ async fn replacing_a_stopped_agent_discards_it_and_takes_a_worker() {
     let workspace = fixture.workspace("stopped").await;
     let record = stopped_agent(&fixture, &workspace);
     let space = fixture.space(&workspace.id);
-    (fixture
-        .agents
-        .replace_stopped_worker(&*fixture.daemon, &space))
-    .await
-    .unwrap();
+    replace(&fixture, &space).await.unwrap();
     assert!(!record.exists(), "the stopped agent's record stayed");
     queue_worker(&fixture, &workspace).await.unwrap();
 }
@@ -243,10 +294,7 @@ async fn replacing_refuses_a_running_agent() {
     let workspace = fixture.workspace("busy").await;
     let _agent = connected_agent(&fixture, &workspace).await;
     let space = fixture.space(&workspace.id);
-    let refused = (fixture
-        .agents
-        .replace_stopped_worker(&*fixture.daemon, &space))
-    .await;
+    let refused = replace(&fixture, &space).await;
     let refused = format!("{:#}", refused.expect_err("a running agent was replaced"));
     assert!(refused.contains("shoal stop"), "{refused}");
 }

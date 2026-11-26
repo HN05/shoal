@@ -31,16 +31,29 @@ impl Agents {
         Ok(())
     }
 
-    /// Discard the stopped or asleep agent of `space`, with its last sessions
-    /// and stopped commands, so that a new agent can take its place. Refuses a
-    /// running agent or one in the agent queue, so a start never cuts off a
-    /// live turn. Refuses an asleep agent whose wrapper still waits to restore
-    /// it, which [`Self::stop_asleep_wrappers`] stops first. Requires the queue
-    /// gate.
-    pub async fn replace_stopped_worker(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
-        self.retire_asleep_restores(space).await?;
+    /// Plan the replacement of the stopped or asleep agent of `space`,
+    /// refusing it while an agent of its own runs there or waits in the
+    /// agent queue, so a start never cuts off a live turn. Requires the
+    /// queue gate, and that [`Self::stop_asleep_wrappers`] stopped the
+    /// wrappers waiting to restore the agent, which would refuse it too.
+    pub(super) async fn plan_replacement(&self, space: &Space) -> Result<Replacement> {
         self.ensure_no_live_worker(space).await?;
-        let selector = SpaceSelector::id(&space.id);
+        Ok(Replacement {
+            space: space.clone(),
+            restores: self.asleep_restores(space).await?,
+        })
+    }
+
+    /// Discard the agent `replacement` plans to replace, with its last
+    /// sessions and stopped commands, so that a new agent can take its
+    /// place. Requires the queue gate taken for its plan.
+    pub(super) async fn replace_stopped_worker(
+        &self,
+        daemon: &dyn Daemon,
+        replacement: Replacement,
+    ) -> Result<()> {
+        self.retire_asleep_restores(replacement.restores).await?;
+        let selector = SpaceSelector::id(&replacement.space.id);
         if !self.saved_work(daemon, &selector).await?.is_empty() {
             self.discard_stopped_agent(daemon, &selector, None).await?;
         }
@@ -54,7 +67,8 @@ impl Agents {
     pub async fn discard_replaced_worker(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
         self.stop_asleep_wrappers(daemon, space).await?;
         let _gate = self.agent_queue.lock_admission().await;
-        self.replace_stopped_worker(daemon, space).await
+        let replacement = self.plan_replacement(space).await?;
+        self.replace_stopped_worker(daemon, replacement).await
     }
 
     /// Refuse the scoped `caller` a launch that `replaces` the stopped
@@ -133,11 +147,11 @@ impl Agents {
         Ok(())
     }
 
-    /// Take the restores of the asleep agent of `space` out of the queue,
-    /// which no wrapper waits for once [`Self::stop_asleep_wrappers`]
-    /// stopped them. Requires the queue gate.
-    async fn retire_asleep_restores(&self, space: &Space) -> Result<()> {
-        for restore in self.asleep_restores(space).await? {
+    /// Take the `restores` of an asleep agent out of the queue, which no
+    /// wrapper waits for once [`Self::stop_asleep_wrappers`] stopped them.
+    /// Requires the queue gate.
+    async fn retire_asleep_restores(&self, restores: Vec<QueueEntryId>) -> Result<()> {
+        for restore in restores {
             self.delete_waiting_entry(restore).await?;
         }
         Ok(())
@@ -168,6 +182,14 @@ impl Agents {
         }
         Ok(gate)
     }
+}
+
+/// The stopped or asleep agent of a space that a new agent replaces, once
+/// nothing refuses the replacement. Only [`Agents::plan_replacement`] builds
+/// one, and only [`Agents::replace_stopped_worker`] discards that agent.
+pub(super) struct Replacement {
+    space: Space,
+    restores: Vec<QueueEntryId>,
 }
 
 /// The refusal of a launch in a workspace that has an agent of its own,
