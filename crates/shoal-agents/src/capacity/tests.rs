@@ -341,6 +341,7 @@ fn work_under_a_limit_has_the_room_its_limit_leaves() {
     };
     let reading = |work| load::MemoryReading {
         memory: machine,
+        stall: None,
         work,
         pressure,
     };
@@ -354,7 +355,13 @@ fn work_under_a_limit_has_the_room_its_limit_leaves() {
         available: gib(4),
     };
     assert_eq!(
-        reading_room(&reading(Some(load::WorkMemory::Read(work))), &settings),
+        reading_room(
+            &reading(Some(load::WorkMemory::Read {
+                memory: work,
+                stall: None,
+            })),
+            &settings,
+        ),
         gib(10) * warning / 100 - gib(6)
     );
 }
@@ -373,6 +380,7 @@ fn unread_work_admits_nothing() {
     };
     let reading = load::MemoryReading {
         memory: machine,
+        stall: None,
         work: Some(load::WorkMemory::Unread),
         pressure,
     };

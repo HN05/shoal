@@ -13,6 +13,12 @@ pub struct Memory {
 }
 
 impl Memory {
+    /// The share of the memory in use, in percent.
+    pub fn used_percent(self) -> f64 {
+        let used = self.total.saturating_sub(self.available);
+        used as f64 * 100.0 / self.total.max(1) as f64
+    }
+
     /// Whether at least `percent` of the memory is in use.
     fn used_at_least(self, percent: u8) -> bool {
         u128::from(self.available) * 100
@@ -67,9 +73,11 @@ impl MemoryPressure {
 
 /// One reading of the machine's memory and its pressure, with Shoal's
 /// work's against the user's limit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MemoryReading {
     pub memory: Memory,
+    /// The machine's stall; none without pressure stall information.
+    pub stall: Option<Stall>,
     /// Shoal's work against the user's limit; none without a limit.
     pub work: Option<WorkMemory>,
     /// The machine's and the work's together.
@@ -77,10 +85,14 @@ pub struct MemoryReading {
 }
 
 /// Shoal's work's memory against the user's limit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WorkMemory {
-    /// The limit as `total` and what the work leaves of it.
-    Read(Memory),
+    /// The limit as `total` and what the work leaves of it, with the work
+    /// slice's stall where the kernel reports it.
+    Read {
+        memory: Memory,
+        stall: Option<Stall>,
+    },
     /// The work could not be read, as without a current usage sample.
     Unread,
 }
@@ -96,7 +108,10 @@ pub fn memory(levels: &MemoryLevels, work: Option<WorkLimit>) -> Result<MemoryRe
     };
     Ok(match work.read() {
         Ok((used, stall)) => MemoryReading {
-            work: Some(WorkMemory::Read(used)),
+            work: Some(WorkMemory::Read {
+                memory: used,
+                stall,
+            }),
             pressure: machine.pressure.or(pressure(used, stall, levels)),
             ..machine
         },
@@ -117,14 +132,12 @@ pub fn memory(levels: &MemoryLevels, work: Option<WorkLimit>) -> Result<MemoryRe
 fn machine(levels: &MemoryLevels) -> Result<MemoryReading> {
     let text = std::fs::read_to_string("/proc/meminfo").context("read memory availability")?;
     let memory = linux_memory(&text, &read_swaps()?)?;
+    let stall = read_stall("/proc/pressure/memory".as_ref())?;
     Ok(MemoryReading {
         memory,
+        stall,
         work: None,
-        pressure: pressure(
-            memory,
-            read_stall("/proc/pressure/memory".as_ref())?,
-            levels,
-        ),
+        pressure: pressure(memory, stall, levels),
     })
 }
 
@@ -241,10 +254,10 @@ fn is_zram(name: &str) -> bool {
 /// some of them over ten seconds and over a minute, and all of them over ten
 /// seconds.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct Stall {
-    some_avg10: f64,
-    some_avg60: f64,
-    full_avg10: f64,
+pub struct Stall {
+    pub some_avg10: f64,
+    pub some_avg60: f64,
+    pub full_avg10: f64,
 }
 
 /// The stall `/proc/pressure/memory`'s `text` reports.
@@ -301,6 +314,7 @@ fn machine(_levels: &MemoryLevels) -> Result<MemoryReading> {
     let level = native_level()?;
     Ok(MemoryReading {
         memory: native_memory()?,
+        stall: None,
         work: None,
         pressure: MemoryPressure {
             critical: level == 4,

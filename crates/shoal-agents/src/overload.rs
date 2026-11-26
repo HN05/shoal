@@ -1,6 +1,7 @@
 //! Stop work after sustained machine pressure, one entry of the stop order
 //! at a time, then let the machine recover before evaluating another. Work
 //! and leases stay owned.
+mod pressure_log;
 mod sampler;
 pub mod stops;
 

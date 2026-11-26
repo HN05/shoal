@@ -310,7 +310,7 @@ fn memory_state(pressure: load::MemoryPressure) -> MemoryState {
 /// warning threshold.
 fn reading_room(reading: &load::MemoryReading, settings: &Overload) -> u64 {
     let work = match reading.work {
-        Some(load::WorkMemory::Read(work)) => Some(work),
+        Some(load::WorkMemory::Read { memory, .. }) => Some(memory),
         Some(load::WorkMemory::Unread) | None => None,
     };
     (std::iter::once(reading.memory).chain(work))

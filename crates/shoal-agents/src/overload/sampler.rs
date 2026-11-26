@@ -8,13 +8,15 @@ use std::{
 };
 use tokio::{sync::mpsc, time::Instant};
 
-use super::{Monitor, Pressure, Recovery, protection_changed, publish_busy_cpu};
+use super::{
+    Monitor, Pressure, Recovery, pressure_log::PressureLog, protection_changed, publish_busy_cpu,
+};
 use crate::{
     Agents,
     config::{Config, MachineLimit},
     daemon::Daemon,
     log,
-    process::load::{self, MemoryPressure},
+    process::load::{self, MemoryReading},
     warnings::{Signal, Warning},
 };
 
@@ -66,6 +68,7 @@ pub(super) struct Sampler {
     /// The config the monitor's windows were observed under.
     config: Arc<Config>,
     monitor: Monitor,
+    pressure_log: PressureLog,
     warnings: mpsc::Sender<Warned>,
     stops: mpsc::Sender<Pressure>,
     outcomes: std_mpsc::Receiver<bool>,
@@ -86,6 +89,7 @@ impl Sampler {
             agents,
             daemon,
             monitor: Monitor::default(),
+            pressure_log: PressureLog::default(),
             warnings,
             stops,
             outcomes,
@@ -156,29 +160,49 @@ impl Sampler {
     /// Act on `readings` taken at `now`: publish what admission and
     /// recovery read, and hand over this sample's warnings and a stop.
     pub(super) fn decide(&mut self, now: Instant, readings: Readings) {
-        let settings = &self.config.machine.overload;
-        publish_busy_cpu(
-            &self.agents,
-            now,
-            settings,
-            admission(&self.config),
-            &readings.cpu,
-        );
-        let pressure = self
+        let config = self.config.clone();
+        let settings = &config.machine.overload;
+        if let Some(reading) = &readings.memory {
+            self.pressure_log.observe(now, reading);
+        }
+        let memory = readings.memory.map(|reading| reading.pressure);
+        let admission = admission(&config);
+        publish_busy_cpu(&self.agents, now, settings, admission, &readings.cpu);
+        let pressure = self.monitor.reason(now, settings, memory, readings.cpu);
+        self.publish_recovery(now, settings, memory, readings.disk_safe);
+        let warnings = self
             .monitor
-            .reason(now, settings, readings.memory, readings.cpu);
+            .warnings(now, settings, memory, readings.limited);
+        self.hand_over(now, warnings, pressure);
+    }
+
+    /// Advance the healthy window on this sample's readings and publish it.
+    fn publish_recovery(
+        &mut self,
+        now: Instant,
+        settings: &crate::config::overload::Overload,
+        memory: Option<load::MemoryPressure>,
+        disk_safe: bool,
+    ) {
         let recovery = &self.agents.overload_recovery;
         let epoch = recovery.epoch();
         match self
             .monitor
-            .recovery(now, settings, epoch, readings.memory, readings.disk_safe)
+            .recovery(now, settings, epoch, memory, disk_safe)
         {
             Recovery::Revoke => recovery.reset(),
             Recovery::Publish(ready) => recovery.publish(ready),
         }
-        let warnings = self
-            .monitor
-            .warnings(now, settings, readings.memory, readings.limited);
+    }
+
+    /// Hand the async side this sample's `warnings`, and a stop for
+    /// `pressure` unless one awaits its outcome.
+    fn hand_over(
+        &mut self,
+        now: Instant,
+        warnings: Vec<(Signal, Warning)>,
+        pressure: Option<Pressure>,
+    ) {
         if !warnings.is_empty() {
             let _ = self.warnings.try_send((now, warnings));
         }
@@ -198,7 +222,7 @@ fn admission(config: &Config) -> bool {
 /// One sample's machine readings. A disabled protection reads as calm.
 pub(super) struct Readings {
     /// `None` with memory protection off or a failed reading.
-    pub(super) memory: Option<MemoryPressure>,
+    pub(super) memory: Option<MemoryReading>,
     /// `memory` counts Shoal's work against its memory limit.
     pub(super) limited: bool,
     pub(super) cpu: anyhow::Result<load::CpuTicks>,
@@ -212,7 +236,7 @@ impl Readings {
         let settings = &config.machine.overload;
         let work = daemon.work_limit();
         Self {
-            memory: memory_pressure(settings, work),
+            memory: memory_reading(settings, work),
             limited: work.is_some(),
             cpu: if settings.cpu.enabled || admission(config) {
                 load::cpu_ticks()
@@ -224,18 +248,17 @@ impl Readings {
     }
 }
 
-/// This sample's memory pressure against the configured levels, the
+/// This sample's memory reading against the configured levels, the
 /// machine's with that of Shoal's work against its `work` limit, `None` with
 /// memory protection off or a failed reading, which is logged.
-fn memory_pressure(
+fn memory_reading(
     settings: &crate::config::overload::Overload,
     work: Option<load::WorkLimit>,
-) -> Option<MemoryPressure> {
+) -> Option<MemoryReading> {
     if !settings.memory.enabled {
         return None;
     }
     load::memory(&settings.memory_levels(), work)
-        .map(|reading| reading.pressure)
         .inspect_err(|error| log!("memory overload monitor: {error:#}"))
         .ok()
 }

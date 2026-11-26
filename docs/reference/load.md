@@ -66,7 +66,11 @@ allocation that reaches the kernel's OOM killer before any stall builds up, and
 alone measures a kernel without pressure stall information. Zram swap counts
 as neither memory nor free space, since RAM holds what it swaps out: the
 compressed pages count as RAM in use. macOS uses native
-critical pressure. The wrapper terminates the agent's process
+critical pressure. While memory is past a warning or stop level, the daemon
+log records the readings protection acts on: memory in use, the ten-second
+stall of some tasks and of every task, and Shoal's work's against its
+[memory limit](#work-slice). It logs a level again after 30 seconds, and a
+higher one at once. The wrapper terminates the agent's process
 group through its normal grace period. The monitor waits for the cooldown before
 resampling and stopping another entry if pressure persists. It retains workspaces, execution recovery records and resource
 leases and records an `agent_stopped` alert.

@@ -177,7 +177,7 @@ fn work_past_its_limit_presses_however_calm_the_machine() {
         outside_slice: 2000,
     };
     let reading = memory(&LEVELS, Some(work(Some(sampled)))).unwrap();
-    let Some(WorkMemory::Read(used)) = reading.work else {
+    let Some(WorkMemory::Read { memory: used, .. }) = reading.work else {
         panic!("{reading:?}");
     };
     assert_eq!(used.available, 0);

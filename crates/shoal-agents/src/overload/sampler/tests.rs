@@ -1,4 +1,5 @@
 use super::*;
+use crate::process::load::MemoryPressure;
 use crate::stand_in::Fixture;
 
 const CALM: MemoryPressure = MemoryPressure {
@@ -163,7 +164,15 @@ async fn a_stop_is_handed_over_one_at_a_time_without_waiting_on_it() {
     fixture.agents.config.publish(config);
     let (mut sampler, mut handoff) = Sampler::new(fixture.agents.clone(), fixture.daemon.clone());
     let critical = || Readings {
-        memory: Some(CRITICAL),
+        memory: Some(MemoryReading {
+            memory: load::Memory {
+                total: 100,
+                available: 1,
+            },
+            stall: None,
+            work: None,
+            pressure: CRITICAL,
+        }),
         limited: false,
         cpu: Ok(load::CpuTicks::default()),
         disk_safe: true,
