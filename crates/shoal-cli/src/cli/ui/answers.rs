@@ -16,6 +16,11 @@ use crate::cli::context::Context;
 const ACTION: &str = "action:";
 /// The picker id of the reply in words.
 const WORDS: &str = "words";
+/// The prefix of an option's picker id, which keeps it apart from picking
+/// none whatever the option's value.
+const OPTION: &str = "option:";
+/// The picker id of picking no option.
+const NO_OPTION: &str = "none";
 
 /// How the user answers a post's surface.
 pub enum Answering {
@@ -80,21 +85,26 @@ fn value(ctx: &Context, input: &Input) -> Result<Value> {
 }
 
 /// The values of the options picked among `options`, by their labels,
-/// several when `multiple`.
+/// several when `multiple`, or none, which the picker offers last.
 fn picked(
     ctx: &Context,
     prompt: &str,
     options: &[(String, String)],
     multiple: bool,
 ) -> Result<Value> {
-    let entries: Entries = options.to_vec();
+    let rows = (options.iter()).map(|(value, label)| (format!("{OPTION}{value}"), label.clone()));
+    let none = (NO_OPTION.to_owned(), "No option".to_owned());
+    let entries: Entries = rows.chain(std::iter::once(none)).collect();
     let prompt = format!("{prompt}> ");
     let picked = match multiple {
         true => pick_many(ctx, &prompt, entries)?,
         false => vec![pick(ctx, &prompt, entries)?],
     };
+    let values = (picked.iter()).filter_map(|id| id.strip_prefix(OPTION));
     Ok(Value::Array(
-        picked.into_iter().map(Value::String).collect(),
+        values
+            .map(|value| Value::String(value.to_owned()))
+            .collect(),
     ))
 }
 

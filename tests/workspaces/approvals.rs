@@ -474,6 +474,44 @@ fn thread_picker_asks_for_the_values_an_action_takes() {
 }
 
 #[test]
+fn thread_picker_answers_an_options_input_with_none() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let form = fixture.root.path().join("tags.json");
+    fs::write(
+        &form,
+        serde_json::json!({"version": "1.0", "createSurface": {"surfaceId": "tags",
+            "components": [
+                {"id": "root", "component": "Column", "children": ["tags", "ok"]},
+                {"id": "tags", "component": "ChoicePicker", "variant": "multipleSelection",
+                 "options": [{"label": "Bug", "value": "bug"}, {"label": "Docs", "value": "docs"}],
+                 "value": {"@path": "/tags"}},
+                {"id": "ok", "component": "Button", "child": "ok-label",
+                 "action": {"event": {"name": "tag", "context": {"tags": {"@path": "/tags"}}}}},
+                {"id": "ok-label", "component": "Text", "text": "Tag"}],
+            "dataModel": {"tags": ["bug"]}}})
+        .to_string(),
+    )
+    .unwrap();
+    let question = ask(
+        &fixture,
+        "asker",
+        "Tags?",
+        &["Which tags?", "--ui", form.to_str().unwrap()],
+    );
+    let id = question["number"].as_str().unwrap().to_owned();
+    let (output, rows) = fixture.pick(&["thread", "list"], &format!("{id} action:tag none"), "");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(rows.contains("none\t"), "{rows}");
+    let answer = latest(&fixture, &id);
+    assert_eq!(
+        answer["answer"]["values"],
+        serde_json::json!({"tags": []}),
+        "{answer}"
+    );
+}
+
+#[test]
 fn a_thread_prompt_without_a_surface_posts_text_as_typed() {
     let fixture = Fixture::new();
     fixture.add("asker");
