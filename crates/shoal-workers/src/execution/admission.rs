@@ -26,6 +26,7 @@ use tokio::{
 use crate::client::{
     connection::CommandPaths, output::queue::held_by_label, queue::CommandAdmission,
 };
+use crate::protocol::timing;
 
 /// How many times protection may stop a command before it gives up.
 pub(super) const STOPS: u32 = 3;
@@ -104,8 +105,7 @@ impl Admission {
         // waits for healthy readings however it was started.
         let now = run.now && !matches!(admit_as, AdmitAs::AfterStop);
         let mut link =
-            CommandAdmission::request(paths, space.clone(), run.key.clone(), now, admit_as)
-                .await?;
+            CommandAdmission::request(paths, space.clone(), run.key.clone(), now, admit_as).await?;
         tokio::select! {
             admitted = admitted(&mut link, Some(&run.key)) => admitted?,
             signal = interrupted() => bail!("{signal} while {} waited for memory", run.key),
@@ -216,6 +216,16 @@ async fn admitted(link: &mut CommandAdmission, key: Option<&CommandKey>) -> Resu
     }
 }
 
+/// What asking for a lost admission again came to.
+enum Again {
+    /// The admission of the running command.
+    Held(CommandAdmission),
+    /// The run ended meanwhile, with its end to report.
+    Ended(RunReport),
+    /// The run ended without a report.
+    Gone,
+}
+
 /// What holds a run's admission: its daemon, space and command, and the
 /// run's shared state while the run lasts.
 struct Holding {
@@ -241,7 +251,7 @@ impl Holding {
             tokio::select! {
                 ran = &mut end => {
                     if let Ok(ran) = ran {
-                        let _ = link.report(ran).await;
+                        self.deliver(Some(link), ran).await;
                     }
                     return;
                 }
@@ -249,8 +259,12 @@ impl Holding {
                     Ok(AdmissionFrame::Stop { reason }) => self.stop(reason),
                     Ok(_) => {}
                     Err(_) => match self.again(&mut end).await {
-                        Some(again) => link = again,
-                        None => return,
+                        Again::Held(again) => link = again,
+                        Again::Ended(ran) => {
+                            self.deliver(None, ran).await;
+                            return;
+                        }
+                        Again::Gone => return,
                     },
                 },
                 _ = tick.tick() => {
@@ -277,10 +291,36 @@ impl Holding {
     }
 
     /// The admission of the running command again, from a daemon that lost
-    /// it, as its execution's once it registered one. Each failure, such as
-    /// a daemon still restarting or a scope not yet reattached, is tried
-    /// again after a longer wait; none once the run ends, which `end` says.
-    async fn again(&self, end: &mut oneshot::Receiver<RunReport>) -> Option<CommandAdmission> {
+    /// it, or the run's end, which `end` says, should the run end meanwhile.
+    async fn again(&self, end: &mut oneshot::Receiver<RunReport>) -> Again {
+        tokio::select! {
+            link = self.reconnect() => Again::Held(link),
+            ran = &mut *end => ran.map_or(Again::Gone, Again::Ended),
+        }
+    }
+
+    /// Report the run's end, `ran`, on `link`. When that fails, or there is
+    /// no link, report it on the admission asked for again, for as long as
+    /// the run's completion waits for a restarting daemon.
+    async fn deliver(&self, mut link: Option<CommandAdmission>, ran: RunReport) {
+        let delivered = async {
+            loop {
+                let mut current = match link.take() {
+                    Some(link) => link,
+                    None => self.reconnect().await,
+                };
+                if current.report(ran.clone()).await.is_ok() {
+                    return;
+                }
+            }
+        };
+        let _ = tokio::time::timeout(timing::REATTACH_EXIT_TIMEOUT, delivered).await;
+    }
+
+    /// Ask for the admission again, as the running command's, until a
+    /// daemon gives it. Each failure, such as a daemon still restarting or
+    /// a scope not yet reattached, is tried again after a longer wait.
+    async fn reconnect(&self) -> CommandAdmission {
         let mut wait = RETRY_FIRST;
         loop {
             let attempt = async {
@@ -288,16 +328,10 @@ impl Holding {
                 admitted(&mut link, None).await?;
                 anyhow::Ok(link)
             };
-            tokio::select! {
-                _ = &mut *end => return None,
-                again = attempt => if let Ok(link) = again {
-                    return Some(link);
-                },
+            if let Ok(link) = attempt.await {
+                return link;
             }
-            tokio::select! {
-                _ = &mut *end => return None,
-                () = tokio::time::sleep(wait) => {}
-            }
+            tokio::time::sleep(wait).await;
             wait = (wait * 2).min(RETRY_LAST);
         }
     }

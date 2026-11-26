@@ -211,4 +211,5 @@ such as over a build's outputs, so the wrapper exits non-zero instead.
 After a daemon restart, the wrapper asks for admission again as its running
 execution's. The daemon admits it at once only when the connection comes from
 that execution's wrapper, since that skips the wait that `--now` needs the
-`limits` permission for.
+`limits` permission for. A run that ends while the wrapper asks still reports
+its end once the daemon is back, for as long as its completion waits.
