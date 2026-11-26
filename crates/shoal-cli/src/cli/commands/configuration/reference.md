@@ -401,12 +401,14 @@ terminal stays on its machine, and `--machine` always picks the machine.
 `placement` takes these values:
 
 - `local` keeps every start on the machine it was made on.
-- `balanced` sends lasting work to an `always_on` machine with room. The
-  machine must have the start's repository registered, matched by origin, and
-  its agent tool. A heavy start goes to the machine whose admission would
-  start a heavy agent now, with the most spare memory. A light start goes
-  first to a machine with `max_heavy_agents = 0`, then to one where no heavy
-  work waits. Without such a machine, the start stays where it was made.
+- `balanced` sends lasting work to an `always_on` machine with room, the
+  machine the start was made on first. The machine must have the start's
+  repository registered, matched by origin, and its agent tool. A heavy start
+  goes to the machine whose admission would start a heavy agent now, with the
+  most spare memory. A light start goes first to a machine with
+  `max_heavy_agents = 0`, then to one where no heavy work waits, then to the
+  one where the least heavy work waits. Without such a machine, the start
+  stays where it was made.
   Placement never clones a repository; the start reports the machines it
   skipped and why.
 - `external` asks the app registered as the placer. It falls back to
