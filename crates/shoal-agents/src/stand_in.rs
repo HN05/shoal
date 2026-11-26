@@ -1,8 +1,5 @@
 //! A stand-in for the rest of the daemon, which the agents' tests build the
-//! service over: a home with its state directory under a temporary
-//! directory, the global config a test gives, the workspaces a test
-//! records, the agents a test registers with their executions, and alerts
-//! that only note what they tell.
+//! service over.
 mod fixture;
 mod records;
 

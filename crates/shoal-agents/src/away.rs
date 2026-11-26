@@ -1,10 +1,6 @@
-//! The user walking away from this machine and coming back, which the
-//! daemon reads from the platform while `keep_awake` acts on it: the agent
-//! queue admits nothing new while they are away, and keep-awake holds the
-//! machine only as the level says then. Under `handover`, the spaces with
-//! something to do go to other machines of the hub once the user walks
-//! away, or before the machine sleeps, and this machine retires its copies
-//! once they come back.
+//! The user walking away from this machine and coming back, which the daemon
+//! reads from the platform. `docs/design/hub.md` says what `keep_awake` does
+//! then.
 use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;

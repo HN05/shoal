@@ -1,9 +1,7 @@
-//! Stopping tracked work before the system or the daemon shuts down, as
-//! `shoal stop --all` does, while the daemon and wrappers still run to save
-//! it, then handing the spaces over to other machines of the hub; and the
-//! same for the spaces with something to do once the user walks away under
-//! `keep_awake = "handover"`, or pauses the machine, which stops the rest
-//! too.
+//! Stopping tracked work while the daemon and wrappers still run to save it,
+//! before a shutdown, a walk-away or a pause, and handing spaces over to other
+//! machines of the hub. `docs/design/power.md` and `docs/design/hub.md` say
+//! when each applies.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{collections::HashSet, time::Duration};

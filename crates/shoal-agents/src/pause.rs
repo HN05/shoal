@@ -1,10 +1,5 @@
-//! The user pausing this machine until they unpause it: the agent queue
-//! admits nothing new, no agent, restore, CI job or review, which the
-//! store keeps through daemon restarts and the hub's placement reads from
-//! the machine's capacity, and every agent stops as before a shutdown, the
-//! spaces with something to do going to other machines of the hub.
-//! Unpausing admits work again, which restores the agents that stayed, and
-//! retires this machine's copies of the spaces that went.
+//! The user pausing this machine until they unpause it. `docs/design/hub.md`
+//! says what a pause stops and hands over.
 use std::time::Duration;
 
 use anyhow::Result;

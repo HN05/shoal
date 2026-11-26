@@ -1,8 +1,5 @@
-//! What an execution takes from the space it runs in, whose records differ
-//! by kind: a workspace's verified worktree, ports, caches and configured
-//! environment, or a chat's home, its own scope token, its temporary
-//! directory and its configured environment without a worktree's.
-//! Registration asks nothing else of a space's kind.
+//! What an execution takes from the space it runs in, whose records differ by
+//! kind. Registration asks nothing else of a space's kind.
 use anyhow::{Context as _, Result, ensure};
 use rusqlite::Transaction;
 use shoal_ids::execution_ids::ExecutionId;

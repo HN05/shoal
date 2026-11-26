@@ -1,10 +1,8 @@
-//! The subagents each tracked agent runs, as its hooks report their starts
-//! and stops: an idle agent with one running counts as working, since the
-//! subagent works for it and its end may start the agent's next turn. A
-//! subagent whose stop never arrives counts until the agent's session
-//! starts again or its execution ends, or, once the proxy of its execution
-//! has passed a request of its subagents in the current session, until none
-//! has for [`LOST_AFTER`].
+//! The subagents each tracked agent runs, as its hooks report their starts and
+//! stops. A subagent whose stop never arrives counts until the agent's session
+//! starts again or its execution ends. Once the proxy of its execution has
+//! passed a request of its subagents in the current session, it counts only
+//! until none has for [`LOST_AFTER`].
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use std::collections::HashSet;

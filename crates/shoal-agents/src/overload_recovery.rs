@@ -1,8 +1,7 @@
 //! Whether sustained healthy readings let protection-stopped agents restore.
 //! Each stop, reload or unsafe reading starts a new epoch, so readings taken
-//! before it no longer admit a restore. The demos protection restarted wait
-//! for such readings too before it restarts them again, since a demo's
-//! wrapper runs it again at once.
+//! before it no longer admit a restore. Demos protection restarted wait for
+//! such readings too, since a demo's wrapper runs it again at once.
 use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::HashSet,

@@ -1,10 +1,8 @@
-//! The store side of the restarts the daemon took for later: one per space,
-//! with the execution of the agent it is for, how that agent restarts and
-//! who asked, and a generation each record
-//! takes anew, which tells a newer request's record from the one it
-//! replaced. Every restart the daemon begins is recorded as begun and
-//! stays until the agent's restore applies its options, which each wrapper
-//! that reattaches meanwhile reads.
+//! The store side of the restarts the daemon took for later: one per space.
+//! Each record takes a new generation, which tells a newer request's record
+//! from the one it replaced. A restart the daemon began stays recorded until
+//! the agent's restore applies its options, so a wrapper that reattaches
+//! meanwhile reads it.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};

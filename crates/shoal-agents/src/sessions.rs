@@ -1,10 +1,6 @@
-//! End terminal sessions Shoal created once their owner ends, or its agent
-//! left them, including leftovers from failed closes. An owner is a space, a
-//! workspace or a chat, whose removal ends its places the same way whatever
-//! its kind. Hosts supply discovery and close operations, not lifecycle
-//! policy. Sessions a host labels as Shoal's are found there; places a host
-//! does not label are closed from the daemon's records of the places Shoal
-//! created.
+//! Ending the terminal sessions Shoal created once their owner ends or its
+//! agent left them, including leftovers from failed closes. Hosts supply
+//! discovery and close operations, not lifecycle policy.
 pub mod left;
 pub mod pending;
 

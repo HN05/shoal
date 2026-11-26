@@ -1,11 +1,7 @@
-//! Retrying a turn an API failure ended. An agent whose integration reports
-//! failed turns, with `retry` on, is asked to continue once the failure has
-//! had time to pass, or once the reset its upstream named, through its
-//! proxy or a rate limit's error, has passed, and again after each turn
-//! that still fails, until one succeeds. The retry is persisted, so it
-//! outlasts a daemon restart and the agent's sleep, whose restore its
-//! message starts, and knows no agent: any report of a failed turn
-//! schedules one, or tells of a turn Shoal does not retry.
+//! Retrying a turn an API failure ended. `docs/design/agents.md` says when a
+//! retry runs. The retry is persisted, so it outlasts a daemon restart and the
+//! agent's sleep, and knows no agent: any report of a failed turn schedules
+//! one.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::{sync::Arc, time::Duration};

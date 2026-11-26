@@ -1,10 +1,6 @@
-//! Hold the operating system's sleep inhibitor while agents have the work
-//! `keep_awake` holds the machine for, so an idle timeout or a closed laptop
-//! lid does not suspend it: under `on`, a turn working or an idle agent
-//! receiving an open PR's activity; under `finish` the same while the user
-//! is there and only a working turn once they walked away. The inhibitor
-//! lasts only as long as a pipe the daemon holds open, so it ends with the
-//! daemon however that stops.
+//! Holding the operating system's sleep inhibitor while agents have work that
+//! `keep_awake` holds the machine for. `docs/design/power.md` says why the
+//! inhibitor lasts only as long as a pipe the daemon holds open.
 use shoal_ids::space_ids::SpaceId;
 use std::{process::Stdio, sync::Arc, time::Duration};
 

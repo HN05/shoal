@@ -1,8 +1,5 @@
-//! Restoring what a stop saved of a space: each stopped agent and last
-//! session queues its restore, which the daemon's worker starts where the
-//! agent stopped or in a background place, and stopped commands go to the
-//! restored agent, or to the user when no agent restores outside the
-//! wrapper that waits for it.
+//! Restoring what a stop saved of a space: its stopped agents, its last
+//! sessions and its stopped commands.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::Agents;

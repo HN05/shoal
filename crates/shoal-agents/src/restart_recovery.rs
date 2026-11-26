@@ -1,11 +1,8 @@
-//! Reconcile stopped agents whose executions became unknown, after a daemon
-//! interruption or a stop that could not be proven. A saved recovery record
-//! names the stop Shoal started; once its wrapper is gone and no process of
-//! the execution survives, the record alone represents the agent and
-//! `shoal resume` restores it. Survivors and incomplete evidence keep the
-//! execution, are checked again, and only they notify the user. Executions
-//! of an earlier boot need no evidence, and those that never started their
-//! command need only their wrapper gone.
+//! Reconciling stopped agents whose executions became unknown, after a daemon
+//! interruption or a stop that could not be proven. Once a wrapper is gone and
+//! no process of its execution survives, its saved recovery record alone stands
+//! for the agent. Survivors and incomplete evidence keep the execution, which
+//! is checked again.
 use crate::execution::recovery::RecordExt;
 use shoal_ids::execution_ids::ExecutionId;
 use std::{collections::HashSet, sync::Arc, time::Duration};

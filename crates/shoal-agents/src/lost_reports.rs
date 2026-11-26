@@ -1,10 +1,8 @@
-//! The turn-state reports agents' hooks left without the daemon receiving
-//! them, as when the daemon refused the hook's Shoal or restarted past the
-//! hook's time limit. Each tells the user that the space's agent state may
-//! be out of date, and each is recorded late, oldest first, unless a
-//! report made after it was recorded first. A report stays until the daemon has
-//! handled it, and one from an execution whose wrapper has yet to reattach
-//! after a restart waits for it.
+//! The turn-state reports agents' hooks left without the daemon receiving them,
+//! as when the daemon refused the hook's Shoal or restarted past the hook's
+//! time limit. Each is recorded late, oldest first, unless a later report was
+//! recorded first. A report stays until the daemon has handled it, and one from
+//! an execution whose wrapper has yet to reattach waits for it.
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{Arc, Mutex},

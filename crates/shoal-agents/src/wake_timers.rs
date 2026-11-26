@@ -1,9 +1,6 @@
-//! The timer `shoal sleep --for` or `--until` sets for a space: when it is
-//! due, Shoal sends the space's agent its message, which reaches an awake
-//! agent through its hooks and starts an asleep one's restore, as any
-//! message does. A space has one timer, which a new one replaces; it lasts
-//! until it fires, `shoal sleep --undo` cancels it, or the space is done
-//! or removed, through agent stops, restores and daemon restarts.
+//! The timer `shoal sleep --for` or `--until` sets for a space, which sends the
+//! space's agent its message when due. `docs/design/agent-lifecycle.md` says
+//! how long it lasts.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;

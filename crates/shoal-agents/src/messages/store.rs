@@ -1,6 +1,4 @@
-//! The alerts for a space's agent: queueing one, listing the unread ones as
-//! the agent reads them, marking delivered ones read, and what becomes of
-//! them when their space goes.
+//! The store side of a space's alerts.
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};

@@ -1,8 +1,7 @@
-//! Executions that never started their command, such as a setup whose
-//! wrapper left before it launched it: unknown, with no recovery record and
-//! neither a child nor a process group recorded. Once the wrapper is provably gone, its PID free or
-//! taken by a process of another birth, and no process of the execution
-//! survives, nothing of it runs, so the daemon forgets it.
+//! Executions that never started their command, such as a setup whose wrapper
+//! left before it launched it. Once the wrapper is provably gone, its PID free
+//! or taken by a process of another birth, and no process of the execution
+//! survives, the daemon forgets it.
 use anyhow::Result;
 
 use super::{Pending, Waiting};

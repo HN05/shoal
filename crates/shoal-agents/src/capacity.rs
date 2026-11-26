@@ -1,15 +1,5 @@
 //! Dynamic admission from the daemon's memory, disk and CPU readings.
-//!
-//! Agents and CI jobs start one at a time while memory and disk leave room
-//! for another. CPU holds back only a job beside running ones: builds and
-//! tests use every core that is free, so no start reserves CPU, but jobs
-//! piled on a saturated CPU only make each other slower, while memory and
-//! disk do not stretch. An agent first reads files and only later edits and
-//! compiles, so a recent start counts at the memory a settled agent's
-//! workspace uses until it settles itself. A job reaches its peak late, while
-//! it builds and runs tests, so until it ends it reserves what its earlier
-//! runs reached beyond what it uses now. Fixed limits apply the same free disk
-//! space rule.
+//! `docs/design/queue.md` says what each reading admits and why.
 use std::{path::Path, time::Duration};
 
 use crate::config::overload::Overload;

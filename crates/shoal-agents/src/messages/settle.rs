@@ -1,7 +1,6 @@
 //! Holding a run of alerts to an agent until it settles, so alerts queued in
-//! quick succession, such as the user's approval decisions, reach the agent in
-//! one delivery instead of one hook output or turn each. Hooks, waits and wake
-//! prompts deliver only settled alerts; `shoal alert list` reads them at once.
+//! quick succession reach it in one delivery. Hooks, waits and wake prompts
+//! deliver only settled alerts; `shoal alert list` reads them at once.
 use std::time::Duration;
 
 use anyhow::Result;

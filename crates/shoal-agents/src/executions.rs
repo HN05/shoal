@@ -1,6 +1,5 @@
-//! Daemon-side execution registration and tracking. Stopping executions
-//! lives in [`stopping`]. Terminal I/O stays in crate::execution, in the
-//! invoking CLI process.
+//! Registering and tracking executions. Terminal I/O stays in the execution
+//! wrapper.
 pub mod completion;
 pub mod homes;
 pub mod reregistration;

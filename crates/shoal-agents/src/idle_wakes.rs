@@ -1,7 +1,5 @@
-//! Wake an agent that has stayed idle as long as its mode's
-//! `idle_wake_minutes`, as a backup to the wakes its updates bring: a
-//! message asks it to continue or to sleep. An agent whose space is done,
-//! or that sleeps, is left idle.
+//! Waking an agent that has stayed idle as long as its mode's
+//! `idle_wake_minutes`, as a backup to the wakes its updates bring.
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Result;

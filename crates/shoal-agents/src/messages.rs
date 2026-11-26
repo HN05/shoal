@@ -1,9 +1,5 @@
-//! Alerts for the agent of a space, a workspace or a chat, from the user,
-//! Shoal or the spaces above and below it. The daemon never writes to an
-//! agent's terminal: agents receive alerts through `shoal alert list`,
-//! watches and agent hooks, which mark them read. Files attached to an
-//! alert are the daemon's copies among its space's attached files, which
-//! outlive it until the space is removed.
+//! Alerts for a space's agent. `docs/design/coordination.md` says how they
+//! reach it.
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::Result;

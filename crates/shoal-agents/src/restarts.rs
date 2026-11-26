@@ -1,9 +1,6 @@
-//! `shoal restart`: the daemon restarts the agent of the space a request
-//! names, a workspace's or a chat's, which has at most one of its own, or
-//! says why it does not. Each restart is recorded, outliving the request
-//! and the daemon: one that waits for the agent's turn to end, or for its
-//! place among the sequential restarts, until the daemon carries it out,
-//! and one the daemon begins until the agent's restore applies its options.
+//! `shoal restart` requests: which agent of a space restarts, and the record of
+//! each restart, which outlives the request and the daemon until the agent's
+//! restore applies its options.
 use std::collections::HashMap;
 
 use anyhow::{Result, anyhow};

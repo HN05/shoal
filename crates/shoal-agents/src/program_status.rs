@@ -1,8 +1,6 @@
-//! The space's status for the terminal its agent runs in, through the
-//! Program Status Protocol: the daemon decides each report from the space's
-//! records and sends it to the agent's execution wrapper whenever it
-//! changes, once the wrapper says its terminal reads the protocol. The
-//! daemon never writes to a terminal itself.
+//! The space's status for the terminal its agent runs in, through the Program
+//! Status Protocol. The daemon decides each report and sends it to the agent's
+//! execution wrapper once the wrapper says its terminal reads the protocol.
 pub mod decision;
 pub mod facts;
 

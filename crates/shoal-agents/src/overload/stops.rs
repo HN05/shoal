@@ -1,11 +1,5 @@
-//! What load protection stops: the newest one-shot run, which has no
-//! session to lose and starts over once readings are healthy, otherwise
-//! the first entry of the stop order whose stop frees what the pressure
-//! presses. A CI job's stop always does, so agents stop only once no job
-//! runs; a demo's or a heavy agent's does under memory pressure only where
-//! its space holds memory worth freeing, and a demo's only once until
-//! readings recover, since its wrapper runs it again at once. An agent
-//! stops after every agent below it.
+//! What load protection stops next. `docs/design/protection.md` gives the order
+//! and why.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_schedule::stopping::{Stop, Work};
 

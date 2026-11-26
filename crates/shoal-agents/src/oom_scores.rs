@@ -1,10 +1,8 @@
-//! The kernel's OOM order, set from the stop order on Linux: every
-//! [`INTERVAL`] each entry's processes take the score of its place, the
-//! first entry's highest, and only scores that changed are written. A CI
-//! job's processes are those of the scope its runner runs in, whose
-//! kernel kill of one process ends the whole job, which fails anyway, and
-//! frees all of it; every other entry's are the processes carrying its
+//! The kernel's OOM scores, set from the stop order on Linux every
+//! [`INTERVAL`]. Only scores that changed are written. A CI job's processes are
+//! those of its runner's scope; every other entry's are those carrying its
 //! execution's marker, short of its wrapper, which keeps Shoal's floor.
+//! `docs/design/protection.md` says why.
 use shoal_ids::execution_ids::ExecutionId;
 use std::{
     collections::{HashMap, HashSet},

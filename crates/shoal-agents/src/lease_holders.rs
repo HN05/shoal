@@ -1,6 +1,4 @@
-//! The agents that hold leases, as leases read them: a space's agent keeps
-//! its leases from its first acquire until it ends for good, through its
-//! sleeps, restores and restarts, and which agents sleep, since when.
+//! The agents that hold leases, and which of them sleep, as leases read them.
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;

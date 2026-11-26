@@ -1,8 +1,7 @@
-//! A stopped wrapper waits until its processes are proven stopped and the
-//! agent queue admits its restore, or only for the proof when `shoal restart`
-//! stopped it, and finishes normally when recovery is cancelled or a restart
-//! leaves the agent to a new wrapper. Failed ownership checks never authorize
-//! a replacement process.
+//! A stopped wrapper's wait for its restore: until its processes are proven
+//! stopped and the agent queue admits the restore, or only for the proof after
+//! `shoal restart`. Failed ownership checks never authorize a replacement
+//! process.
 use crate::control::ProtectionExt;
 use anyhow::{Context, Result, ensure};
 use shoal_ids::execution_ids::ExecutionId;

@@ -1,9 +1,6 @@
-//! `shoal resume` of a space's agent, a workspace's or a chat's, which the
-//! space's daemon decides and carries out: it continues a turn an interrupt
-//! ended, queues a launch that failed to start again, or queues the
-//! restores of the agents and last sessions a stop saved, starting them at
-//! once when asked, and a space's last session when it resumes alone, where
-//! the agent stopped or in a background place. A workspace whose setup failed is `shoal setup`'s.
+//! `shoal resume` of a space's agent, which the space's daemon decides and
+//! carries out. `docs/design/agent-lifecycle.md` says what a resume brings
+//! back.
 mod launches;
 mod saved;
 mod turns;

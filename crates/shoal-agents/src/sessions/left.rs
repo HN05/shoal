@@ -1,8 +1,6 @@
-//! The places a space's agent left: those the saved agents it restores ran
-//! in, which serve nothing once it runs elsewhere, as after a restore that
-//! could not run where its agent stopped. Shoal closes the ones it created
-//! then, so `shoal status` and `shoal attach` show the place the agent runs
-//! in, and keeps those where another saved agent waits for its restore.
+//! The places a space's agent left, such as those of the saved agents it
+//! restores once it runs elsewhere. Shoal closes the ones it created, and keeps
+//! those where another saved agent waits for its restore.
 use std::path::PathBuf;
 
 use anyhow::Result;

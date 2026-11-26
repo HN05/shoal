@@ -1,7 +1,6 @@
-//! The user's interactions with each space's agent, which keep it awake
-//! while idle: whether the user is engaged with it, having interacted since
-//! its turn before the last ended, and how long they take to come back to it
-//! after a turn, which sets how long it waits for them before it sleeps.
+//! The user's interactions with each space's agent: whether they are engaged
+//! with it, and how long they take to come back to it after a turn, which sets
+//! how long it waits for them before it sleeps.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::HashMap, time::Duration};
