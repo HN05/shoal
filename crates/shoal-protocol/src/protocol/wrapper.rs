@@ -56,7 +56,8 @@ pub struct Reattach {
     pub reports_status: bool,
 }
 
-/// Wrapper → daemon messages after an [`ExecutionMethod::Execute`] response.
+/// Wrapper → daemon messages after an
+/// [`ExecutionMethod::Execute`](super::ExecutionMethod::Execute) response.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExecutionEvent {

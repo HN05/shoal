@@ -42,7 +42,7 @@ pub enum ExecutionMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         source: Option<crate::launches::LaunchSource>,
         /// The wrapper keeps its command running when the daemon goes away
-        /// and returns with [`Reattachment::Reattach`].
+        /// and returns with [`Reattachment::Reattach`](super::Reattachment::Reattach).
         #[serde(default)]
         reattach: bool,
         /// The agent queue entry whose slot this agent takes over.

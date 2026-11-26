@@ -94,7 +94,7 @@ pub enum RepositoryMethod {
     DeleteKeptBranches {
         branches: Vec<crate::model::BranchTarget>,
     },
-    /// [`WorkspaceMethod::KeepAgentEnvironment`] for a chat in the repository's
+    /// [`WorkspaceMethod::KeepAgentEnvironment`](super::WorkspaceMethod::KeepAgentEnvironment) for a chat in the repository's
     /// checkout, which belongs to no workspace.
     KeepRepositoryAgentEnvironment {
         repository: RepositoryId,
