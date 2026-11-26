@@ -194,12 +194,10 @@ async fn keys(
     review: &PlacedReview<'_>,
     response: &Value,
 ) -> Result<Vec<String>> {
-    let node = response
-        .get("node_id")
-        .context("the review has no node ID")?;
-    let mut keys = vec![activity_key("reviews", node)];
+    let id = response.get("id").context("the review has no ID")?;
+    let mut keys = vec![activity_key("reviews", id)];
     if !review.comments.is_empty() {
-        let id = id_text(response.get("id").context("the review has no ID")?);
+        let id = id_text(id);
         let endpoint = repo.repo_endpoint(&format!("pulls/{number}/reviews/{id}/comments"));
         let comments = repo.pages(account, &endpoint).await?;
         keys.extend(

@@ -86,11 +86,7 @@ fn posts_are_keyed_where_each_forge_records_their_activity() {
     };
     let response = json!({"id": 9, "node_id": "IC_9", "pull_request_review_id": 4});
     let posted = |forge: &ForgeRepo, action: &Action| forge.posted(action, &response);
-    assert_eq!(
-        posted(&github, &comment).as_deref(),
-        Some("discussion:IC_9")
-    );
-    assert_eq!(posted(&forgejo, &comment).as_deref(), Some("discussion:9"));
+    assert_eq!(posted(&github, &comment).as_deref(), Some("discussion:9"));
     assert_eq!(
         posted(&github, &reply(Some("Fixed"))).as_deref(),
         Some("inline:9")

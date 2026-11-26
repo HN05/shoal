@@ -4,10 +4,11 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod github_activity;
 mod post_surfaces;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 301;
+pub const SCHEMA_VERSION: i64 = 302;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -47,6 +48,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         301,
         include_str!("migrations/0301_drop_post_choices.sql"),
         Some(post_surfaces::rewrite_choices),
+    ),
+    (
+        302,
+        include_str!("migrations/0302_github_activity_ids.sql"),
+        Some(github_activity::key_by_database_ids),
     ),
 ];
 

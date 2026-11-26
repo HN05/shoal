@@ -142,33 +142,34 @@ fn drafts_report_their_conflicts() {
 }
 
 #[test]
-fn comments_keep_the_fingerprints_gh_reported_and_ignore_reactions() {
+fn comments_are_keyed_by_id_and_ignore_reactions() {
     let mut comment = json!({"id": 1, "node_id": "IC_1", "body": "hello",
         "user": {"login": "a"}, "reactions": {}, "updated_at": "first"});
-    let (key, entry) = entries(std::slice::from_ref(&comment), "node_id")
+    let (key, entry) = comment_entries(std::slice::from_ref(&comment))
         .unwrap()
         .remove(0);
-    assert_eq!(key, "IC_1");
+    assert_eq!(key, "1");
     assert_eq!(entry.author, "a");
-    // As `gh pr view --json comments` reported it.
-    let saved = json!({"id": "IC_1", "body": "hello", "state": null, "lastEditedAt": null});
-    assert_eq!(entry.fingerprint, saved.to_string());
+    // The migration from node IDs writes stored comments in this shape.
+    assert_eq!(entry.fingerprint, json!({"body": "hello"}).to_string());
     comment["reactions"] = json!({"+1": 1});
     comment["updated_at"] = json!("reacted");
-    let reacted = entries(std::slice::from_ref(&comment), "node_id").unwrap();
+    let reacted = comment_entries(std::slice::from_ref(&comment)).unwrap();
     assert_eq!(reacted[0].1, entry);
     comment["body"] = json!("edited");
-    let edited = entries(std::slice::from_ref(&comment), "node_id").unwrap();
+    let edited = comment_entries(std::slice::from_ref(&comment)).unwrap();
     assert_ne!(edited[0].1, entry);
+}
 
+#[test]
+fn reviews_are_keyed_by_id_and_change_with_their_state() {
     let review = json!({"id": 2, "node_id": "PRR_2", "body": "", "state": "COMMENTED"});
-    let approved = json!({"id": 2, "node_id": "PRR_2", "body": "", "state": "APPROVED"});
-    assert_ne!(
-        entries(&[review], "node_id").unwrap(),
-        entries(&[approved], "node_id").unwrap()
-    );
-    let inline = json!({"id": 3, "body": "finding", "user": {"login": "bot"}});
-    let saved = json!({"id": 3, "body": "finding", "state": null, "lastEditedAt": null});
-    let (key, entry) = entries(&[inline], "id").unwrap().remove(0);
-    assert_eq!((key.as_str(), entry.fingerprint), ("3", saved.to_string()));
+    let (key, entry) = review_entries(std::slice::from_ref(&review))
+        .unwrap()
+        .remove(0);
+    assert_eq!(key, "2");
+    let saved = json!({"body": "", "state": "COMMENTED"});
+    assert_eq!(entry.fingerprint, saved.to_string());
+    let approved = json!({"id": 2, "body": "", "state": "APPROVED"});
+    assert_ne!(review_entries(&[approved]).unwrap()[0].1, entry);
 }

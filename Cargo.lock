@@ -3314,6 +3314,7 @@ name = "shoal-store"
 version = "0.21.1"
 dependencies = [
  "anyhow",
+ "base64",
  "rusqlite",
  "serde",
  "serde_json",

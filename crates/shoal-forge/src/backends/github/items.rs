@@ -110,10 +110,8 @@ impl Items for GitHub {
         Ok(github_rest::set_state(repo, item, state))
     }
 
-    /// GitHub reads discussion comments by GraphQL node ID, which REST
-    /// returns as `node_id`.
     fn comment_key(&self) -> (&'static str, &'static str) {
-        (DISCUSSION, "node_id")
+        (DISCUSSION, "id")
     }
 
     fn reply_key(&self) -> (&'static str, &'static str) {

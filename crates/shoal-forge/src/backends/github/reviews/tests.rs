@@ -79,6 +79,6 @@ async fn reviews_post_their_verdict_line_comments_and_head_in_one_request() -> R
         &response,
     )
     .await?;
-    assert_eq!(keys, ["reviews:PRR_80"]);
+    assert_eq!(keys, ["reviews:80"]);
     Ok(())
 }

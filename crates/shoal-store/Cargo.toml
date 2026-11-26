@@ -13,6 +13,7 @@ test-support = []
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 rusqlite = { workspace = true, features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true

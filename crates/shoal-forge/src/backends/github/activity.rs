@@ -1,8 +1,7 @@
 //! GitHub's item activity, read through its REST API, which answers a
-//! repeated read as unchanged. Snapshots key, fingerprint and name what they
-//! record in the shape of GitHub's GraphQL API, which stored snapshots hold.
+//! repeated read as unchanged.
 use anyhow::{Context, Result, ensure};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::GitHub;
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
         Activity,
         status::{StatusRecords, Statuses, github_reviews},
     },
-    backends::rest::read_pull,
+    backends::rest::{fingerprints, read_pull},
     items::{
         discussion::{Views, login},
         item::ItemRequests,
@@ -20,7 +19,7 @@ use crate::{
         api::{Request, TransportRequests},
         backend::LoginHint,
     },
-    updates::{Check, DISCUSSION, Entry, Snapshot, id_text},
+    updates::{Check, DISCUSSION, Entry, Snapshot},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -122,7 +121,7 @@ async fn pr_activity(repo: &ForgeRepo, account: &Account, number: PullNumber) ->
         open_checks(repo, account, &pull),
     );
     snapshot.record_comments(DISCUSSION, discussion);
-    snapshot.record_comments("reviews", reviews.and_then(|r| entries(&r, "node_id")));
+    snapshot.record_comments("reviews", reviews.and_then(|r| review_entries(&r)));
     snapshot.record_comments("inline", inline);
     if let Some(checks) = checks {
         snapshot.record_keyed_checks(&pull, checks);
@@ -163,15 +162,14 @@ async fn open_checks(
     Some(checks(repo, account, pull).await)
 }
 
-/// The item's discussion comments, keyed by their GraphQL node IDs as
-/// stored snapshots key them.
+/// The item's discussion comments.
 async fn discussion(
     repo: &ForgeRepo,
     account: &Account,
     number: u64,
 ) -> Result<Vec<(String, Entry)>> {
     let endpoint = repo.repo_endpoint(&format!("issues/{number}/comments"));
-    entries(&repo.pages(account, &endpoint).await?, "node_id")
+    comment_entries(&repo.pages(account, &endpoint).await?)
 }
 
 async fn reviews(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Result<Vec<Value>> {
@@ -179,14 +177,13 @@ async fn reviews(repo: &ForgeRepo, account: &Account, number: PullNumber) -> Res
     repo.pages(account, &endpoint).await
 }
 
-/// The PR's inline comments, by their REST IDs.
 async fn inline_comments(
     repo: &ForgeRepo,
     account: &Account,
     number: PullNumber,
 ) -> Result<Vec<(String, Entry)>> {
     let endpoint = repo.repo_endpoint(&format!("pulls/{number}/comments"));
-    entries(&repo.pages(account, &endpoint).await?, "id")
+    comment_entries(&repo.pages(account, &endpoint).await?)
 }
 
 /// The check runs and commit statuses on the PR's head commit.
@@ -287,29 +284,15 @@ fn revision(head: &str, completed: &Value, started: &Value) -> String {
     format!("{}:{completed}:{started}", Value::from(head))
 }
 
-/// Each comment or review by its `id_field`, with what changes when it is
-/// edited, answered or dismissed and its author.
-fn entries(items: &[Value], id_field: &str) -> Result<Vec<(String, Entry)>> {
-    items
-        .iter()
-        .map(|item| {
-            let id = item.get(id_field).context("comment or review has no ID")?;
-            let entry = Entry::new(comment_fingerprint(id, item), login(&item["user"]));
-            Ok((id_text(id), entry))
-        })
-        .collect()
+/// Each comment by its ID, which changes when it is edited. Its
+/// `updated_at` stays out: a reaction moves it too.
+fn comment_entries(comments: &[Value]) -> Result<Vec<(String, Entry)>> {
+    fingerprints(comments, &["body"], |comment| login(&comment["user"]))
 }
 
-/// The fingerprint of a comment or review with ID `id`. It keeps
-/// `lastEditedAt` null, as stored snapshots hold it.
-fn comment_fingerprint(id: &Value, item: &Value) -> String {
-    json!({
-        "id": id,
-        "body": item["body"],
-        "state": item["state"],
-        "lastEditedAt": null,
-    })
-    .to_string()
+/// Each review by its ID, which changes when it is edited or dismissed.
+fn review_entries(reviews: &[Value]) -> Result<Vec<(String, Entry)>> {
+    fingerprints(reviews, &["body", "state"], |review| login(&review["user"]))
 }
 
 #[cfg(test)]

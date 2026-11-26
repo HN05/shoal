@@ -1989,7 +1989,7 @@ fn github_comments_embed_files_uploaded_to_the_repository() {
             {"body": {"url": "https://github.com/user-attachments/assets/1"}},
         format!("{uploads}?name=demo.mp4&content_type=video%2Fmp4&repository_id=42"):
             {"body": {"url": "https://github.com/user-attachments/assets/2"}},
-        "POST repos/team/project/issues/8/comments": {"body": {"node_id": "C_1"}},
+        "POST repos/team/project/issues/8/comments": {"body": {"id": 1}},
     }));
     let video_arg = format!("{video}#Ignored for videos");
     fixture.ok(&[
@@ -6484,7 +6484,7 @@ fn a_finding_that_reached_the_forge_is_not_posted_again() {
         // it after the comment is posted fails, in a way not tried again.
         "GET repos/team/project/issues/40": [issue, issue,
             {"status": 403, "body": {"message": "unavailable"}}],
-        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"node_id": "C_1"}},
+        "POST repos/team/project/issues/40/comments": {"status": 201, "body": {"id": 1}},
     }));
     let propose = |title: &str| {
         let open = ["issue", "open", "--title", title];

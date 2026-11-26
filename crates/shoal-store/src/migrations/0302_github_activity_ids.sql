@@ -1,0 +1,3 @@
+-- GitHub activity records key and fingerprint comments and reviews as
+-- GitHub's REST reads give them, which the migration's preparation
+-- rewrote them into.
