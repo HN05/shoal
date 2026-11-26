@@ -1,205 +1,360 @@
 # Daemon
 
-This file covers the daemon process, held in `shoal-daemon`, `shoal-daemon-base`
-and `shoal-store`: its connections and limits, operations, store, journal,
-startup, service and updates.
+This file covers the daemon process, held in `shoal-daemon`,
+`shoal-daemon-base` and `shoal-store`: its state directory, connections and
+limits, operations, store, journal, startup, exits, service and updates, and
+how it proves that processes ended. [Daemon](../reference/daemon.md) says what
+each command does; this file gives the reasons.
+
+## State directory
 
 The state directory holds only what Shoal keeps to run and to record its runs.
-Only Shoal writes, changes or deletes anything there. Shoal never gives the user
-or an agent a file there to work with, though it may name its own logs there for
-reading. A file the user, an agent or a reviewer works with lives in the
-directory of the repository it belongs to, or in `root_dir` when it belongs to
-none, in a directory marked as Shoal's.
+Only Shoal writes, changes or deletes anything there. Shoal never gives the
+user or an agent a file there to work with, though it may name its own logs
+there for reading.
 
-Creating a workspace, opening a PR and merging start operations, below, whose ID
-a client follows for typed progress, then a result or a typed failure. A
-subscription sends a snapshot of the records of its topics, then each record
-that changed or was removed, comparing again after each stored change, until its
-scope token is revoked; a daemon restart closes it and `shoal_client` subscribes
-again and reports the new snapshot as a resync.
+A file the user, an agent or a reviewer works with lives in the directory of
+its repository, or in `root_dir` when it belongs to none. It sits in a
+directory marked as Shoal's.
 
-The daemon raises its open file limit at startup and accepts every connection,
-whatever its requests hold. Request/response operations share a fixed limit;
-executions, waits and streams take a separate share of the remaining
-descriptors, so neither can block the other, and daemon administration takes
-neither. A request past the limit is refused at once with the requests that hold
-it, and a request that runs past a minute is logged, again when it ends. A
-request that only reads state is cancelled when its client hangs up; one that
-changes state finishes, so a hangup never leaves it half done. When the
-long-lived share is full, a request whose client sends it again after the daemon
-closes its connection, as across a restart, is closed unanswered; others are
-refused. Accept failures that clear on their own, such as running out of
-descriptors, are retried; any other stops the daemon with a log line. Resource
-protocol methods use domain-then-verb names matching the CLI operations. The
-daemon owns SQLite state, allocation, lifecycle transitions, and recovery.
-SQLite runs on one dedicated blocking thread with one reusable connection and a
-128-operation queue; callers wait for queue space. Admitted operations run once
-even if their caller disconnects, and shutdown drains them before releasing
-daemon ownership. Connections retain foreign keys and a five-second busy
-timeout; a panic or unfinished transaction discards the connection before the
-next operation. Daemon errors retain typed codes and messages on the client
-without changing the wire format; unfamiliar codes are preserved verbatim for
-version compatibility.
+Writable state stays outside the binary's directory, so replacing the binary
+never touches it.
 
-Workspace setup with the post-setup hook, `pr open`'s push and `merge` are
-operations: the daemon starts their work in a worker process of its own,
-detached as it starts queued agents, so the work goes on when the CLI or app
-that asked for it goes. The worker acts with the caller's scope and, from the
-CLI, its environment without the secrets an agent launch exported, and runs the
-same tracked executions and hooks the CLI ran, under the same checks; what it
-and its processes write becomes the operation's output, and it reports typed
-steps and its end. A scoped process follows an operation of a space its scope
-reaches, and one its own space started whatever became of the space it works in,
-as a move's once that space left before the hub lists it at its destination. The
-CLI starts an operation and follows it through `shoal_client`, as an app does,
-showing its output where it showed it before, so the CLI and apps cannot drift.
+## Connections
+
+The daemon accepts every connection, whatever its requests hold. It raises its
+open file limit at startup to make room for them. An accept failure that
+clears on its own, such as running out of descriptors, is retried. Any other
+stops the daemon with a log line.
+
+### Request limits
+
+Requests that answer once share a fixed limit. Executions, waits and streams
+take a separate share of the remaining descriptors. Neither kind can thus
+block the other. Daemon administration takes neither, so a full daemon can
+still be inspected and stopped.
+
+A request past its limit is refused at once, with the requests that hold it.
+When the long-lived share is full, a request that its client sends again after
+the daemon closed its connection, as across a restart, is closed unanswered.
+
+The daemon logs a request that runs past a minute, and again when it ends.
+
+### Hangups
+
+A request that only reads state is cancelled when its client hangs up. A
+request that changes state finishes, so a hangup never leaves it half done.
+
+### Subscriptions
+
+A subscription sends a snapshot of the records of its topics. It then sends
+each record that changed or was removed, comparing again after each stored
+change, until its scope token is revoked. A daemon restart closes it.
+`shoal_client` then subscribes again and reports the new snapshot as a resync.
+[Follow changes](../reference/apps.md#follow-changes) says what a subscription
+follows.
+
+### Names and errors
+
+Resource protocol methods name the domain, then the verb, as the CLI's
+operations do.
+
+The client keeps a daemon error's typed code and message without changing the
+wire format. It keeps an unfamiliar code verbatim, so it can show an error
+from a daemon of another release.
+
+## Operations
+
+Workspace setup with its post-setup hook, `pr open`'s push and `merge` are
+operations. The daemon runs each in a worker process of its own, detached as a
+queued agent's start is. The work thus goes on when the CLI or app that asked
+for it goes.
+
+A client follows an operation by its ID: its typed steps and output as they
+come, then a result or a typed failure. The CLI starts and follows operations
+through `shoal_client`, as an app does, so the CLI and apps cannot drift.
+
+The worker acts with the caller's scope. From the CLI, it also takes the
+caller's environment, without the secrets an agent launch exported. It runs
+the tracked executions and hooks the CLI ran, under the same checks. What it
+and its processes write becomes the operation's output.
+
+A scoped process follows an operation of any space its scope reaches. It also
+follows one its own space started, whatever became of the space the operation
+works in. A move's operation thus stays visible once its space left this
+machine and before the hub lists it at its destination.
+
+## Store
+
+The daemon owns the SQLite state, allocation, lifecycle transitions and
+recovery.
+
+SQLite runs on one dedicated blocking thread with one reusable connection. Its
+queue holds 128 operations, and callers wait for space in it. An admitted
+operation runs once, even when its caller disconnects. Shutdown drains the
+queue before it releases daemon ownership.
+
+The connection keeps foreign keys on and a five-second busy timeout. A panic or
+an unfinished transaction discards the connection before the next operation.
+
+### Transactions
+
+An atomic claim takes a short transaction. Slow operations stay outside
+transactions. Failures and migrations keep ownership as it was.
+
+### Closed sets
+
+The `states!` macro gives a closed set of Shoal names one spelling across
+serde, `Display`, SQLite and clap, and rejects unknown values everywhere.
+
+### Migrations
+
+Shoal makes its earlier versions no compatibility promise, and the store
+migrates only from its floor, as [AGENTS.md](../../AGENTS.md#compatibility)
+states. Opening the store therefore migrates it, rewriting what it holds into
+the shapes this release reads.
+
+The store refuses, unchanged, a database below its floor, naming the release
+to start once first. It refuses a database a newer release wrote the same way.
+[After an update](../reference/install.md#after-an-update) names the floor's
+release.
+
+## Journal
+
+The journal records every space's lifecycle events in a table of its own in
+the store. An event is written in the transaction that makes its change, such
+as a lifecycle transition or a cleanup outcome. Events survive the removal of
+what they describe, and their IDs keep increasing.
+
+The code that makes a change records its event. A chat's events take the same
+recording path and shape as a workspace's, and name the space by its ID and
+kind. No event kind belongs to one kind of space for what both record.
+
+A space's log is a filtered view of the journal, not a second store, and so is
+Shoal's log. Shoal's own events belong to no space. A child's creation and
+removal are events of its parent too. A removed space's place in the tree is
+the one its parent's log recorded at its removal.
+
+Unscoped integrations replay or follow the journal without consuming alerts.
+[Space events](../reference/log.md#space-events) says how they read it and
+recover from a gap.
+
+### Journal retention
+
+Each space keeps its own events, so a busy space cannot push out another's
+history. A removed space keeps them as long as its checkpoints and attached
+files, so a restore brings back its history with them. A cap applies only to
+the high-volume kinds of event. [Retention](../reference/log.md#retention)
+gives the periods and the cap.
+
+## Startup
+
+The daemon binds its socket before its startup work. Until the work ends,
+requests wait instead of finding no daemon. A request its client sends again
+is closed unanswered. A status request still waiting after two seconds is
+refused with what startup is doing, as
+[A daemon that is starting](../reference/daemon.md#a-daemon-that-is-starting)
+describes. The daemon logs a step that runs past a minute.
+
+Once the store is migrated, startup marks interrupted operations under the
+daemon lock, in a transaction of its own. It does so before it audits
+ownership, serves requests or cleans up. A failure aborts startup and leaves committed
+migrations in place for the next try. [Startup](../reference/daemon.md#startup)
+lists what it marks.
+
+### The startup audit
+
+Startup audits but never deletes, kills or releases leases. It clears an
+unknown execution only once the stopped agent's reconciliation proves it
+ended, as [Unknown executions](agent-lifecycle.md#unknown-executions)
+describes.
+
+The cleanup sweep rechecks only the workspaces the audit failed. It readies
+one once its ownership verifies. It checks before it reserves the lifecycle,
+so a workspace that still fails never leaves the failed state. Automatic
+repair goes no further, since repair would also accept a failed setup the user
+has not seen.
+
+## Exits
 
 Only a planned exit, a restart or an update, keeps work running. The daemon
 cannot tell a service command's SIGTERM from a shutdown's, a logout's or a
-`kill`, so a signal stops all work with the save-first shutdown stop below, and
-the service commands instead ask the daemon over its socket how to exit: `shoal
-daemon restart` and an install that replaces an incompatible daemon ask it to
-detach its wrappers, and `shoal daemon stop` to stop work as `shoal stop --all`
-does, so agents stay down until `shoal resume`, except that queued launches in
-existing workspaces stay for the next daemon to start. The request is permanent
-like reattachment and answered before the protocol check, since restarting is
-how an upgrade reaches a daemon of another release; a daemon that does not
-answer gets SIGTERM. Once its work has ended, the daemon answers again on the
-same connection with the spaces whose work it stopped and left for `shoal
-resume`, a restart's those of the wrappers that could not reattach, which `shoal
-daemon stop` and `restart` name in the `shoal resume` they point to, so it
-restores nothing the exit did not stop. Work the daemon runs itself, in
-background operations, operation workers and connected setup or merges, cannot
-detach, so `shoal daemon stop` and `restart` ask the daemon to exit only once
-none runs, with the same quiescence an update waits for. That wait happens in
-the daemon before it begins to exit, outside the service manager's stop timeout.
-Meanwhile it holds back the background passes and requests that would start such
-work, whose clients send them again until the next daemon takes them when a
-restart brings one; queued launches wait for it too, while restores of running
-agents and other requests go on, so agents keep working through the wait.
+`kill`'s. A signal therefore stops all work with the
+[shutdown stop](../reference/daemon.md#signals), which saves each agent first.
 
-Use short transactions for atomic claims. Closed Shoal enums with matching display and
-wire names use one macro to share explicit spellings across conversions and reject
-unknown values. Native simulator states use a
-separate adapter enum that preserves unfamiliar strings and native wire spellings;
-only confirmed shutdown frees running capacity. Slow operations stay outside
-transactions; failures and migrations preserve ownership. `install` preserves compatible daemons and
-commands, deferring service changes until restart; incompatible daemons are
-verified stopped before replacing their service.
+### The service commands ask the daemon
 
-Keep writable state outside the binary's directory. Service setup manages one
-per-user launchd/systemd service and refuses to change its state directory until
-the existing service is stopped; foreground mode covers environments without a
-service manager. The service captures the installing shell's `PATH`. A managed
-daemon keeps the installed definition of its state directory current, rewriting
-it at startup when its release renders it differently, with the executable and
-`PATH` the installed one starts, and reloading systemd without restarting
-anything: service managers read only the file `shoal daemon install` wrote, and
-a definition in a system directory would need root and a distribution package.
+The service commands instead ask the daemon over its socket how to exit.
+`shoal daemon restart` and an install that replaces an incompatible daemon ask
+it to detach its wrappers. `shoal daemon stop` asks it to stop work.
+[Daemon restarts](../reference/daemon.md#daemon-restarts) says what each
+leaves running.
 
-Managed daemons record their stable executable path before startup work and
-restart after a replacement, including one during startup, once daemon
-operations are idle and no setup or merge runs; commands reattach. A request
-holds its operation until its reply is written, and an answer that goes on,
-such as a stream, holds one only while it writes, so a restart never falls
-between a change and its answer, nor waits for a client that only reads. Retain the
-ownership lock and listening socket across exec so queued requests reach the
-replacement under the same service PID. The lock file names the owning process
-by PID and birth, so a client refused by the socket tells a live daemon that
-does not answer from none running and points to restarting it. Read-only streams
-reconnect after the handoff, preserving event cursors, and item waits resume for
-their remaining time; when the replacement speaks a newer protocol, they
-continue by executing the installed release with that cursor or time. An update
-does not wait for clients of the previous protocol. The old daemon refuses newer
-requests before running them, so the installed CLI sends them again until the
-replacement answers; daemon controls report the mismatch at once. Foreground
-daemons keep explicit restart control.
+The request is permanent, as reattachment is: the daemon answers it before the
+protocol check, since a restart is how an upgrade reaches a daemon of another
+release. A daemon that does not answer gets SIGTERM.
 
-Every space's lifecycle events persist in a separate SQLite journal alongside
-lifecycle transitions and cleanup outcomes, survive ownership removal, and keep
-increasing IDs. A chat's events go through the same recording path as a
-workspace's and take the same shape, naming the space by its ID and kind, with
-no event kind of one kind of space for what both record. Retention is per space,
-so one busy space cannot push out another's history: a space keeps its events
-while it exists and for `cleanup.restore.retention_days` after its removal, as
-its checkpoints and attached files, and a restored space, which keeps its ID,
-keeps them; only its high-volume events, its agent's turn states, its progress
-changes and forge activity other than an item's closing, merging and reopening,
-keep a cap of the newest 500 per space. A space's log (`shoal log`,
-`client::log::log`) is a filtered view of this journal, not a second store, and
-so is Shoal's, every space's events with Shoal's own, which belong to no space
-and stay for the global retention: renames, restores, agent starts, stops and
-exits, threads, approvals, alerts, and the spaces created and removed below a
-space (in that parent's log) are journal events for it, each recorded where the
-change is made. A scoped caller reads the logs of its own space and the spaces
-below it; a removed space's place in the tree is the one its parent's log
-recorded at its removal. Unscoped integrations replay or follow them without
-consuming alerts; expired cursors report a gap for resync.
+Once its work has ended, the daemon answers again on the same connection. It
+names the spaces whose work it stopped and left for `shoal resume`: after a
+restart, those whose wrappers could not reattach. The command names them in
+the `shoal resume` it prints, so a resume restores nothing the exit did not
+stop.
 
-Opening persistence migrates the store, rewriting what it holds into the shapes
-this release reads: Shoal promises its earlier versions no compatibility, so
-code reads one shape of each record and file, and refuses a package or request
-of another version, except from a process an upgrade left running, such as an
-agent's wrapper. A database below the store's floor, the schema v0.21.0 wrote,
-is refused unchanged, naming that release to start once first, as is one a newer
-version wrote. The floor moves to a later release's schema only by hand, which
-deletes the migrations at or below it with their tests and names the new release
-in the refusal. Under the daemon lock, startup then atomically quarantines
-interrupted operations in a separate transaction before ownership auditing,
-serving requests, or cleanup; failure aborts startup and leaves committed
-migrations available for retry. The daemon binds its socket before this work:
-until it ends, requests wait, except that a request its client sends again is
-closed unanswered and a status request still waiting after two seconds is
-refused with the running step, how long it has run, and a stalled directory or a
-check that has waited five seconds; a step that runs past a minute is logged.
-Startup audits but never deletes, kills or releases leases, and clears an
-unknown execution only when stopped-agent reconciliation proves it ended. The
-cleanup sweep rechecks only the workspaces the audit failed and readies one once
-its ownership verifies, checking before it reserves the lifecycle so a workspace
-that still fails never leaves the failed state; automatic repair goes no
-further, since repair would also accept a failed setup the user has not seen.
-Survivors are signaled only after verifying PID birth identity and same-user
-ownership; acknowledgement cannot override visible live processes. `shoal stop`
-asks for it, since an execution without a recorded launch identity cannot be
-proven ended even when nothing of it is visible. Recheck unreadable process
-identities before treating visibility as incomplete; an identity that has exited
-or is exiting no longer blocks the ownership proof, and an inaccessible macOS
-identity is treated as a different process because it cannot be a same-user
-process Shoal started. One whose exec has not yet published its environment, or
-that no ancestor attributes, is read again within a bounded settle wait before
-it counts as unreadable, so a short-lived helper launchd adopted while running a
-platform binary no longer blocks once it exits or execs a program whose
-environment lacks the execution's marker. A reported agent or command exit first
-stops its verified processes outside its process group, so background shell
-commands do not outlive it; what should outlive a command belongs in a hook or a
-demo, and setup instead fails on what it leaves running. A reported command exit
-clears its execution and permits setup readiness only when marker, child and
-group evidence has no survivors and environment visibility is complete; a
-settled empty environment is readable evidence, except a macOS platform
-binary's, which reads that way when hidden. A hidden environment takes the
-attribution of the nearest ancestor whose environment tells, through any setuid
-program the user started, such as a terminal's `login`, which runs as another
-user and is never stopped itself. One launchd adopted after its parent exited
-has no ancestor left to tell, so the daemon remembers, by unique process ID,
-what the latest inventory told about each process's owner, an execution or none,
-while a live process can still name it as itself or as its parent. Inventories
-take turns, so the latest is the newest, except that an inference never replaces
-a reading of the process's own environment. Inventories, and the command lines,
-run times, terminals and foreground process groups Shoal shows or checks, read
-the kernel's process records, `proc_pidinfo` and `sysctl` on macOS and `/proc`
-on Linux, rather than run `ps`: stops, waits and status checks take them often,
-each `ps` cost a process start plus more reads than Shoal needs, which skip a
-zombie after its first, and Shoal needs no `ps` installed. Such a process takes
-what is remembered for it, failing that for its exited parent, and counts as
-unreadable only when no inventory saw either with its owner, as for a parent
-that exited between scans or before a daemon restart. An unreadable process
-counts only against executions of the workspace it works in; one working
-elsewhere, such as an orphan of a removed workspace, or whose working directory
-cannot be read blocks none. The reporting wrapper may remain alive awaiting
-acknowledgement; workspace stopping allows for child registration, stopping and
-completion verification; service termination and its command deadlines cover
-that drain. Managed stops signal only the daemon through its service manager and
-wait for its ownership lock before removing the job, so an already-loaded
-service with an older termination limit cannot cut the drain short. Recovery
-polls incomplete proof within a separate bounded wait and still refuses live or
-unverifiable survivors.
+### Work the daemon runs itself
+
+Work the daemon runs itself cannot detach: background operations, operation
+workers, and connected setup or merges. `shoal daemon stop` and `restart`
+therefore ask the daemon to exit only once none runs, as an update waits.
+
+The daemon waits before it begins to exit, outside the service manager's stop
+timeout. Meanwhile it holds back the background passes and requests that
+would start such work. Clients send those requests again until the next daemon
+takes them, when a restart brings one. Queued launches wait too. Restores of
+running agents and other requests go on, so agents keep working through the
+wait. [Work the daemon runs itself](../reference/daemon.md#work-the-daemon-runs-itself)
+says what a command sees.
+
+### The service manager's stop
+
+A managed stop signals only the daemon, through its service manager. It waits
+for the daemon's ownership lock before it removes the job. An already loaded
+service with an older termination limit thus cannot cut the drain short.
+
+The service's termination limit and its commands' deadlines cover that drain.
+A wrapper that reports its exit may wait for acknowledgement. Stopping a
+workspace allows time for a command's child process to register and stop, and
+for its completion to verify.
+
+## Service
+
+One per-user launchd or systemd service runs the daemon. Foreground mode
+covers environments without a service manager.
+[The service](../reference/daemon.md#the-service) says how to install and run
+each.
+
+The definition lives in the user's own service directory, since one in a
+system directory would need root and a distribution package. Service managers
+read only the file that `shoal daemon install` wrote. A managed daemon thus
+keeps that file current itself, rewriting it at startup when its release
+renders it differently, as
+[Keep the service definition current](../reference/daemon.md#keep-the-service-definition-current)
+describes.
+
+`shoal daemon install` keeps a compatible daemon and its commands running and
+defers service changes until it restarts. It verifies that an incompatible
+daemon stopped before it replaces its service.
+
+## Updates
+
+A managed daemon records its stable executable path before its startup work.
+It restarts after a replacement of that executable, even one during startup,
+once no daemon operation, setup or merge runs. Commands reattach.
+[After an update](../reference/install.md#after-an-update) says what the user
+sees.
+
+### Requests across a restart
+
+A request holds its operation until its reply is written. An answer that goes
+on, such as a stream, holds one only while it writes. A restart thus never
+falls between a change and its answer, nor waits for a client that only reads.
+
+The daemon keeps its ownership lock and listening socket across the exec. Queued
+requests thus reach the replacement under the same service PID.
+
+The lock file names the owning process by PID and birth. A client the socket
+refuses can thus tell a live daemon that does not answer from none running,
+and point to restarting it.
+
+Read-only streams reconnect after the handoff and keep their event cursors.
+Item waits resume for their remaining time. When the replacement speaks a newer
+protocol, they continue by running the installed release with that cursor or
+time.
+
+### Protocol mismatches
+
+An update does not wait for the clients of the previous protocol. The old
+daemon refuses a newer request before running it, so the installed CLI sends it
+again until the replacement answers. Daemon controls report the mismatch at
+once.
+
+A foreground daemon restarts only when told to.
+
+## Proof that processes ended
+
+The daemon signals a process, and counts it as ended, only on evidence.
+[Process tracking](../reference/daemon.md#process-tracking) and
+[Survivors](../reference/daemon.md#survivors) say what the user sees and the
+waits each check takes.
+
+### Signals
+
+The daemon signals a survivor only after it verifies the PID's birth identity
+and that the process belongs to the same user. An acknowledgement cannot
+override a visible live process. `shoal stop` asks for one because an
+execution without a recorded launch identity cannot be proven ended, even when
+nothing of it is visible.
+
+### Exits
+
+A reported agent or command exit first stops its verified processes outside
+its process group, so background shell commands do not outlive it. What should
+outlive a command belongs in a hook or a demo. Setup instead fails on what it
+leaves running.
+
+A reported command exit clears its execution, and lets setup become ready,
+only when the marker, child and group evidence shows no survivor and the
+environments it needs are readable. A settled empty environment is readable
+evidence. A macOS platform binary's is not, since it reads empty when hidden.
+
+### Unreadable processes
+
+The daemon rechecks an unreadable process identity before it treats its view
+of the processes as incomplete:
+
+- An identity that has exited or is exiting no longer blocks the proof.
+- An inaccessible macOS identity counts as a different process, since it
+  cannot be a same-user process Shoal started.
+- A process whose exec has not yet published its environment, or that no
+  ancestor attributes, is read again within a bounded wait. A short-lived
+  helper that launchd adopted while running a platform binary thus stops
+  blocking once it exits, or once it runs a program whose environment lacks
+  the execution's marker.
+
+A process with a hidden environment takes the attribution of its nearest
+ancestor whose environment tells. That reaches through any setuid program the
+user started, such as a terminal's `login`, which runs as another user and is
+never stopped itself.
+
+An unreadable process counts only against the executions of the workspace it
+works in. One that works elsewhere, such as an orphan of a removed workspace,
+blocks none, and neither does one whose working directory cannot be read.
+
+Recovery polls incomplete proof within a separate bounded wait, and still
+refuses live or unverifiable survivors.
+
+### Processes launchd adopted
+
+A process launchd adopted after its parent exited has no ancestor left to
+tell. The daemon therefore remembers, by unique process ID, what the latest
+inventory told of each process's owner: an execution or none. It remembers
+this while a live process can still name that process as itself or as its
+parent.
+
+Inventories take turns, so the latest is the newest. An inference never
+replaces a reading of the process's own environment.
+
+An adopted process takes what is remembered for it, or else for its exited
+parent. It counts as unreadable only when no inventory saw either with its
+owner, as for a parent that exited between scans or before a daemon restart.
+
+### Kernel process records
+
+Inventories read the kernel's process records: `proc_pidinfo` and `sysctl` on
+macOS, and `/proc` on Linux. So do the command lines, run times, terminals and
+foreground process groups that Shoal shows or checks. Shoal runs no `ps`:
+
+- Stops, waits and status checks read processes often, and each `ps` cost a
+  process start.
+- `ps` reads more of each process than Shoal needs, while Shoal reads a
+  zombie's record once and skips the rest.
+- Shoal needs no `ps` installed.

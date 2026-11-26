@@ -45,7 +45,9 @@ falling back to its last owner only when unclaimed; SQLite maintains the index
 on every write and rejects malformed ownership fields, and journals a lease when
 its record enters or leaves the leased state, or goes while leased. Allocation planning is pure
 over recorded devices and inventory; its executor revalidates ownership and live capacity under the simulator
-gate before ordered audit, claim and simctl operations. An omitted runtime selects
+gate before ordered audit, claim and simctl operations. Native simulator states
+use an adapter enum of their own that keeps unfamiliar strings and simctl's
+spellings; only a confirmed shutdown frees running capacity. An omitted runtime selects
 the latest installed, available iOS version compatible with the requested device;
 explicit runtimes stay pinned and existing leases keep their runtime. Generic permits consume
 pool and member capacity in one transaction; rwlock members allow unlimited readers sharing one slot or one

@@ -64,7 +64,7 @@ events longer. A restored workspace's log continues the removed one's.
 
 A space keeps only its newest 500 agent turn states, progress changes and
 forge activity events. This cap leaves out an item's closing, merging and
-reopening. The [daemon design](../design/daemon.md) says why each space keeps
+reopening. The [daemon design](../design/daemon.md#journal-retention) says why each space keeps
 its own events.
 
 ## Scope
