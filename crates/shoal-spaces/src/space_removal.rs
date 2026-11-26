@@ -1,7 +1,6 @@
-//! The operations cleanup and removal take on a space, whatever its kind:
-//! its agent, reserving it for removal, and its record. Cleanup and removal
-//! call only these, and ask nothing else of a space's kind than whether it
-//! has a worktree.
+//! What cleanup and removal do to a space of either kind: its agent, its
+//! reservation and its record. They ask nothing else of a space's kind than
+//! whether it has a worktree.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::Dropped;
@@ -36,7 +35,6 @@ use crate::{
 /// What a space's agent means for cleanup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AgentState {
-    /// It runs.
     Running,
     /// Shoal saved its session, or a recovery is pending, to run it again.
     Saved,
@@ -44,42 +42,38 @@ pub enum AgentState {
     Stopped,
 }
 
-/// A space's agent as cleanup reads it.
 #[derive(Clone, Copy, Debug)]
 pub struct SpaceAgent {
     pub state: AgentState,
-    /// When it last stopped, where the space records that; a workspace's
-    /// agent's stops count among its recorded activity.
+    /// Where the space records it. A workspace's agent's stops count among
+    /// its recorded activity.
     pub stopped_at: Option<UnixTime>,
 }
 
 /// A space a removal holds, from before it checks the space until it deletes
-/// the record or gives up: nothing else changes the space's lifecycle,
-/// restores its agent or gives it new children meanwhile.
+/// the record or gives up. Meanwhile nothing else changes the space's
+/// lifecycle, restores its agent or gives it new children.
 pub struct SpaceReservation<'a> {
-    /// The space as recorded once reserved.
     pub space: Space,
     _removal: spaces::Reservation<'a>,
     worktree: Option<WorktreeReservation>,
 }
 
-/// A worktree a removal holds, through its workspace's lifecycle state,
-/// which startup recovery reads.
+/// A worktree a removal holds through its workspace's lifecycle state, which
+/// startup recovery reads.
 struct WorktreeReservation {
-    /// The lifecycle state the reservation replaced.
     replaced: WorkspaceState,
-    /// The removal under way, which fails it if the removal ends early.
+    /// Fails the removal if it ends early.
     underway: Underway,
 }
 
 impl SpaceReservation<'_> {
-    /// The lifecycle state the reservation replaced, for a space with a
-    /// worktree.
+    /// None for a space without a worktree.
     pub fn replaced(&self) -> Option<WorkspaceState> {
         self.worktree.as_ref().map(|worktree| worktree.replaced)
     }
 
-    /// Give up the reservation once its removal deleted the space's record.
+    /// Call once the removal deleted the space's record.
     pub fn finish(self) {
         if let Some(worktree) = &self.worktree {
             worktree.underway.finish();
@@ -88,9 +82,8 @@ impl SpaceReservation<'_> {
 }
 
 impl Spaces {
-    /// The agent of `space`, leaving out the restores of idle agents, which
-    /// their wrappers wait to carry out, and the `cancelled` ones a removal
-    /// stopped. A running agent is use, a workspace's as a chat's.
+    /// Leaves out the restores of idle agents, which their wrappers wait to
+    /// carry out, and the `cancelled` ones a removal stopped.
     pub async fn space_agent(
         &self,
         daemon: &dyn Daemon,
@@ -99,8 +92,7 @@ impl Spaces {
     ) -> Result<SpaceAgent> {
         let id = &space.id;
         let mut saved = self.saved_agent(daemon, id, cancelled).await?;
-        // A saved chat in its worktree comes back there, as a saved agent
-        // does.
+        // A saved chat in a worktree comes back there, as a saved agent does.
         if space.worktree().is_some() {
             for chat in self.chats_in(&space.id).await? {
                 saved = saved || self.saved_agent(daemon, &chat.id, cancelled).await?;
@@ -116,9 +108,8 @@ impl Spaces {
         })
     }
 
-    /// Whether an agent of the space `id` runs, other than the `cancelled`
-    /// ones a removal stopped: an agent whose restore waits in the queue
-    /// does not.
+    /// Leaves out the `cancelled` agents a removal stopped. An agent whose
+    /// restore waits in the queue does not run.
     async fn agent_runs(&self, id: &SpaceId, cancelled: &[IdleRestore]) -> Result<bool> {
         let (id, records) = (id.to_owned(), self.records.clone());
         let running = (self.store)
@@ -131,9 +122,8 @@ impl Spaces {
         }))
     }
 
-    /// Whether the space `id` has stopped work saved to restore, other than
-    /// the restores of idle agents, which their wrappers wait to carry out,
-    /// and the `cancelled` ones a removal stopped.
+    /// Leaves out the restores of idle agents, which their wrappers wait to
+    /// carry out, and the `cancelled` ones a removal stopped.
     async fn saved_agent(
         &self,
         daemon: &dyn Daemon,
@@ -149,7 +139,6 @@ impl Spaces {
         })
     }
 
-    /// When the agent of the space `id` last stopped or exited.
     async fn agent_stopped_at(&self, id: &SpaceId) -> Result<Option<UnixTime>> {
         let id = id.to_owned();
         (self.store)
@@ -157,8 +146,7 @@ impl Spaces {
             .await
     }
 
-    /// Stop the agent of `space` and its commands for a removal, as `policy`
-    /// and `request` say, and refuse while any of them runs on.
+    /// Refuses while any of them runs on.
     pub async fn stop_space_agent(
         &self,
         daemon: &dyn Daemon,
@@ -169,20 +157,19 @@ impl Spaces {
         daemon.stop_executions(&space.id, policy, request).await
     }
 
-    /// Reserve the space `id` for `removal`, then its worktree, where it has
-    /// one.
+    /// Reserves the worktree too, where the space has one.
     pub async fn reserve_space(
         &self,
         id: &SpaceId,
         removal: Removal<'_>,
     ) -> Result<SpaceReservation<'_>> {
-        // Reserved first, so no agent of it registers and nothing opens
-        // below it while the removal goes on.
+        // Reserve first, so no agent of it registers and nothing opens below
+        // it while the removal goes on.
         let reservation = self.space_removals.reserve(id)?;
-        // A hook of the space, which rechecks the reservation once it holds
-        // the space's resource guard, excludes removal while it runs.
+        // A hook of the space rechecks the reservation once it holds the
+        // space's resource guard, so taking the guard waits out a running
+        // hook.
         drop(self.gates.resource_guard(id, GuardMode::Shared)?);
-        // No hold arrives once the space is reserved.
         ensure!(
             !removal.refuses_holds() || !self.user_holds(id).await?,
             "the space has holds, which are the user's; ask the user to remove it"
@@ -192,7 +179,7 @@ impl Spaces {
             Some(workspace) => Some(self.reserve_worktree(&workspace, removal).await?),
             None => None,
         };
-        // Read again, as the reservations keep it from here on.
+        // Read again: the reservations keep the space as it is from here on.
         let space = (self.find_space(id).await?).context("the space was removed meanwhile")?;
         Ok(SpaceReservation {
             space,
@@ -201,12 +188,10 @@ impl Spaces {
         })
     }
 
-    /// Reserve the worktree of `workspace` for `removal` through its
-    /// lifecycle state. A manual removal also takes a workspace whose setup
-    /// never started, as when the command creating it was interrupted; it
-    /// waits for that creation to end, then takes the repository's Git gate,
-    /// under which setup starts, and reads the workspace again, which
-    /// creation has since finished recording. A removal that holds the
+    /// A manual removal also takes a workspace whose setup never started, as
+    /// when the command creating it was interrupted. It waits for that
+    /// creation to end, then takes the repository's Git gate, under which
+    /// setup starts, and reads the workspace again. A removal that holds the
     /// gate did both already.
     async fn reserve_worktree(
         &self,
@@ -246,8 +231,7 @@ impl Spaces {
         })
     }
 
-    /// Give up `reservation` after its removal failed with `error`, for
-    /// `cause`, which the space's journal records: a worktree returns to the
+    /// `cause` goes to the space's journal. A worktree returns to the
     /// lifecycle state it had, or to failed once it can no longer be ready.
     pub async fn release_space(
         &self,
@@ -270,11 +254,11 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the record of `space`, which `cause` removed, and give the user
-    /// what only it kept: the approval requests it had not decided, the
-    /// messages it had not read and its attached files, which stay for the
-    /// retention period. Its open threads close, telling their openers. The forge assignments only it kept go, and so do
-    /// the carried commits only a workspace's record kept.
+    /// Gives the user what only the space kept: the approval requests it had
+    /// not decided, the messages it had not read, and its attached files,
+    /// which stay for the retention period. Its open threads close, telling
+    /// their openers. The forge assignments and carried commits only its
+    /// record kept go too.
     pub async fn delete_space_record(
         &self,
         daemon: &dyn Daemon,
@@ -304,9 +288,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Take back the forge assignments only the removed `space` kept: the
-    /// user's logins `dropped` names, and the agent account on `issues` once
-    /// no agent here works them. Each failure notifies.
+    /// Takes back the user's logins `dropped` names, and the agent account on
+    /// `issues` once no agent here works them. Each failure notifies.
     async fn release_removed_assignees(
         &self,
         daemon: &dyn Daemon,
@@ -331,9 +314,9 @@ impl Spaces {
         }
     }
 
-    /// Forget what `space` kept outside its record once that is deleted or,
-    /// for a workspace, converted: its agents' recovery records and session
-    /// logs, and a workspace's state.
+    /// Runs once the record is deleted or, for a workspace, converted.
+    /// Forgets its agents' recovery records and session logs, and a
+    /// workspace's state.
     pub async fn forget_removed_space(&self, daemon: &dyn Daemon, space: &Space) {
         daemon.forget_reports(&space.id);
         if space.worktree().is_some() {
@@ -342,17 +325,15 @@ impl Spaces {
         self.delete_session_logs(&space.id);
     }
 
-    /// Discard what `space` kept outside its record once that is deleted,
-    /// which a chat it converts into keeps: the places it opened, its
-    /// temporary directory and its attached files.
+    /// Discards what a chat the space converts into would keep: its places,
+    /// its temporary directory and its attached files.
     pub async fn discard_removed_space(&self, daemon: &dyn Daemon, space: &Space) {
         daemon.close_space_places(&space.id, &space.name).await;
         self.delete_removed_tmp_dir(daemon, space).await;
         (self.delete_unrecorded_files(daemon, &space.clone().into())).await;
     }
 
-    /// Delete the temporary directory of the removed `space`. A failure is
-    /// logged, since the removal already happened.
+    /// Logs a failure, since the removal already happened.
     async fn delete_removed_tmp_dir(&self, daemon: &dyn Daemon, space: &Space) {
         if let Err(error) = self.delete_tmp_dir(daemon, space).await {
             crate::log!(
@@ -362,8 +343,8 @@ impl Spaces {
         }
     }
 
-    /// Recovery records and session logs are run data owned by the record
-    /// just deleted.
+    /// Recovery records and session logs are run data the deleted record
+    /// owned.
     fn delete_session_logs(&self, id: &shoal_ids::space_ids::SpaceId) {
         let _ = std::fs::remove_dir_all(self.paths.space_state(id));
     }
@@ -373,23 +354,19 @@ impl Spaces {
 struct Deleted {
     /// The last notification recorded for the space's unread messages.
     notification: Option<i64>,
-    /// The approval requests the space had not decided.
     released: Vec<ApprovalRequest>,
-    /// The user's forge assignees the space stood for on its assigned
-    /// issues.
+    /// The user's logins the space stood for on its assigned issues.
     assignees: Vec<Dropped>,
-    /// The assigned issues whose agent account its removal settles.
+    /// The assigned issues whose agent account the removal settles.
     issues: Vec<ItemRef>,
-    /// What closing its threads delivered.
     threads: threads::ThreadsDelivered,
 }
 
-/// Delete the record of the space `id`, which `cause` removed, once the
-/// spaces below it are gone, in one transaction with what it recorded:
-/// the user gets its unread messages and the requests it decides, such as
-/// an issue proposal that outlives it, its attached files stay until
-/// `expires_at`, the pending reviews it writes or of it go and its open
-/// threads close.
+/// Runs once the spaces below are gone, in one transaction with what the
+/// space recorded: the user gets its unread messages and the requests it
+/// decides, such as an issue proposal that outlives it. Its attached files
+/// stay until `expires_at`, the pending reviews it writes or of it go, and
+/// its open threads close.
 fn delete_record(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,
@@ -397,7 +374,7 @@ fn delete_record(
     cause: crate::model::EventCause,
     expires_at: UnixTime,
 ) -> Result<Deleted> {
-    // Children go first; none may outlive its parent.
+    // No child may outlive its parent.
     ensure!(
         super::tree::children(tx, id)?.is_empty(),
         "spaces were opened below it during removal; retaining it"
@@ -405,10 +382,9 @@ fn delete_record(
     events::record(tx, id, events::EventKind::Removed, cause, None)?;
     let notification = records.hand_alerts_to_user(tx, id)?;
     workspace_files::keep_removed(tx, id, expires_at)?;
-    // With the record, so no request is left with a removed decider.
+    // In the same transaction, so no request is left with a removed decider.
     let released = release_decided_by(tx, id)?;
     let (assignees, issues) = records.remove_issue_links(tx, id)?;
-    // The pending reviews it writes, or of it, go with their comments.
     records.drop_pending_reviews(tx, id)?;
     let (_, threads) = threads::close(tx, records.coordination(), id, CloseCause::Removal)?;
     ensure!(

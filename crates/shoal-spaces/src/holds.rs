@@ -1,5 +1,5 @@
-//! Caller-named claims of a space's use, a workspace's or a chat's,
-//! independent of assignment completion.
+//! Holds: named claims that keep a space from cleanup. See
+//! `docs/design/cleanup.md`.
 use crate::Spaces;
 use crate::approvals::ApprovalRequestExt;
 use crate::daemon::Daemon;
@@ -26,8 +26,7 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Hold the space as `placed_by`; repeating a held name keeps the hold
-    /// as it was placed.
+    /// Repeating a held name keeps the hold as it was placed.
     pub async fn acquire_hold(
         &self,
         daemon: &dyn Daemon,
@@ -40,8 +39,7 @@ impl Spaces {
             .await
     }
 
-    /// Hold the space as `placed_by` once `authority` allows it in the
-    /// transaction that places the hold.
+    /// Checks `authority` in the transaction that places the hold.
     pub async fn place_hold(
         &self,
         daemon: &dyn Daemon,
@@ -67,8 +65,8 @@ impl Spaces {
         Ok(hold)
     }
 
-    /// What placing a hold on `space` holds meanwhile: no resource hook runs
-    /// in the worktree of a workspace, which must still be its own.
+    /// No resource hook runs in a workspace's worktree while the guard is
+    /// held, and the worktree must still be the workspace's own.
     async fn hold_guard(&self, daemon: &dyn Daemon, space: &Space) -> Result<ResourceGuard> {
         let guard = (self.gates).resource_guard(&space.id, GuardMode::Shared)?;
         if let Some(workspace) = space.to_workspace() {
@@ -77,9 +75,8 @@ impl Spaces {
         Ok(guard)
     }
 
-    /// Hold the space for its own agent once its coordinator, or the user
-    /// when it has none, approves; approval places the hold, and asking
-    /// again returns it.
+    /// The space's coordinator, or the user without one, approves the
+    /// request, and approval places the hold. Asking again returns the hold.
     pub async fn request_hold(
         &self,
         daemon: &dyn Daemon,
@@ -141,9 +138,8 @@ impl Spaces {
         Ok(outcome)
     }
 
-    /// What approving `request` needs held while its decision places the
-    /// hold it asks for, as acquiring one directly does. `None` for other
-    /// requests and denials.
+    /// Approving `request` holds the same as acquiring the hold directly.
+    /// `None` for other requests and denials.
     pub async fn hold_decision_guard(
         &self,
         daemon: &dyn Daemon,
@@ -157,8 +153,7 @@ impl Spaces {
         Ok(Some(self.hold_guard(daemon, &space).await?))
     }
 
-    /// Release the hold `name` for `released_by`: an agent releases only
-    /// the holds agents placed.
+    /// An agent releases only the holds agents placed.
     pub async fn release_hold(
         &self,
         selector: &SpaceSelector,
@@ -176,8 +171,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Release the hold `name` for `caller`: a scoped caller releases one
-    /// the user placed as its `user_holds` permission allows.
+    /// A scoped caller releases a hold the user placed only as its
+    /// `user_holds` permission allows.
     pub async fn release_hold_as(
         &self,
         daemon: &dyn Daemon,
@@ -214,7 +209,6 @@ impl Spaces {
         Ok(self.space(selector).await?.holds.to_vec())
     }
 
-    /// Whether the user placed a hold on the space `id`.
     pub async fn user_holds(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         (self.store)
@@ -236,14 +230,12 @@ impl Spaces {
     }
 }
 
-/// What lets a hold be placed.
 #[derive(Clone, Copy)]
 pub enum Authority {
-    /// The caller may hold the space, as the user or an agent above it.
+    /// The caller may hold the space: the user, or an agent above it.
     Caller,
-    /// The space's own agent holds it only with its approval: the hold
-    /// already placed, or an approved request, either of which a release
-    /// meanwhile ends.
+    /// The space's own agent holds it only with approval: the hold already
+    /// placed, or an approved request. A release in between ends either.
     Approval,
 }
 
@@ -267,8 +259,8 @@ impl Authority {
     }
 }
 
-/// Place the hold once `authority` allows it and return it as it stands: a
-/// held name keeps the hold as it was placed.
+/// Returns the hold as it stands: a held name keeps the hold as it was
+/// placed.
 fn place(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -287,9 +279,8 @@ fn place(
     Ok(hold)
 }
 
-/// Delete the hold for `released_by`, who as an agent releases only the
-/// holds agents placed, and end its approval, so holding it again needs
-/// another.
+/// An agent releases only the holds agents placed. Releasing ends the
+/// hold's approval, so holding it again needs another.
 fn release(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -315,9 +306,8 @@ fn release(
     Ok(())
 }
 
-/// Place, in the transaction that approved it, the hold `request` asks for,
-/// refusing it where a new hold is refused: a decision never stands
-/// without its hold.
+/// Runs in the transaction that approved `request`, and refuses where a new
+/// hold is refused: a decision never stands without its hold.
 pub fn place_approved(
     tx: &rusqlite::Transaction<'_>,
     request: &ApprovalRequest,
@@ -331,7 +321,6 @@ pub fn place_approved(
     insert(tx, &request.space_id, name, reason, HoldPlacer::Agent)
 }
 
-/// Insert the hold unless the space already has one by that name.
 fn insert(
     db: &Connection,
     id: &SpaceId,
@@ -349,7 +338,7 @@ fn insert(
 
 const COLUMNS: &str = "SELECT space_id,name,reason,created_at,placed_by FROM space_holds";
 
-/// The holds on the space `id`, by name.
+/// By name.
 pub fn list(db: &Connection, id: &SpaceId) -> Result<Vec<SpaceHold>> {
     Ok(db
         .prepare_cached(&format!("{COLUMNS} WHERE space_id=?1 ORDER BY name"))?

@@ -1,9 +1,5 @@
-//! Chats: agents the user talks with in a repository's registered checkout,
-//! or in a workspace's worktree, where they are not the workspace's agent,
-//! or without a repository in `root_dir`, managing the spaces of every
-//! repository. A chat's agent runs under the execution wrapper as an
-//! execution of the chat, which runs while its execution is recorded; the
-//! chat lasts until it is removed.
+//! The records of chats and the directories they run in. See
+//! `docs/design/chats.md`.
 mod root_moves;
 
 use crate::Spaces;
@@ -32,9 +28,8 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Record the chat `new` in the checkout of `repository`, in the
-    /// worktree of the workspace `workspace` names, which must be ready, in
-    /// the workspace's repository, or without either in `root_dir`.
+    /// A chat in `workspace` requires the workspace to be ready. Without a
+    /// repository or workspace, the chat runs in `root_dir`.
     pub async fn start_new_chat(
         &self,
         daemon: &dyn Daemon,
@@ -56,9 +51,9 @@ impl Spaces {
             .await
     }
 
-    /// Refuse a named `parent` that is `workspace`, whose worktree the chat
-    /// runs in: the chat is not the workspace's child, whose threads would
-    /// go to the workspace's agent while the user attends the chat.
+    /// Refuses a named `parent` that is the workspace the chat runs in. The
+    /// chat is not that workspace's child: its threads would go to the
+    /// workspace's agent while the user attends the chat.
     pub async fn ensure_parent_not_host(
         &self,
         daemon: &dyn Daemon,
@@ -78,8 +73,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// The workspace `selector` names, once a chat may run in it: it is
-    /// ready and its worktree is there and verified to be its own.
+    /// Refuses the workspace unless it is ready and its worktree is there and
+    /// verified as its own.
     pub async fn chat_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -111,9 +106,7 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// Record `new` as a chat of the repository `repository`, or of none,
-    /// in the worktree of `workspace` when given, below its parent, which
-    /// must take a chat of that repository, or at the top without one.
+    /// The parent must take a chat of that repository.
     pub async fn record_new_chat(
         &self,
         daemon: &dyn Daemon,
@@ -163,9 +156,7 @@ impl Spaces {
             .await
     }
 
-    /// Record the removed chat `chat` again, as its restore reopens it: in
-    /// its repository, or else in the `root_dir` it ran in, below `parent`
-    /// when given.
+    /// A chat without a repository goes back into the `root_dir` it ran in.
     pub async fn record_restored_chat(
         &self,
         daemon: &dyn Daemon,
@@ -192,9 +183,6 @@ impl Spaces {
             .await
     }
 
-    /// Record `chat` at `home`, below `parent` when given, with `priority`,
-    /// give it its temporary directory and take `place`, where it runs in a
-    /// terminal host, when given.
     async fn record_chat(
         &self,
         daemon: &dyn Daemon,
@@ -227,11 +215,11 @@ impl Spaces {
         Ok(chat)
     }
 
-    /// Where a new chat of `repository` keeps its temporary directory: the
-    /// repository's directory, or for a chat without one the
-    /// configured `root_dir`, which stays its own however `root_dir` changes
-    /// later. A chat without one is recorded under the registry gate, so a
-    /// root move, which holds it, finds the chat before clearing `root_dir`.
+    /// A chat without a repository keeps its temporary directory in the
+    /// configured `root_dir`, which stays its own when `root_dir` changes
+    /// later. Such a chat is recorded under the registry gate, so a root
+    /// move, which holds the gate, finds the chat before it clears
+    /// `root_dir`.
     async fn reserve_chat_home(
         &self,
         daemon: &dyn Daemon,
@@ -255,8 +243,7 @@ impl Spaces {
         })
     }
 
-    /// `chat`, just recorded, with its temporary directory, created now; a
-    /// chat that cannot have one is forgotten, having never run.
+    /// Forgets a chat that cannot have a temporary directory: it never ran.
     async fn give_tmp_dir(&self, mut chat: Chat, repository: Option<&Repository>) -> Result<Chat> {
         match self.chat_tmp_dir(repository, &chat) {
             Ok(tmp_dir) => {
@@ -274,13 +261,12 @@ impl Spaces {
         }
     }
 
-    /// Running and stopped chats in start order, each with its agent.
+    /// In start order.
     pub async fn chats(&self) -> Result<Vec<Chat>> {
         let recorded = self.recorded_chats(None).await?;
         Ok(self.with_agents(recorded))
     }
 
-    /// The running or stopped chat with the ID `id`, with its agent.
     pub async fn chat_by_id(&self, id: &SpaceId) -> Result<Option<Chat>> {
         let recorded = self.recorded_chats(Some(id)).await?;
         (recorded.into_iter())
@@ -289,9 +275,8 @@ impl Spaces {
             .transpose()
     }
 
-    /// The running and stopped chats in start order, every one or those
-    /// at or below the space `root`, each with what the store records of
-    /// its agent, read in one transaction.
+    /// In start order, all of them or those at or below `root`, read in one
+    /// transaction.
     async fn recorded_chats(
         &self,
         root: Option<&SpaceId>,
@@ -303,17 +288,14 @@ impl Spaces {
             .await
     }
 
-    /// The `recorded` chats, each with its agent, of which the store
-    /// records what each comes with. One whose saved agent cannot be read
-    /// is listed without it, so it costs only its own chat.
+    /// A chat whose saved agent cannot be read is listed without it, so the
+    /// failure costs only that chat.
     pub fn with_agents(&self, recorded: Vec<(Chat, spaces::sessions::StoredAgents)>) -> Vec<Chat> {
         (recorded.into_iter())
             .map(|(chat, stored)| self.listed_with_agent(chat, stored))
             .collect()
     }
 
-    /// `chat` with its agent, of which the store records `stored`, or
-    /// without one when what its stop saved cannot be read.
     fn listed_with_agent(&self, mut chat: Chat, stored: spaces::sessions::StoredAgents) -> Chat {
         chat.agent = self.agent_from(&chat.id, stored).unwrap_or_else(|error| {
             crate::log!("saved agent of chat {} unreadable: {error:#}", chat.id);
@@ -322,15 +304,12 @@ impl Spaces {
         chat
     }
 
-    /// `chat` with its agent, of which the store records `stored`.
     fn with_agent(&self, chat: Chat, stored: spaces::sessions::StoredAgents) -> Result<Chat> {
         let mut chat = chat;
         chat.agent = self.agent_from(&chat.id, stored)?;
         Ok(chat)
     }
 
-    /// The chats running or stopped in the worktree of the workspace `id`,
-    /// by name.
     pub async fn chats_in(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
@@ -352,8 +331,8 @@ impl Spaces {
             .await
     }
 
-    /// The workspace in whose worktree the space `id` runs, when it is a
-    /// chat there.
+    /// The workspace whose worktree the space runs in, when it is a chat
+    /// there.
     pub async fn chat_home(&self, id: &SpaceId) -> Result<Option<SpaceId>> {
         let id = id.to_owned();
         self.store
@@ -369,7 +348,6 @@ impl Spaces {
             .await
     }
 
-    /// Whether a chat runs its agent in the worktree of the workspace `id`.
     pub async fn chat_runs_in(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
@@ -388,8 +366,6 @@ impl Spaces {
             .await
     }
 
-    /// The registered checkout of `chat`'s repository; none for a chat
-    /// without a repository.
     pub async fn chat_repository(
         &self,
         daemon: &dyn Daemon,
@@ -405,9 +381,8 @@ impl Spaces {
         }
     }
 
-    /// The directory a chat outside a workspace runs in: its repository's
-    /// registered checkout, or the `root_dir` a chat without a repository
-    /// started in.
+    /// The checkout of the chat's repository, or the `root_dir` a chat
+    /// without a repository started in.
     pub async fn chat_checkout_path(
         &self,
         daemon: &dyn Daemon,
@@ -423,10 +398,8 @@ impl Spaces {
         }
     }
 
-    /// The layout of the temporary directories of the chats without a
-    /// repository in the configured `root_dir`, which no other daemon uses or
-    /// sweeps; none while `root_dir` is not valid, when no such chat starts
-    /// either.
+    /// No other daemon uses or sweeps this layout. None while `root_dir` is
+    /// not valid; no chat without a repository starts then either.
     pub fn outside_tmp_layout(&self) -> Option<tmp_dirs::Layout> {
         let root_dir = self.config.current().root_dir(&self.paths).ok()?;
         Some(tmp_dirs::Layout::outside_repositories(
@@ -435,14 +408,13 @@ impl Spaces {
         ))
     }
 
-    /// The state directory as the daemon marks what it keeps in `root_dir`:
-    /// canonical, so every path to it names the same owner.
+    /// Canonical, so every path to the state directory names the same owner
+    /// of what the daemon keeps in `root_dir`.
     pub fn root_dir_owner(&self) -> std::path::PathBuf {
         std::fs::canonicalize(&self.paths.state).unwrap_or_else(|_| self.paths.state.clone())
     }
 
-    /// The temporary directory of `chat` of `repository`, or of none,
-    /// created when missing.
+    /// Creates the directory when it is missing.
     pub fn chat_tmp_dir(
         &self,
         repository: Option<&Repository>,
@@ -453,7 +425,6 @@ impl Spaces {
             .transpose()
     }
 
-    /// The scope token the agent of the chat `id` carries.
     #[cfg(any(test, feature = "test-support"))]
     pub async fn chat_scope(
         &self,
@@ -467,21 +438,18 @@ impl Spaces {
     }
 }
 
-/// What a process records to start a chat: the chat's name, agent and
-/// mode, where it runs in a terminal host, and the space it goes below.
 pub struct NewChat {
     pub name: SpaceName,
     pub agent: crate::agent::Agent,
     pub mode: crate::config::modes::ModeName,
-    /// The permissions `--permission` gives its agent, whatever its mode's.
+    /// The permissions `--permission` gives the agent, whatever its mode
+    /// gives.
     pub narrowing: crate::config::permissions::PermissionsConfig,
     pub origin: Option<crate::sessions::Origin>,
     pub parent: Option<SpaceId>,
     pub priority: Option<shoal_schedule::priority::Priority>,
 }
 
-/// Where a new chat keeps its temporary directory, and the registry gate a
-/// chat without a repository is recorded under.
 struct ChatHome<'a> {
     repository: Option<Repository>,
     root_dir: Option<std::path::PathBuf>,
@@ -489,8 +457,6 @@ struct ChatHome<'a> {
 }
 
 impl ChatHome<'_> {
-    /// Where a chat here works: the worktree of `workspace` when given,
-    /// else the repository's checkout, else the `root_dir`.
     fn workdir(&self, workspace: Option<&Workspace>) -> Result<Workdir> {
         Ok(match (workspace, &self.repository, &self.root_dir) {
             (Some(workspace), ..) => Workdir::Worktree {
@@ -508,9 +474,8 @@ impl ChatHome<'_> {
     }
 }
 
-/// Insert `chat` unless the repository or the workspace it runs in is being
-/// removed, below the space `parent` when given, which must take it and, as
-/// `removing` shows, not be a chat being removed.
+/// Refuses a repository or workspace that is being removed, and a parent
+/// that cannot take the chat or is a chat being removed.
 fn insert(
     tx: &rusqlite::Transaction<'_>,
     records: &dyn Records,
@@ -519,9 +484,9 @@ fn insert(
 ) -> Result<Chat> {
     let workspace = chat.workdir.workspace().map(|workspace| &workspace.id);
     ensure_place_free(tx, chat.repository_id.as_ref(), workspace)?;
-    // Checked with the record, so a removal that began while the start
-    // waited finds the chat below the parent or refuses it; recorded first,
-    // so the chat's start names it.
+    // Check the parent with the record, so a removal that began while the
+    // start waited either finds the chat below the parent or refuses it.
+    // Record the chat first, so that its start names it.
     if let Some((parent, removing)) = &parent {
         ensure!(!removing.reserved(parent), "{parent} is being removed");
         super::tree::place_below(tx, chat.repository_id.as_ref(), &chat.id, parent)?;
@@ -555,9 +520,8 @@ fn insert(
     Ok(chat)
 }
 
-/// Refuse a chat in the repository `repository_id` while it is being
-/// removed or moved, or in the workspace `workspace` unless it is ready, as
-/// it is not while it is being removed.
+/// Refuses a repository being removed or moved, and a workspace that is not
+/// ready, as it is not while it is being removed.
 fn ensure_place_free(
     tx: &rusqlite::Transaction<'_>,
     repository_id: Option<&RepositoryId>,
@@ -590,8 +554,6 @@ fn ensure_place_free(
     }
 }
 
-/// The running and stopped chats in start order, every one or those at or
-/// below the space `root`, each with what the store records of its agent;
 /// `owner` owns the `root_dir` of a chat without a repository.
 pub fn recorded_within(
     db: &Connection,
@@ -607,11 +569,9 @@ pub fn recorded_within(
         .collect()
 }
 
-/// The running and stopped chats in start order, every one or those at or
-/// below the space `root`, a chat without a repository with its temporary
-/// directory in the `root_dir` it started in, marked as `owner`'s, the
-/// daemon's state directory, without their agents, which
-/// [`Manager::agent_of`] reads.
+/// Leaves out the agents, which [`Manager::agent_of`] reads. `owner`, the
+/// daemon's state directory, marks the temporary directory of a chat
+/// without a repository in the `root_dir` it started in.
 fn recorded(
     db: &Connection,
     records: &dyn Records,
@@ -674,8 +634,8 @@ fn recorded(
                 agent: None,
                 started_at: row.get("started_at")?,
                 tmp_dir,
-                // An unreadable record fails the cleanup that reads it, for
-                // that chat alone, rather than every listing of chats.
+                // An unreadable record fails only the cleanup that reads it,
+                // for that chat alone, rather than every listing of chats.
                 completion: (row.get::<_, Option<String>>("completion")?)
                     .and_then(|record| serde_json::from_str(&record).ok()),
             },
@@ -697,8 +657,6 @@ fn recorded(
     .collect()
 }
 
-/// Where the chat of `row` works: the worktree it runs in, the checkout of
-/// its `repository`, or the `root_dir` it started in.
 fn workdir(
     row: &rusqlite::Row<'_>,
     repository: Option<&Repository>,
@@ -726,9 +684,8 @@ fn workdir(
     Ok(Workdir::RootDir { path })
 }
 
-/// Delete the record of the chat `id`, just started, which never ran, since
-/// its start failed with `error`, journaling its removal as a removed
-/// space's.
+/// Deletes the record of a chat whose start failed before it ran, and
+/// journals that as a removed space.
 fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
     let unstarted = store::exists(tx, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])?
         && crate::executions::execution_count(tx, id, None)? == 0;

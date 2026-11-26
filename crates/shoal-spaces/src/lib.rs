@@ -1,10 +1,5 @@
-//! The spaces of Shoal's daemon: the records of workspaces and chats and the
-//! tree they form, the marks and progress they report, their worktrees and
-//! the files they send, their lifecycle, removal and cleanup, the startup
-//! audit of what they own, and their restores, conversions, moves and
-//! launches. [`Spaces`] holds what they keep in memory and offers their
-//! operations; what they need of the rest of the daemon is the interface in
-//! [`daemon`].
+//! The spaces subsystem of the daemon: workspaces, chats and the tree they
+//! form. See `docs/design/spaces.md`.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
@@ -70,7 +65,6 @@ pub mod workspace_usage;
 #[cfg(test)]
 mod stand_in;
 
-/// The spaces service, which `Manager` holds.
 pub struct Spaces {
     pub store: Store,
     pub gates: Arc<Gates>,
@@ -81,30 +75,21 @@ pub struct Spaces {
     pub file_access: Arc<FileAccess>,
     forges: Arc<ForgeAccess>,
     operations: Arc<Operations>,
-    /// How the cleanup sweep last went.
     pub cleanup_health: cleanup::CleanupHealth,
-    /// How the idle sleep pass last went.
     pub idle_sleep_health: cleanup::CleanupHealth,
     /// The spaces the cleanup sweep removed, which it reports.
     pub cleanup_removals: cleanup::Removed,
-    /// The progress sections being published to linked items.
     pub publications: progress::Publications,
-    /// What each workspace's worktree uses of the disk.
     pub usage: workspace::usage::Usage,
-    /// The leftovers of removed spaces still being deleted.
+    /// The leftovers of removed spaces that are still being deleted.
     pub leftovers: leftovers::Leftovers,
-    /// The agents conversions hand over between spaces.
     pub conversion_handovers: conversions::Handovers,
     /// The spaces whose agent a conversion is moving now.
     pub relocating: conversions::Relocating,
-    /// The spaces whose removal is under way.
     pub space_removals: spaces::Removing,
-    /// The spaces whose completion cleanup is under way.
     pub completed_owners: spaces::Removing,
     /// The commits workspaces carry for another, held until they land.
     pub carried_holds: carried_commits::CarriedHolds,
-    /// What other subsystems record of a space, which the spaces read and
-    /// write in their own transactions.
     pub records: Arc<dyn daemon::Records>,
 }
 

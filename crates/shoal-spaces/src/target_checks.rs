@@ -1,8 +1,6 @@
-//! What each request requires of the space it acts on: one check per
-//! request kind, which every request group declares with no default arm.
-//! The daemon runs it before the request's handler, and a handler that
-//! reads the space again under a lock judges it by the same check, so both
-//! refuse a space alike.
+//! What each request requires of the space it acts on. The daemon runs the
+//! check before the request's handler, and a handler that reads the space
+//! again under a lock judges it by the same check, so both refuse alike.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::collections::HashSet;
@@ -18,26 +16,21 @@ use crate::{
     state::WorkspaceState,
 };
 
-/// What a request requires of the space it acts on, each judged by a
-/// named operation below.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TargetCheck {
     /// Any workspace or chat, running or stopped.
     Space,
-    /// A workspace; a chat lacks the worktree the request acts on.
     Workspace,
-    /// A ready workspace.
     ReadyWorkspace,
-    /// A ready workspace, or a chat.
     ReadySpace,
-    /// A ready workspace, or one a lifecycle operation that passes holds,
-    /// which the request waits out; or a chat.
+    /// A ready workspace, or one in a lifecycle operation that passes, which
+    /// the request waits out; or a chat.
     AwaitedReadySpace,
-    /// A workspace its setup can run in: preparing, ready or failed, with no
-    /// execution in it but the caller's own.
+    /// Preparing, ready or failed, with no execution in it but the caller's
+    /// own.
     SetupWorkspace,
-    /// A ready workspace, or a failed one an interrupted operation left
-    /// for the request to finish.
+    /// A ready workspace, or a failed one an interrupted operation left for
+    /// the request to finish.
     SettledWorkspace,
     /// A ready or failed workspace, one whose preparation waits with
     /// nothing started in it, or a chat.
@@ -46,58 +39,46 @@ pub enum TargetCheck {
     LinkingSpace,
     /// A workspace that takes link changes.
     LinkingWorkspace,
-    /// A workspace a checkpoint can be taken of: ready, stopping or
-    /// failed.
+    /// Ready, stopping or failed.
     CheckpointedWorkspace,
-    /// A space where an agent or command runs; the request acts on nothing
+    /// A space where an agent or command runs. The request acts on nothing
     /// in another.
     RunningSpace,
     /// A ready workspace or a chat that recorded its completion.
     DoneSpace,
-    /// A space with a hold to release.
     HeldSpace,
-    /// A space with a ready-for-review mark to withdraw.
     MarkedSpace,
-    /// A workspace that records a base workspace to clear.
     StackedWorkspace,
-    /// A space with an agent session to attach to, where this machine's
-    /// terminal hosts keep it.
+    /// A space whose agent session this machine's terminal hosts keep.
     SessionSpace,
-    /// A space whose agent's directory is found on this machine, for a
-    /// shell or an app to enter.
+    /// A space whose agent's directory this machine has, for a shell or an
+    /// app to enter.
     DirectorySpace,
 }
 
-/// What a check reads besides the space it judges, which
-/// [`Manager::facts`] loads only for a check that reads it.
+/// What a check reads besides the space. [`Manager::facts`] loads only what
+/// the check reads.
 #[derive(Debug, Default)]
 pub struct Facts {
-    /// The spaces where work runs other than the caller's own execution,
-    /// which a setup leaves running.
+    /// The spaces where work other than the caller's own execution runs,
+    /// which a setup must leave running.
     pub busy: HashSet<SpaceId>,
-    /// The spaces with an agent session.
     pub sessions: HashSet<SpaceId>,
-    /// The spaces whose agent's directory is found.
     pub directories: HashSet<SpaceId>,
 }
 
-/// How a request's check judges one space.
 #[derive(Debug)]
 pub enum Verdict {
-    /// The request acts on it.
     Accepted,
-    /// The request refuses it with this error, for a reason worth showing,
-    /// such as its state.
+    /// Refused for a reason worth showing, such as its state.
     Refused(anyhow::Error),
     /// It lacks what the request acts on, such as a worktree or a running
-    /// agent to stop, so it is no candidate for it. The request is refused
-    /// with the error where there is one, and otherwise its handler says
-    /// what becomes of it.
+    /// agent to stop. The request is refused with the error where there is
+    /// one; otherwise its handler says what becomes of it.
     Lacking(Option<anyhow::Error>),
 }
 
 impl Verdict {
-    /// Refuse a request this verdict refuses.
     pub fn require(self) -> Result<()> {
         match self {
             Self::Accepted | Self::Lacking(None) => Ok(()),
@@ -107,12 +88,11 @@ impl Verdict {
 }
 
 impl TargetCheck {
-    /// Whether the request path reads the space to judge it: a check that
-    /// can refuse what the handler would not refuse first. Every recorded
-    /// space passes `Space`; a workspace check refuses only a chat, which
-    /// its handler refuses through `Manager::workspace` alike; and a check
-    /// of what a space has only leaves out one without it, which its handler
-    /// answers.
+    /// Whether the request path reads the space to judge it: only a check
+    /// that can refuse what the handler would not refuse first. Every
+    /// recorded space passes `Space`. A workspace check refuses only a chat,
+    /// which `Manager::workspace` refuses alike. A check of what a space has
+    /// only leaves out one without it, which its handler answers.
     fn refuses_before_handler(self) -> bool {
         match self {
             Self::Space
@@ -136,7 +116,6 @@ impl TargetCheck {
         }
     }
 
-    /// How a request of this check judges `space`, with `facts`.
     pub fn judge(self, space: &Space, facts: &Facts) -> Verdict {
         match self {
             Self::Space => Verdict::Accepted,
@@ -161,8 +140,8 @@ impl TargetCheck {
     }
 }
 
-/// A workspace judged by `judged` on its worktree's record; a chat lacks
-/// the worktree, refused as [`Manager::workspace`] refuses it.
+/// A chat lacks the worktree and is refused as [`Manager::workspace`]
+/// refuses it.
 fn workspace(space: &Space, judged: impl FnOnce(&Worktree) -> Verdict) -> Verdict {
     match &space.part {
         SpacePart::Workspace(worktree) => judged(worktree),
@@ -170,8 +149,7 @@ fn workspace(space: &Space, judged: impl FnOnce(&Worktree) -> Verdict) -> Verdic
     }
 }
 
-/// Accept `workspace` in `state` where it is ready, which a handler that
-/// read its state again under a lock asks too.
+/// A handler that read the state again under a lock asks this too.
 pub fn ready<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
     match state {
         WorkspaceState::Ready => Verdict::Accepted,
@@ -179,9 +157,8 @@ pub fn ready<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
     }
 }
 
-/// Accept `workspace` in `state` where it is ready, or failed with an
-/// interrupted operation for the request to finish, which a handler that
-/// read its state again under a lock asks too.
+/// Also accepts a failed workspace whose interrupted operation the request
+/// finishes. A handler that read the state again under a lock asks this too.
 pub fn settled<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
     match state {
         WorkspaceState::Ready | WorkspaceState::Failed => Verdict::Accepted,
@@ -189,14 +166,11 @@ pub fn settled<P>(workspace: &Space<P>, state: WorkspaceState) -> Verdict {
     }
 }
 
-/// The refusal of `workspace`, in `state`, by a request that needs it
-/// ready, as the store's recheck in a transaction words it.
+/// Worded as the store's recheck in a transaction words it.
 fn not_ready<P>(workspace: &Space<P>, state: WorkspaceState) -> anyhow::Error {
     shoal_store::not_ready(workspace.number, &workspace.id, &workspace.name, state)
 }
 
-/// A ready or failed workspace, or one whose preparation waits with
-/// nothing started in it; or any chat.
 fn settled_space(space: &Space) -> Verdict {
     match &space.part {
         SpacePart::Workspace(worktree) if worktree.preparation_waits.is_some() => Verdict::Accepted,
@@ -205,7 +179,6 @@ fn settled_space(space: &Space) -> Verdict {
     }
 }
 
-/// A ready workspace, or any chat.
 fn ready_space(space: &Space) -> Verdict {
     match &space.part {
         SpacePart::Workspace(worktree) => ready(space, worktree.state),
@@ -213,8 +186,6 @@ fn ready_space(space: &Space) -> Verdict {
     }
 }
 
-/// A ready workspace, or one a lifecycle operation that passes holds, which
-/// the request waits out; or any chat.
 fn awaited_ready(space: &Space) -> Verdict {
     match &space.part {
         SpacePart::Workspace(worktree) if worktree.state.passes() => Verdict::Accepted,
@@ -223,8 +194,6 @@ fn awaited_ready(space: &Space) -> Verdict {
     }
 }
 
-/// A workspace its setup can run in: preparing, ready or failed, and not
-/// `busy` with work other than the caller's own execution.
 fn setup(space: &Space, busy: bool) -> Verdict {
     workspace(space, |worktree| match worktree.state {
         WorkspaceState::Preparing | WorkspaceState::Ready | WorkspaceState::Failed if busy => {
@@ -240,7 +209,6 @@ fn setup(space: &Space, busy: bool) -> Verdict {
     })
 }
 
-/// A workspace whose state takes link changes, or any chat.
 fn linking_space(space: &Space) -> Verdict {
     match &space.part {
         SpacePart::Workspace(worktree) => linking(worktree.state),
@@ -248,8 +216,7 @@ fn linking_space(space: &Space) -> Verdict {
     }
 }
 
-/// Accept a workspace in `state` where it takes link changes, which a
-/// link change asks again in the transaction that records it.
+/// A link change asks this again in the transaction that records it.
 pub fn linking(state: WorkspaceState) -> Verdict {
     match state.accepts_links() {
         true => Verdict::Accepted,
@@ -259,8 +226,8 @@ pub fn linking(state: WorkspaceState) -> Verdict {
     }
 }
 
-/// Accept a workspace in `state` where a checkpoint can be taken of it:
-/// ready, stopping or failed, as no other lifecycle operation holds it.
+/// Ready, stopping or failed: no other lifecycle operation holds the
+/// workspace then.
 pub fn checkpointed(state: WorkspaceState) -> Verdict {
     match state {
         WorkspaceState::Ready | WorkspaceState::Stopping | WorkspaceState::Failed => {
@@ -272,8 +239,7 @@ pub fn checkpointed(state: WorkspaceState) -> Verdict {
     }
 }
 
-/// A space that recorded its completion, which only a ready workspace or a
-/// chat withdraws.
+/// Only a ready workspace or a chat withdraws its completion.
 fn done_space(space: &Space) -> Verdict {
     let done = match &space.part {
         SpacePart::Workspace(worktree) => worktree.done,
@@ -285,8 +251,7 @@ fn done_space(space: &Space) -> Verdict {
     }
 }
 
-/// Accept a space that has what the request acts on, and leave its
-/// handler to answer for one that has not.
+/// Leaves the handler to answer for a space without it.
 fn present(has: bool) -> Verdict {
     match has {
         true => Verdict::Accepted,
@@ -294,7 +259,6 @@ fn present(has: bool) -> Verdict {
     }
 }
 
-/// The refusal of `space` to a request that needs a space of kind `needed`.
 pub fn other_kind(space: &Space, needed: SpaceKind) -> anyhow::Error {
     let message = format!(
         "space {space} is a {}; this command needs a {}",
@@ -305,9 +269,8 @@ pub fn other_kind(space: &Space, needed: SpaceKind) -> anyhow::Error {
 }
 
 impl Spaces {
-    /// Refuse a request whose `target` names a space that fails the
-    /// `check` its kind declares. A space this machine has no record of is left to the
-    /// handler, which refuses or forwards it as before.
+    /// A space this machine has no record of is left to the handler, which
+    /// refuses or forwards it.
     pub async fn check_target(
         &self,
         daemon: &dyn Daemon,
@@ -338,7 +301,6 @@ impl Spaces {
         check.judge(&space, &facts).require()
     }
 
-    /// What `check` reads of `spaces` besides their records, for `caller`.
     pub async fn facts(
         &self,
         daemon: &dyn Daemon,
@@ -363,8 +325,7 @@ impl Spaces {
         }
     }
 
-    /// The spaces with an execution other than `own`; none where the store
-    /// cannot say, which leaves setup to refuse.
+    /// Empty where the store cannot say, which leaves setup to refuse.
     async fn busy_spaces(&self, own: Option<&ExecutionId>) -> HashSet<SpaceId> {
         let (own, records) = (own.cloned(), self.records.clone());
         let busy = self
