@@ -358,6 +358,30 @@ fn a_holder_s_resolving_pick_becomes_the_holder_s_answer() -> Result<()> {
 }
 
 #[test]
+fn a_resolving_pick_answers_the_latest_choices_of_either_side() -> Result<()> {
+    let mut db = at_floor()?;
+    thread_with_picks(&db)?;
+    // The opener offers choices after the holder's, and resolves with 2.
+    db.execute_batch(
+        "INSERT INTO thread_posts(id,thread_id,created_at,side,sender,text,choices)
+            VALUES (5,1,6,'opener','user','Or the queue?','[\"Kafka\",\"NATS\"]');
+        UPDATE threads SET outcome='{\"outcome\":\"answered\",\"choice\":2}' WHERE id=1;",
+    )?;
+    migrate(&mut db)?;
+    let (id, text): (i64, String) = db.query_row(
+        "SELECT id,text FROM thread_posts ORDER BY id DESC LIMIT 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(text, "NATS");
+    assert_eq!(
+        interaction(&db, id)?.1,
+        Some(serde_json::json!({"post": 5, "action": "2"}))
+    );
+    Ok(())
+}
+
+#[test]
 fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
     let mut db = at_floor()?;
     thread_with_picks(&db)?;

@@ -71,8 +71,8 @@ fn answer_picks(db: &Connection) -> Result<()> {
 
 /// Give each thread resolved as answered with a choice a post that picks
 /// it, from whoever resolved it, on their side, when it was resolved: an
-/// answer to the latest post that offered choices, the other side's where
-/// it has one, with the choice's text. The resolver is the holder when the
+/// answer to the latest post that offered choices, from either side, as
+/// the pick was checked against, with the choice's text. The resolver is the holder when the
 /// holder resolved it, the user holding it or its holding space, and else
 /// the opener. The space's journal, which recorded the resolution then,
 /// records neither the post nor the outcome without the choice.
@@ -86,7 +86,7 @@ fn answer_resolved_picks(db: &Connection) -> Result<()> {
                 FROM threads WHERE json_extract(outcome,'$.choice') IS NOT NULL)
         SELECT r.id,r.resolved_by,r.resolver_id,r.resolved_at,r.choice,r.side,o.id,o.choices
             FROM resolved r JOIN thread_posts o ON o.id=(SELECT id FROM thread_posts
-                WHERE thread_id=r.id AND choices!='[]' ORDER BY side IS r.side, id DESC LIMIT 1)",
+                WHERE thread_id=r.id AND choices!='[]' ORDER BY id DESC LIMIT 1)",
     )?;
     let resolved = resolving
         .query_map([], |row| {
