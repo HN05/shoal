@@ -1,10 +1,6 @@
 //! `git-remote-shoal`, the remote helper Git runs for an agent's push to a
-//! rewritten URL. It speaks Git's remote helper protocol on standard input
-//! and output: it lists the remote's refs, takes the push options and the
-//! refs to push, asks the daemon about each push, pushes those it allows to
-//! the real URL with Git, and reports the others as held for approval or
-//! refused.
-//! Standard output carries only the protocol.
+//! rewritten URL. Standard output carries only Git's remote helper
+//! protocol.
 use shoal_refs::CommitId;
 use std::collections::BTreeMap;
 

@@ -1,5 +1,4 @@
-//! Starting Shoal work beside this terminal: additions, tracked agents and
-//! chats, focused or in the background.
+//! Starting Shoal work beside this terminal.
 use shoal_ids::space_ids::SpaceNumber;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;

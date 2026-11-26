@@ -1,6 +1,4 @@
-//! The starts the daemon runs later for a terminal that queued them, which
-//! has none of its own: each opens its place in the background where that
-//! terminal would have, falling back as [`groups::first_queued`] does.
+//! The starts the daemon runs later for a terminal that queued them.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result};

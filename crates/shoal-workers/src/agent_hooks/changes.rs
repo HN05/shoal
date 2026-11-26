@@ -1,6 +1,5 @@
-//! `shoal internal change`: the hook an agent runs before and after its
-//! tool calls, which reports what each changes and tells the agent about
-//! the changes Shoal could not tell were its own.
+//! `shoal internal change`: the hook an agent runs around its tool calls to
+//! report what each changes.
 use anyhow::Result;
 use shoal_protocol::changes::Change;
 

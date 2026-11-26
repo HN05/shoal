@@ -1,5 +1,4 @@
-//! The execution wrapper under a daemon's overload protection: it stops,
-//! saves and restores the agents it runs as the daemon asks.
+//! The execution wrapper under a daemon's overload protection.
 use crate::client::connection::CommandPaths;
 use crate::model::Space;
 use crate::paths::StateFiles;

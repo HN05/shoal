@@ -1,9 +1,5 @@
-//! Delivering a move to another machine joined to the same hub: the daemon
-//! sends the package there, and the destination's claim of the space at the
-//! hub commits the move. When the destination's answer does not say that
-//! nothing was recorded there, the move asks the hub whether it claimed the
-//! space, and asks again while the hub cannot be asked, its agents stopped
-//! meanwhile, since the space may continue there.
+//! Delivering a move to another machine joined to the same hub. The
+//! destination's claim of the space at the hub commits the move.
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};

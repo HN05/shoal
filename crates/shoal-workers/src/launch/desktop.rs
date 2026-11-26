@@ -1,5 +1,4 @@
-//! Desktop apps a space is handed to, and how each opens it; they run
-//! untracked.
+//! Desktop apps a space is handed to. They run untracked.
 use std::{
     ffi::{OsStr, OsString},
     os::unix::ffi::OsStrExt as _,

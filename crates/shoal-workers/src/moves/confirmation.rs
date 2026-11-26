@@ -1,6 +1,4 @@
-//! What a move asks its caller before it ends spaces besides those it
-//! names or releases holds: the spaces that end with those named, with
-//! their kind and agent, and the holds it releases.
+//! What a move asks its caller before it ends more than it names.
 use shoal_protocol::model::ByKind;
 
 use super::{

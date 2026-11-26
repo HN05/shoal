@@ -1,5 +1,4 @@
-//! `shoal internal agent-state` and `turn-failed`: the turn state, and the
-//! failure that ended a turn, that an agent's hooks report for its space.
+//! `shoal internal agent-state` and `turn-failed`.
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -138,7 +137,6 @@ fn turn_end(paths: &CommandPaths, integration: IntegrationKind) -> TurnEnd {
     }
 }
 
-/// Print the agent's `status`, as JSON when `json`.
 fn print(json: bool, status: AgentStatus) -> Result<i32> {
     let label = ListStatus::agent(status.state).label();
     let message = format!("Agent state: {label}");

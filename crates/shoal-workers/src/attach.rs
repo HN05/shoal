@@ -1,9 +1,6 @@
-//! `shoal attach`'s steps, which a local attach and the worker the daemon
-//! runs for a user on another machine both take: finding a space's agent
-//! sessions, waking an agent that sleeps or is stopped there, as
-//! `shoal resume --now` resumes one, choosing a session and showing it
-//! through the host that keeps it. The caller passes in what it does its
-//! own way through [`Attaching`].
+//! `shoal attach`'s steps, which a local attach and the worker for a user on
+//! another machine both take. The caller passes in what it does its own way
+//! through [`Attaching`].
 mod elsewhere;
 mod restores;
 mod sessions;

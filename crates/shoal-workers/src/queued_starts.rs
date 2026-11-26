@@ -1,7 +1,4 @@
-//! The daemon's worker for an admitted agent queue entry, which has no
-//! terminal: it opens the place of a launch where the terminal that queued
-//! it would have, or restores a stopped agent where it stopped or in the
-//! background. What runs in that place is the CLI's start or restore.
+//! The daemon's worker for an admitted agent queue entry.
 mod launch;
 mod restore;
 
@@ -21,7 +18,6 @@ pub async fn run(paths: &CommandPaths, entry: QueueEntryId) -> Result<i32> {
     started.map(|()| 0)
 }
 
-/// Start `entry` by its kind.
 async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let queued = queue::entries(paths)
         .await?

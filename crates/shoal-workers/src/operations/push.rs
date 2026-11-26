@@ -1,6 +1,4 @@
-//! The push the user approved, in the operation approving it started: the
-//! approved commit as a tracked command, as `shoal pr open` pushes, then the
-//! daemon decides the request, opening the PR it proposed.
+//! The push the user approved, in the operation approving it started.
 use anyhow::Result;
 
 use super::{Failed, Reporter};

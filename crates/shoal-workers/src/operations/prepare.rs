@@ -1,7 +1,4 @@
-//! Preparing a workspace: creating the worktree it has yet to get, then its
-//! tracked setup and the containers that start with it, failing as the
-//! operation reports it, then linking its PR, then its post-setup hook,
-//! failing in turn, then queuing its agent.
+//! Preparing a workspace.
 use anyhow::{Result, ensure};
 
 use super::{Failed, Reporter};

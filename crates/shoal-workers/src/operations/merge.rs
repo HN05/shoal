@@ -1,5 +1,5 @@
 //! Merging a workspace's branch as a tracked execution, and that
-//! execution's worker, which writes what it merged to a file.
+//! execution's worker.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
@@ -14,7 +14,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Merge `workspace` as `options` say.
 pub(super) async fn merge_branch(
     paths: &CommandPaths,
     workspace: SpaceSelector,

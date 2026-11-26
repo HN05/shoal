@@ -1,10 +1,5 @@
-//! Moving one space, with the spaces it carries: the daemon records the
-//! move and packs them, stopping their agents; the package goes to its
-//! destination; the spaces end here only once the destination has it, so
-//! a failed move leaves them here. When the destination has nothing of
-//! them, the agents the move stopped restore here; when how its import
-//! ended is unknown, they stay stopped, since the spaces may continue
-//! there.
+//! Moving one space with the spaces it carries. The spaces end here only
+//! once the destination has them, so a failed move leaves them here.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};

@@ -1,5 +1,4 @@
-//! `shoal pr open`'s operation: the push of the workspace's branch, then
-//! the PR the daemon finds or opens.
+//! `shoal pr open`'s operation.
 use anyhow::Result;
 
 use super::{Failed, Reporter};

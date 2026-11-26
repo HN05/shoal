@@ -1,8 +1,5 @@
-//! Tracked execution wrapper. The CLI process launches the command inside the
-//! workspace, hands it the terminal, forwards daemon stop requests, and reports
-//! completion. The daemon never touches terminal I/O. A detached launch runs
-//! the same wrapper in a background `shoal` process with a log file instead
-//! of the terminal, so the invoking CLI returns once the launch is recorded.
+//! The tracked execution wrapper, which runs a command in its space and
+//! reports it to the daemon. See `docs/design/execution.md`.
 mod cancellation;
 mod completion;
 mod containers;

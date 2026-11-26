@@ -1,5 +1,4 @@
-//! Supervising a tracked command: registering its process group with the
-//! daemon, handing it the terminal, and waiting for it to exit or be stopped.
+//! Supervising a tracked command until it exits or is stopped.
 use std::{
     ffi::OsString,
     os::unix::process::ExitStatusExt,

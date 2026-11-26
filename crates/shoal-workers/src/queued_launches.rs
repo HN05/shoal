@@ -1,6 +1,4 @@
-//! Queuing a launch in an existing workspace, which the agent queue starts
-//! detached: in a ready workspace, or in one whose setup failed, where it
-//! waits for a retried setup.
+//! Queuing a launch in an existing workspace.
 use anyhow::Result;
 
 use crate::{

@@ -1,6 +1,4 @@
-//! The spaces each command last acted on, so `-` can name the previous one,
-//! and the history `attach -` reads, which every process that shows a
-//! space's agent session here keeps, a command or a place's worker.
+//! The spaces each command last acted on, so `-` can name the previous one.
 use shoal_core::paths::StateFiles;
 use shoal_ids::space_ids::SpaceId;
 use std::collections::BTreeMap;

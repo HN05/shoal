@@ -1,9 +1,5 @@
 //! The wrapper's daemon connection. A reader task owns the receive half, so
 //! waiting for a control is cancel-safe and adjacent frames are never lost.
-//! Once its command runs, a reattachable execution survives the daemon going
-//! away: the link reconnects in the background and presents the execution's
-//! identity to the next daemon. The space's status reports the daemon sends
-//! go to the terminal as they arrive, whatever the wrapper waits for.
 use anyhow::{Result, anyhow, bail};
 use tokio::{
     io::BufReader,

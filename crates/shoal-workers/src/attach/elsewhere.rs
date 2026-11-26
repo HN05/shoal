@@ -1,7 +1,5 @@
 //! The space's machine's side of `shoal attach` from another machine or a
-//! device: the daemon runs it on a terminal it made for that user here, and
-//! it takes the steps a local attach takes, then shows the session as its
-//! host shows a place to another machine.
+//! device.
 use std::{
     io::Write as _,
     os::fd::{FromRawFd as _, OwnedFd},
@@ -77,7 +75,6 @@ async fn show_chosen(
     terminal::show_elsewhere(&target.number().to_string(), session, &shown).await
 }
 
-/// Write `line` to `report` for the daemon.
 fn send_report(report: &mut std::fs::File, line: &AttachReport) -> Result<()> {
     writeln!(report, "{}", serde_json::to_string(line)?).context("report to the daemon")
 }

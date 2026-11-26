@@ -1,7 +1,5 @@
-//! What agent hooks deliver: `shoal internal deliver` prints a space's new
-//! alerts, item activity and leftover processes as context after a tool
-//! call or a submitted prompt, and `shoal internal wake` waits for them to
-//! start an idle agent's next turn.
+//! What agent hooks deliver: `shoal internal deliver` and `shoal internal
+//! wake`.
 use anyhow::{Context as _, Result, bail};
 use shoal_protocol::{links::Updates, space_names::SpaceSelector};
 

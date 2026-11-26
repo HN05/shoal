@@ -1,5 +1,4 @@
-//! The command that restores a tracked agent, resolved from its space's
-//! settings and records as the daemon has them now.
+//! The command that restores a tracked agent.
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::executions::TrackedAgent;
 use std::{

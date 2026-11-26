@@ -1,5 +1,4 @@
-//! The place this process runs in: recording it as a workspace's, and
-//! closing it with the workspace.
+//! The place this process runs in.
 use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

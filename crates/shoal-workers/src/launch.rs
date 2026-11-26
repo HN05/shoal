@@ -1,6 +1,5 @@
-//! Launching the agents Shoal runs (see [`crate::agents`]) from a process
-//! in a workspace or a chat, handing a workspace to a desktop app, and the
-//! trust and session files those launches prepare.
+//! Launching the agents Shoal runs, and handing a workspace to a desktop
+//! app.
 pub mod desktop;
 mod detached;
 mod environment;

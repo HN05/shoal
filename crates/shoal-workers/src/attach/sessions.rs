@@ -1,6 +1,4 @@
-//! Choosing the session an attach shows, once the agent there runs: waking
-//! an agent that sleeps or is stopped, and finding a session again after a
-//! lost connection.
+//! Choosing the session an attach shows, once the agent there runs.
 use anyhow::{Context as _, Result, bail, ensure};
 use shoal_ids::execution_ids::ExecutionId;
 

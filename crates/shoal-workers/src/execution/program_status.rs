@@ -1,8 +1,5 @@
-//! The space's status in the terminal the wrapper runs in, through the
-//! Program Status Protocol: the wrapper writes each report the daemon sends
-//! on Shoal's own record, only to a terminal that answered the protocol's
-//! query before its child started, and reports the agent's exit itself, also
-//! while the daemon is away.
+//! The space's status in the wrapper's terminal, through the Program Status
+//! Protocol. See `docs/design/terminals.md`.
 mod query;
 mod sequence;
 mod writer;

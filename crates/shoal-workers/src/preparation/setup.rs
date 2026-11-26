@@ -1,5 +1,4 @@
-//! Running a workspace's setup and post-setup hook in an operation the
-//! daemon starts, and settling a setup that failed as the frontend says.
+//! Running a workspace's setup and post-setup hook in an operation.
 use anyhow::{Result, ensure};
 use shoal_protocol::{hub::Machine, recovery::ReconcileOptions, space_names::SpaceSelector};
 
@@ -249,7 +248,6 @@ async fn retry_setup(
     }))
 }
 
-/// Delete `workspace` with its setup's changes.
 async fn delete_failed(paths: &CommandPaths, workspace: &Workspace) -> Result<()> {
     let selector = SpaceSelector::id(&workspace.id);
     crate::client::removal::remove(paths, selector, UnsavedWork::All).await?;

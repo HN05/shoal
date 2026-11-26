@@ -1,5 +1,4 @@
-//! Copying one space, with copies of the spaces below it, which its
-//! destination opens as new spaces, leaving it running here.
+//! Copying a space, with the spaces below it, leaving it running here.
 use anyhow::{Result, bail};
 
 use super::{Steps, ssh::Remote};

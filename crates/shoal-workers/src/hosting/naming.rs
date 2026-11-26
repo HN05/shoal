@@ -1,9 +1,6 @@
-//! What the places hosts open for spaces are called. A workspace's take the
-//! host's name template with the repository, branch, issue and name filled
-//! in, otherwise its name; a chat's take its name. Hosts that show names
-//! apply the label they are given, and a place takes a space's new label
-//! only while it still shows the one Shoal gave it, since another is the
-//! user's.
+//! What the places hosts open for spaces are called. A place takes a
+//! space's new label only while it still shows the one Shoal gave it, since
+//! another is the user's.
 use tokio::sync::OnceCell;
 
 use crate::places::naming::place_name;

@@ -1,6 +1,5 @@
 //! The process group of a wrapper that runs another space's agent in the
-//! process that started it, such as a scoped caller's `start --here`: its
-//! starter's group is the one a stop of the starter's execution signals.
+//! process that started it, such as a scoped caller's `start --here`.
 use std::io::IsTerminal;
 
 use anyhow::{Result, ensure};

@@ -1,8 +1,6 @@
-//! Cancelling this process's tracked commands, as an operation's worker
-//! does once the daemon cancels its operation: a command running then, or
-//! started later, stops as an interrupt stops it. A command still being
-//! registered, such as setup behind a gated pre-setup hook, has no signal
-//! listeners yet, so the cancellation outlasts the signal that caused it.
+//! Cancelling this process's tracked commands once the daemon cancels its
+//! operation. A command still being registered has no signal listeners
+//! yet, so the cancellation outlasts the signal that caused it.
 use std::sync::LazyLock;
 
 use tokio::sync::watch;

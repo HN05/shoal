@@ -1,7 +1,6 @@
-//! The Shoal on another machine that a move reaches with `ssh`, without a
-//! prompt, since the move runs in the daemon: the package goes into
-//! `shoal --json restore --from -` there, so the other side stays a plain
-//! command.
+//! The Shoal on another machine that a move reaches with `ssh`. The package
+//! goes into `shoal --json restore --from -` there, so the other side stays
+//! a plain command.
 use std::{path::Path, process::Stdio};
 
 use anyhow::{Context as _, Result, ensure};

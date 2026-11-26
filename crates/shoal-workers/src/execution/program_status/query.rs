@@ -1,8 +1,7 @@
-//! Asking a terminal whether it reads the Program Status Protocol. The
-//! protocol's query goes out followed by a primary device attributes
-//! request, which every terminal answers: a terminal that reads the
-//! protocol replies to its query first, so a device attributes reply
-//! without one before it means the terminal does not.
+//! Asking a terminal whether it reads the Program Status Protocol. Every
+//! terminal answers the device attributes request that follows the query,
+//! so that reply without a protocol reply before it means the terminal
+//! does not.
 use std::{
     fs::File,
     io::{Read as _, Write as _},

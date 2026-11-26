@@ -1,5 +1,4 @@
-//! `shoal internal plan`: the plan an agent's plan tool sets, which its
-//! hook reports as its space's steps.
+//! `shoal internal plan`: the plan an agent's plan tool sets.
 use anyhow::Result;
 use shoal_protocol::{
     progress::{PlanStep, ProgressChange},

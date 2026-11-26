@@ -1,5 +1,4 @@
-//! The secret tool worker: it runs a tool with the secrets a launch's
-//! launchers serve it, once the daemon authorizes each one.
+//! The secret tool worker.
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::space_ids::SpaceId;
 use std::{

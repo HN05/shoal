@@ -1,7 +1,4 @@
-//! Restoring stopped agents through their space's daemon, as `shoal
-//! resume` does: the daemon queues the restores of the executions a
-//! resume names, or starts them at once, and gives back the stopped
-//! commands no restored agent receives.
+//! Restoring stopped agents through their space's daemon.
 use anyhow::Result;
 use shoal_protocol::model::{AgentResume, ResumeOutcome};
 use shoal_protocol::space_names::SpaceSelector;

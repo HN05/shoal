@@ -1,7 +1,4 @@
-//! A demo's runs: its wrapper shows where a serving demo listens before each
-//! run, and runs the command again whenever it exits, waiting longer after
-//! each exit that follows soon after a start, so a command that fails at once
-//! keeps its error on screen without spinning.
+//! A demo's runs: its wrapper runs the command again whenever it exits.
 use anyhow::{Context, Result, bail};
 use shoal_protocol::demos::{Launch, Preset};
 use tokio::{

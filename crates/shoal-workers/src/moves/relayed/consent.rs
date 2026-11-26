@@ -1,7 +1,5 @@
-//! What a move of spaces of several machines asks before any of them ends:
-//! what ending this machine's spaces would ask here, and what each other
-//! machine asks of its own, which that machine's move only checks for, all
-//! in one question, so the caller consents once to everything that ends.
+//! What a move of spaces of several machines asks before any of them ends,
+//! in one question.
 use anyhow::Result;
 
 use super::{Relay, Relays};

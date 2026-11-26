@@ -1,5 +1,4 @@
-//! Tracked terminal launches, the agent's configured command with Shoal's
-//! instructions, hooks and prompt, run through the execution wrapper.
+//! Tracked terminal launches of an agent, run through the execution wrapper.
 use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;

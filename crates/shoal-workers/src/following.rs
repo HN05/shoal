@@ -1,7 +1,5 @@
-//! Following an operation the daemon runs for this process to its end:
-//! what its processes write goes where the process shows it, its steps to
-//! the display the caller gives, and an interrupt or termination cancels it,
-//! as it stopped the work when the process ran it itself.
+//! Following an operation the daemon runs for this process to its end. An
+//! interrupt or termination cancels it.
 use std::future::Future;
 
 use anyhow::Result;

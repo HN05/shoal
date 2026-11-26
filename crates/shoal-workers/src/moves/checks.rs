@@ -1,5 +1,5 @@
-//! What ending a space for its move would do, and the refusals of a move
-//! that would lose work or write its package into what it ends.
+//! The refusals of a move that would lose work or write its package into
+//! what it ends.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail, ensure};

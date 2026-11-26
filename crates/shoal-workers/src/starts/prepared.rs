@@ -1,6 +1,4 @@
-//! Following the preparation of a workspace a start recorded, then
-//! reporting and entering it, or giving a workspace opened without an
-//! agent its shell.
+//! Following the preparation of a workspace a start recorded.
 use anyhow::Result;
 use shoal_protocol::space_names::SpaceSelector;
 

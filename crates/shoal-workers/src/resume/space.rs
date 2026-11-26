@@ -1,5 +1,5 @@
 //! Choosing the stopped agent or last session of one space a resume
-//! restores, a workspace's or a chat's, once nothing refuses its restore.
+//! restores.
 use anyhow::{Context as _, Result, ensure};
 use shoal_core::execution::recovery::{Saved, SavedCommand, SavedSession};
 use shoal_ids::execution_ids::ExecutionId;
@@ -155,7 +155,6 @@ fn awaits_setup(inspection: &Inspection) -> bool {
     }
 }
 
-/// The space `selector` names, a workspace or a chat.
 pub async fn present_space(paths: &CommandPaths, selector: &SpaceSelector) -> Result<Space> {
     let space = crate::client::spaces::present_space(paths, selector).await?;
     space.with_context(|| format!("no space {selector}"))

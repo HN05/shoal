@@ -1,8 +1,6 @@
 //! Opening spaces again that the daemon restored from their removal
-//! records: a workspace set up, with its PRs linked again and its post-setup
-//! hook run, a chat with its PRs linked, then the restores of their stopped
-//! agents queued, and the spaces a package carries with its own space. What
-//! the process tells its own way is its [`Reopening`] frontend.
+//! records. What the process tells its own way is its [`Reopening`]
+//! frontend.
 use std::collections::BTreeSet;
 
 use anyhow::{Context as _, Result};

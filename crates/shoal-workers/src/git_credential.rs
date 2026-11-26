@@ -1,17 +1,12 @@
-//! The Git credential helper of an agent launch. Git runs it with the
-//! operation as its argument and the request on standard input; for `get`
-//! over HTTPS it answers with the login the daemon gives the caller's scope,
-//! the agent token of the host. It answers nothing otherwise, or when the
-//! daemon gives nothing, and Git moves on; `store` and `erase` do nothing.
-//! When the daemon cannot answer, it tells Git to quit, so Git neither asks
-//! for a password nor signs in as anyone else.
+//! The Git credential helper of an agent launch. When the daemon cannot
+//! answer, it tells Git to quit, so Git neither asks for a password nor
+//! signs in as anyone else.
 use std::io::{Read as _, Write as _};
 
 use anyhow::Result;
 
 use crate::client::connection::CommandPaths;
 
-/// Answer Git's `operation` request on standard input.
 pub async fn answer(paths: &CommandPaths, operation: String) -> Result<i32> {
     if operation != "get" {
         return Ok(0);

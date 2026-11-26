@@ -1,5 +1,4 @@
-//! The place a host opened for a recorded space, and how the place hosts
-//! the space.
+//! The place a host opened for a recorded space.
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::path::Path;

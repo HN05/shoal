@@ -1,5 +1,4 @@
-//! An operation's typed failures, as the worker reports them and as the
-//! errors its commands handled before.
+//! An operation's typed failures.
 use crate::{
     execution::SetupVerificationFailure,
     protocol::{RemoteError, operations::Failure},

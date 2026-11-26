@@ -20,7 +20,6 @@ pub enum Target {
 }
 
 impl Target {
-    /// The workspace `workspace` selects.
     pub async fn inspected(paths: &CommandPaths, workspace: SpaceSelector) -> Result<Self> {
         let inspection = crate::client::workspaces::inspect(workspace)
             .send(paths)

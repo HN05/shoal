@@ -1,5 +1,5 @@
-//! Claude Code's wake hook: it waits in the background for the next update
-//! of the idle agent and starts its next turn with it.
+//! Claude Code's wake hook, which starts an idle agent's next turn with its
+//! next update.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};

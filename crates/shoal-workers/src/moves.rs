@@ -1,9 +1,6 @@
 //! Moving spaces to another machine or a file, as the daemon's move
-//! operation does: checking every space before any ends, and asking the
-//! caller's consent where ending them needs it, then for each one packing
-//! it, delivering its package and ending it here once its destination has
-//! it, or with `--keep` delivering a copy of it. Only delivery differs by
-//! destination.
+//! operation does. Only delivery differs by destination. See
+//! `docs/design/moves.md`.
 pub mod checks;
 mod confirmation;
 mod copying;
@@ -316,12 +313,10 @@ fn say(line: &str) {
     let _ = writeln!(std::io::stdout(), "{line}");
 }
 
-/// Print `line` as the operation's error output.
 fn warn(line: &str) {
     let _ = writeln!(std::io::stderr(), "{line}");
 }
 
-/// Show what a package left out.
 fn warn_left_out(moved: &SpaceMoved) {
     for warning in &moved.warnings {
         warn(&format!("warning: {warning}"));

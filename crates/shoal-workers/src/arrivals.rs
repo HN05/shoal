@@ -1,9 +1,5 @@
 //! `shoal internal import-moved`: the destination's side of a move between
-//! joined machines. The daemon there runs it with the package on standard
-//! input, and it continues the spaces as `shoal restore --from -` does,
-//! claimed at the hub as the daemon says, then prints how it
-//! went for the daemon to answer the machine the spaces move from, where
-//! they stay when nothing was recorded here.
+//! joined machines.
 use anyhow::Result;
 
 use shoal_core::{

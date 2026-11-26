@@ -1,6 +1,6 @@
 //! The task that writes reports to the terminal, apart from the wrapper's
-//! control path: a terminal that stops draining, such as one paused by flow
-//! control, holds back only the reports, and of those it keeps the latest.
+//! control path, so a terminal that stops draining holds back only the
+//! reports.
 use std::{fs::File, io::Write as _, time::Duration};
 
 use tokio::sync::watch;

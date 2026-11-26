@@ -1,5 +1,4 @@
-//! The commands stopped with a workspace's agents: one restore claims them,
-//! then reports them to the user or hands them to the restored agent.
+//! The commands stopped with a workspace's agents.
 use anyhow::Result;
 
 use shoal_core::execution::recovery::{self, RecoveryClaim, SavedCommand, consume};

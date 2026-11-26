@@ -1,6 +1,4 @@
-//! A space's settings as its launches resolve them: the global config read
-//! now under the repository layers the daemon has, and the `[env]`
-//! variables they give the space's tracked commands, hooks and agents.
+//! A space's settings as its launches resolve them.
 use std::{collections::BTreeMap, ffi::OsString, path::PathBuf};
 
 use anyhow::{Context as _, Result};

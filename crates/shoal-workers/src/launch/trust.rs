@@ -1,6 +1,4 @@
-//! The trust entries a CLI launch adds for the directories its agent works
-//! in, in the config files [`TrustFile`] edits, and where the daemon keeps
-//! that its agents keep their configs for a repository's removal or move.
+//! The trust entries a launch adds for the directories its agent works in.
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
@@ -170,7 +168,6 @@ async fn workspace_trust_paths(
     }
 }
 
-/// Print each of `warnings`.
 fn warn(warnings: Vec<String>) {
     for warning in warnings {
         eprintln!("warning: {warning}");

@@ -1,5 +1,4 @@
-//! Demos in the places of the first host that keeps them, in a session
-//! nested there where config asks for one; a demo needs a terminal host.
+//! Demos in the places of the first host that keeps them.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};

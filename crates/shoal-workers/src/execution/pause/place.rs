@@ -1,7 +1,4 @@
-//! The place an asleep agent's wrapper waits in for its restore: on a
-//! terminal it holds, a status block under the agent's last output saying
-//! why the agent sleeps and what wakes it, which reads the keys that wake or
-//! stop it; elsewhere, lines on standard error.
+//! The place an asleep agent's wrapper waits in for its restore.
 mod keys;
 mod screen;
 

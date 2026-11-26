@@ -1,6 +1,4 @@
-//! Running here the agent of a recorded space's starting launch, which
-//! this process holds, in the space the daemon opened for it, whatever its
-//! kind, through one launch of the space's agent.
+//! Running here the agent of a recorded space's starting launch.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};

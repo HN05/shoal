@@ -1,6 +1,4 @@
-//! What the move tests share: a helper process without the runner's Shoal
-//! variables, steps no one follows, and a daemon with a move its worker
-//! left.
+//! What the move tests share.
 use anyhow::Result;
 
 use super::Steps;

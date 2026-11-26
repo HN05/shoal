@@ -1,7 +1,5 @@
 //! The places Shoal opens for work the daemon queued or a command starts
-//! beside its caller, the host that starts it there, and their names and
-//! groups, with the repositories, issues and records they name read from
-//! the daemon.
+//! beside its caller.
 pub mod groups;
 pub mod naming;
 pub mod queued;

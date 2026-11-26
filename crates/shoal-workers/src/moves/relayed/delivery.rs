@@ -1,6 +1,5 @@
-//! Delivering a package another joined machine holds: the new file it goes
-//! to, created before anything ends there, the package read into it over
-//! the hub, and the end of the space there once the file holds it.
+//! Delivering a package another joined machine holds. Its file is created
+//! before anything ends there.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result, bail};

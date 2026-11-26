@@ -1,5 +1,4 @@
-//! The group a new place joins: the caller's own, otherwise the one a host's
-//! config names for the repository, whose name it looks up from the daemon.
+//! The group a new place joins.
 use std::path::Path;
 
 use anyhow::{Context as _, Result};

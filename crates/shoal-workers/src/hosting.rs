@@ -1,7 +1,5 @@
-//! Where Shoal runs work for the caller's terminal. Commands say what they
-//! launch; this module chooses whether it takes the terminal or runs in the
-//! background, and the [`Host`](crate::terminal::Host) that carries that out
-//! with its own primitives.
+//! Where Shoal runs work for the caller's terminal: in it, or in the
+//! background through a [`Host`](crate::terminal::Host).
 mod add_place;
 mod demos;
 mod here;

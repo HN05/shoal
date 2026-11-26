@@ -1,9 +1,5 @@
-//! Resuming the stopped agents of spaces, workspaces' and chats' alike, in
-//! the caller's terminal for `shoal resume --focus`, once an execution a
-//! daemon restart left unknown is proven ended, and having their space's
-//! daemon restore the agents a move stopped, handing the commands stopped
-//! with them to the restored agent or the user. The caller passes in what
-//! it does its own way through [`Resuming`].
+//! Resuming the stopped agents of spaces. The caller passes in what it does
+//! its own way through [`Resuming`].
 pub mod commands;
 pub mod permissions;
 mod picker;

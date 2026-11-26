@@ -1,5 +1,4 @@
-//! Agents' session files that `shoal restore --from` puts where the agents
-//! look for them.
+//! The agents' session files that `shoal restore --from` puts in place.
 use shoal_protocol::transcripts::CarriedSessionFile;
 use std::{
     collections::BTreeMap,

@@ -1,5 +1,5 @@
 //! Resuming an execution a daemon restart left unknown, once the daemon has
-//! rechecked that its recorded processes are gone.
+//! rechecked that its processes are gone.
 use anyhow::{Context as _, Result, ensure};
 
 use crate::{client::connection::CommandPaths, state::ExecutionState};

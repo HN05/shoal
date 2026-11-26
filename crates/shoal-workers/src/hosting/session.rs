@@ -1,6 +1,5 @@
-//! The session worker: what a host runs in the place it opens for a
-//! tracked agent's session, which records the place as its space's, closes
-//! it with a workspace when told to, and runs the agent.
+//! The session worker a host runs in the place it opens for a tracked
+//! agent's session.
 use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
@@ -27,7 +26,6 @@ pub struct Session {
     pub command: Vec<OsString>,
 }
 
-/// Run `session` in the place this process runs in.
 pub async fn run_session(caller: Caller<'_>, session: Session) -> Result<i32> {
     let Session {
         space,

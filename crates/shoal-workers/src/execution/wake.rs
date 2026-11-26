@@ -1,10 +1,6 @@
-//! Waking an idle agent no hook of its own wakes: Codex, which has no hook
-//! that can start its turn, and Claude Code where its wake hook cannot:
-//! after an interrupted turn, which the hook does not follow, or once the
-//! hook has stopped waiting. While it is idle so with undelivered updates,
-//! the wrapper types a fixed prompt into the terminal session it runs in,
-//! telling the daemon first so that it does not count the keys as the
-//! user's, and the prompt's `UserPromptSubmit` hook delivers them.
+//! Waking an idle agent that no hook of its own wakes, by typing a fixed
+//! prompt into its terminal. The wrapper tells the daemon first, so the
+//! keys do not count as the user's.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use std::time::Duration;

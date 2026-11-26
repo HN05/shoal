@@ -1,9 +1,5 @@
-//! Finishing a move whose worker went before it ended, as when the machine
-//! restarted during it, from the phase its record reached: a space whose
-//! destination has it ends here, one nothing of which left moves again, a
-//! package for a command that went stays here, and one another machine
-//! may have imported stays stopped on both, as a dropped connection leaves
-//! it. A worker that still holds the move's lock finishes it itself.
+//! Finishing a move whose worker went before it ended, from the phase its
+//! record reached.
 use anyhow::{Result, anyhow};
 
 use super::{

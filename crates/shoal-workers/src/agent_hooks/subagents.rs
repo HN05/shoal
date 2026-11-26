@@ -1,9 +1,6 @@
 //! The subagent hooks. A subagent inherits its agent's scope, and under
-//! Codex its instructions and directory too, so without a brief it would act
-//! on its agent's workspace, finishing that assignment as the instructions
-//! say: the `SubagentStart` hook tells it which workspace it works in
-//! instead. Every agent's hooks also report its subagents' starts and
-//! stops, which keep it from sleep while it idles.
+//! Codex its instructions and directory too, so `SubagentStart` tells it
+//! which workspace it works in.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};

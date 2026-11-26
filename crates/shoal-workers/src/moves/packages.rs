@@ -1,6 +1,4 @@
-//! Where a move's packages go, and what it says it did with each: a new
-//! file, a file per space in a directory, a file its client copies to its
-//! standard output, or a package delivered from here to another machine.
+//! Where a move's packages go, and what it says it did with each.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result, ensure};

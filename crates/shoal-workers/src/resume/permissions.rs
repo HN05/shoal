@@ -1,6 +1,4 @@
-//! A resume's change to the permissions the resumed agents and chats and
-//! the failed launches queued again were given, which it makes in the
-//! records it restores or starts once nothing refuses it.
+//! A resume's change to the permissions of what it resumes.
 use anyhow::Result;
 
 use crate::{

@@ -1,6 +1,4 @@
-//! An admitted restore: `shoal resume` of its stopped agent runs where the
-//! agent stopped when that place is back at its prompt, otherwise in a
-//! background place, and takes over the entry's slot.
+//! An admitted restore.
 use std::ffi::OsString;
 
 use anyhow::{Context as _, Result};
@@ -15,7 +13,6 @@ use crate::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Restore the stopped agent the admitted restore `entry` names.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntry) -> Result<()> {
     let (Some(space), Some(execution)) = (&entry.space_id, &entry.execution) else {
         anyhow::bail!("the queued restore names no stopped agent");

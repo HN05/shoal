@@ -1,7 +1,6 @@
-//! The keys the agent a wrapper runs reads from the terminal they share,
-//! which the wrapper reports to the daemon as the user's interaction with
-//! the agent: reading a key updates the terminal's access time, and the
-//! agent's output does not. The daemon leaves out the keys Shoal typed.
+//! The keys the agent a wrapper runs reads from the terminal, which the
+//! wrapper reports as the user's interaction. Reading a key updates the
+//! terminal's access time, and the agent's output does not.
 use std::{io::IsTerminal, os::fd::AsFd, time::Duration};
 
 use crate::{

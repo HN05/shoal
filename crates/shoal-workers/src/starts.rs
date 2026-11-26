@@ -1,8 +1,6 @@
 //! Carrying out a start the daemon recorded, in the process that runs its
-//! agent: following a new workspace's preparation, hosting the space in the
-//! place opened for it, and running its agent once the queue lets it, as
-//! `shoal start` here and the place a start opens beside a terminal both
-//! do. What the process reports its own way is its [`Starting`] frontend.
+//! agent. What the process reports its own way is its [`Starting`]
+//! frontend.
 mod placed;
 mod prepared;
 mod run;

@@ -1,5 +1,4 @@
-//! The names of the places hosting a workspace or a planned one, with the
-//! repository and issue looked up from the daemon.
+//! The names of the places hosting a workspace or a planned one.
 use anyhow::{Context as _, Result};
 
 use crate::{

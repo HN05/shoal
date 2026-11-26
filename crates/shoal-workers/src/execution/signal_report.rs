@@ -1,9 +1,6 @@
 //! Telling the daemon that a signal ends an execution's session before the
-//! wrapper stops its command, when the execution's plan asks for it: the
-//! daemon first ends what the command runs elsewhere, such as a CI job's run
-//! on its forge, whose runner would otherwise report the stopped job failed.
-//! The daemon keeps the forge's login, so a wrapper that cannot reach it
-//! stops the command all the same and records why in its log.
+//! wrapper stops its command. A wrapper that cannot reach the daemon stops
+//! the command all the same and records why in its log.
 use std::time::Duration;
 
 use tokio::time::timeout;

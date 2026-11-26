@@ -1,6 +1,4 @@
-//! The status block of an asleep agent's place, drawn under what the agent
-//! last showed: what wakes the agent, why it sleeps, what else its restore
-//! waits for, and the keys that wake or stop it.
+//! The status block of an asleep agent's place.
 use std::io::Write;
 
 use crate::model::Protection;

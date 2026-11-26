@@ -1,9 +1,7 @@
 //! An agent's wrapper whose binary an upgrade replaced continues from the
-//! installed one when it restores the agent, as `shoal restart` does: it
-//! replaces itself with that binary, keeping its process, terminal and daemon
-//! connection, and the installed release registers again and starts the
-//! agent. The daemon sends nothing between its resume and the restored
-//! child's start, so the handover loses no control.
+//! installed one, keeping its process, terminal and daemon connection. The
+//! daemon sends nothing between its resume and the restored child's start,
+//! so the handover loses no control.
 use crate::paths::StateFiles;
 use shoal_ids::space_ids::SpaceId;
 use std::{

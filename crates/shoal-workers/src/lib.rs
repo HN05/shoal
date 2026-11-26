@@ -1,7 +1,5 @@
 //! The execution wrapper and the workers: the code that runs in the
-//! processes Shoal starts and calls the daemon. Core's `workers` module
-//! builds those processes' command lines for the daemon, which never
-//! depends on this crate.
+//! processes Shoal starts and calls the daemon.
 
 pub mod agent_hooks;
 pub mod arrivals;

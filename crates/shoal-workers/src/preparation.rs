@@ -1,8 +1,5 @@
-//! Following a workspace's preparation, the worktree, setup and post-setup
-//! hook the daemon runs for it, and settling a setup that failed. What the
-//! process does its own way, showing the steps and asking a user what to do
-//! with a failed setup, is its [`Frontend`]'s; a process without a user
-//! takes [`Unattended`], whose errors name the commands that settle it.
+//! Following a workspace's preparation and settling a setup that failed.
+//! What the process does its own way is its [`Frontend`]'s.
 mod setup;
 
 use anyhow::{Result, anyhow};

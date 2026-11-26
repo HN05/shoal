@@ -1,8 +1,4 @@
-//! An admitted launch: the place worker that runs the agent of the space
-//! it names, a workspace or a chat, runs in a background place where the
-//! terminal that queued it would have opened one, or, for an agent that
-//! runs its own way, such as Happy's, which needs no terminal host, in a
-//! process of its own.
+//! An admitted launch, run in a background place or a process of its own.
 use std::process::Stdio;
 
 use anyhow::{Context as _, Result};

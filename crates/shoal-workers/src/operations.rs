@@ -1,8 +1,5 @@
-//! The worker the daemon starts for an operation: it reads its order on
-//! standard input, does the work with the caller's scope, and reports its
-//! steps and its end. What it and its processes write reaches the daemon
-//! as the operation's output. The merge and unmerge it runs as tracked
-//! executions have workers of their own here too.
+//! The worker the daemon starts for an operation. It reads its order on
+//! standard input and does the work with the caller's scope.
 mod failures;
 mod merge;
 mod open_pull;

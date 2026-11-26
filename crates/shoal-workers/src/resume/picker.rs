@@ -1,5 +1,4 @@
-//! Picking the one stopped agent or last session of a space to restore,
-//! and how the picker names each.
+//! Picking the stopped agent or last session of a space to restore.
 use anyhow::Result;
 use shoal_core::execution::recovery::SavedSession;
 

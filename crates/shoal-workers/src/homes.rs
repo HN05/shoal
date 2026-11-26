@@ -1,7 +1,4 @@
-//! What an agent's command takes from its space as the daemon records it:
-//! the space's records, the directory where its repository keeps its
-//! workspaces, which the agent may also work in, and the diff base its
-//! configured command names.
+//! What an agent's command takes from its space as the daemon records it.
 use shoal_protocol::model::ByKind;
 use std::{
     ffi::{OsStr, OsString},
@@ -23,7 +20,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The records of the space `selector` names.
 pub async fn records(paths: &CommandPaths, selector: &SpaceSelector) -> Result<HomeRecords> {
     let spaces = crate::client::spaces::list(paths).await?;
     match spaces

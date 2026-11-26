@@ -1,5 +1,4 @@
-//! The proxy a tracked agent's wrapper runs and the reports it sends the
-//! daemon.
+//! The proxy a tracked agent's wrapper runs.
 use anyhow::Context;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;
@@ -414,7 +413,6 @@ impl Reporter {
         .await
     }
 
-    /// The time `wait` from now.
     fn after(&self, wait: std::time::Duration) -> UnixTime {
         (self.now)() + wait
     }

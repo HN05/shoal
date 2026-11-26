@@ -1,10 +1,5 @@
 //! Moving a removed space's record to another machine joined to the same
-//! hub: the daemon packs the record, as an export to a file does, and
-//! delivers it, the destination records it as removed under its ID,
-//! claiming it at the hub, and this machine forgets it once that claim
-//! stands. When the destination cannot say whether it claimed it, the move
-//! asks the hub, and the record stays here until the hub answers, its move
-//! lock refusing its restore meanwhile.
+//! hub.
 use anyhow::{Result, anyhow, bail};
 
 use super::{Steps, joined};
@@ -118,7 +113,6 @@ impl HeldLocks {
         Ok(())
     }
 
-    /// Release every lock held.
     fn release(self) {
         self.locks.into_iter().for_each(MoveLock::release);
     }

@@ -1,5 +1,4 @@
-//! An agent the daemon paused: why it stopped, its saved recovery record, and
-//! the wait for the daemon to restore it.
+//! An agent the daemon paused, and the wait for the daemon to restore it.
 mod place;
 
 use shoal_ids::execution_ids::ExecutionId;

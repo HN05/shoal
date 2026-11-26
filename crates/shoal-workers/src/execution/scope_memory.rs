@@ -1,11 +1,6 @@
-//! What the scope a command runs in, in the work slice, records of its
-//! memory: how many of its processes the kernel's OOM killer killed, and
-//! the most memory it held. The wrapper reads both every [`INTERVAL`] while
-//! the command runs and once more as it ends, but the scope goes with its
-//! last process, as when the kernel kills all of a CI job's at once: a
-//! command killed then whose scope is gone counts a kill when the slice,
-//! whose count holds those of every scope in it, counted one since the
-//! last read.
+//! What the scope a command runs in records of its memory. The scope goes
+//! with its last process, so a kill whose scope is gone counts by the work
+//! slice's count instead.
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},

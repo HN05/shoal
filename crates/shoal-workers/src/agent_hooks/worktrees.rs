@@ -1,8 +1,5 @@
-//! Claude Code's `WorktreeCreate` and `WorktreeRemove` hooks. A worktree it
-//! creates, as for a subagent with `isolation: "worktree"`, is a child
-//! workspace of the workspace it runs in: the subagent works there as
-//! the child, the child's activity reaches the agent, and Shoal's cleanup
-//! removes it.
+//! Claude Code's `WorktreeCreate` and `WorktreeRemove` hooks, which make
+//! each worktree a child workspace of the workspace the agent runs in.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context as _, Result};
@@ -87,7 +84,6 @@ async fn done_at_head(paths: &CommandPaths, child: &Workspace) -> Result<bool> {
     Ok(completion.head == head)
 }
 
-/// The hook's JSON input on stdin.
 fn hook_input<T: DeserializeOwned>() -> Result<T> {
     serde_json::from_reader(std::io::stdin().lock()).context("read the hook's input")
 }

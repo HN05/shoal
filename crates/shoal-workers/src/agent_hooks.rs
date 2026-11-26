@@ -1,7 +1,5 @@
 //! The handlers of the hooks Shoal installs for the agents it launches,
-//! which `shoal internal` runs: each reads the event the agent passes on
-//! stdin, reports it for the agent's space, and prints what the agent reads
-//! as context.
+//! which `shoal internal` runs.
 pub mod changes;
 pub mod delivery;
 mod input;

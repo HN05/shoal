@@ -1,10 +1,5 @@
-//! A start whose agent runs in its caller, whatever its space: here, in a
-//! place it opens beside its terminal, or in this process for an agent
-//! that runs its own way. The daemon records the space and prepares a
-//! workspace; the caller holds the agent's queue entry, follows that
-//! preparation, then runs the agent once the queue lets it start, or
-//! leaves it to the queue's background start while the limits hold it
-//! back. The place a start opens carries out its plan the same way.
+//! A start whose agent runs in its caller: here, in a place beside its
+//! terminal, or in this process.
 use anyhow::{Context as _, Result};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -277,7 +272,6 @@ fn print(starting: &impl Starting, text: &str, value: &impl output::Output) -> R
     Ok(())
 }
 
-/// Print `value` as JSON.
 fn print_json(value: &impl output::Output) -> Result<()> {
     shoal_core::outln!("{}", output::json(value)?);
     Ok(())

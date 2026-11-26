@@ -1,13 +1,5 @@
-//! A move to files of spaces other joined machines run, or of copies of
-//! them, or of the records of spaces they removed. Each such machine packs
-//! its spaces and holds their packages, which this one reads over the hub
-//! and writes where the caller named; for a file or a directory it then
-//! ends each space there, and the command that copies a package to its
-//! standard output ends it once copied, as for a space of this machine. A
-//! copy's package, or a removed space's, goes there once read, and the
-//! space keeps running, or its record stays there. With spaces of several
-//! machines, this one's included, the move asks once what ending all of
-//! them needs before any ends.
+//! A move to files of spaces other joined machines run, or of their copies
+//! or removed records.
 mod consent;
 mod delivery;
 
@@ -173,7 +165,6 @@ pub(super) async fn run(
 }
 
 impl Relay {
-    /// The IDs of its spaces.
     fn ids(&self) -> Vec<SpaceId> {
         self.spaces.iter().map(|space| space.id.clone()).collect()
     }

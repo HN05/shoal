@@ -1,5 +1,5 @@
 //! Undoing a workspace's local merge as a tracked execution, and that
-//! execution's worker, which writes what it undid to a file.
+//! execution's worker.
 use std::path::PathBuf;
 
 use anyhow::{Context as _, Result};
@@ -14,7 +14,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Undo `workspace`'s merge.
 pub(super) async fn unmerge_branch(
     paths: &CommandPaths,
     workspace: SpaceSelector,
