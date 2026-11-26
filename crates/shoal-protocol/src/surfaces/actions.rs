@@ -36,10 +36,10 @@ pub struct Input {
     pub initial: Option<Value>,
     /// The absolute data path its component enters.
     pub path: String,
-    /// The component that enters it, and the scope it is placed in, where
-    /// its checks read.
-    pub(super) component: String,
-    pub(super) scope: String,
+    /// Each component that enters it, with the scope it is placed in,
+    /// where its checks read; the first, in render order, says what it
+    /// takes.
+    pub(super) controls: Vec<(String, String)>,
 }
 
 /// What an input takes, as the component bound to its data enters it.
@@ -307,8 +307,9 @@ impl Surface {
         let mut entered: Vec<(usize, Input)> = (self.context(event).into_iter())
             .filter_map(|(key, value)| {
                 let path = scoped(&button.scope, binding(value)?);
-                let (at, input) =
-                    (self.tree_order().into_iter().enumerate()).find_map(|(at, component)| {
+                let controls: Vec<(usize, Placed<'_>)> = (self.tree_order().into_iter())
+                    .enumerate()
+                    .filter_map(|(at, component)| {
                         let scope = self.scope_toward(component, &path, &around)?;
                         let placed = Placed {
                             component,
@@ -316,16 +317,19 @@ impl Surface {
                             items: Vec::new(),
                         };
                         entering(&placed, &path).then_some((at, placed))
-                    })?;
+                    })
+                    .collect();
+                let (at, first) = controls.first()?;
                 let input = Input {
                     key: key.clone(),
-                    kind: self.entry(&input)?,
+                    kind: self.entry(first)?,
                     initial: self.data(&path).cloned(),
                     path,
-                    component: input.component.id.to_owned(),
-                    scope: input.scope,
+                    controls: (controls.iter())
+                        .map(|(_, placed)| (placed.component.id.to_owned(), placed.scope.clone()))
+                        .collect(),
                 };
-                Some((at, input))
+                Some((*at, input))
             })
             .collect();
         entered.sort_by_key(|(at, _)| *at);

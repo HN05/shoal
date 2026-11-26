@@ -808,6 +808,32 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
 }
 
 #[test]
+fn every_control_of_an_answer_s_value_checks_it() {
+    let name = json!({"@path": "/name"});
+    let twice = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["first", "second", "save"]},
+            {"id": "first", "component": "TextField", "label": "Name", "value": name},
+            {"id": "second", "component": "TextField", "label": "Name again", "value": name,
+             "@checks": [{"condition": {"@call": "required", "args": {"value": name}},
+                          "message": "Name is required."}]},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"name": name}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"name": ""}),
+    );
+    assert_eq!(twice.action("save").unwrap().inputs.len(), 1);
+    let refused = (twice.resolve("save", values(&[("name", json!(""))])))
+        .unwrap_err()
+        .to_string();
+    assert!(refused.contains("Name is required."), "{refused}");
+    twice
+        .resolve("save", values(&[("name", json!("Ada"))]))
+        .unwrap();
+}
+
+#[test]
 fn a_date_and_time_may_write_its_t_and_z_lowercase() {
     let meeting = surface(
         json!([
