@@ -594,6 +594,10 @@ pub(crate) fn activity_key(source: &str, id: &serde_json::Value) -> String {
     format!("{source}:{}", id_text(id))
 }
 
+/// Where activity records a posted discussion comment: its source, and the
+/// response field that holds its ID.
+pub(crate) const COMMENT_KEY: (&str, &str) = (DISCUSSION, "id");
+
 /// The activity key of what a post's `response` describes, which holds
 /// its ID in `field` and is recorded under `source`; none without an ID.
 pub(crate) fn posted_key(

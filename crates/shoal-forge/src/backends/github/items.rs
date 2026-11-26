@@ -14,7 +14,6 @@ use crate::{
         api::{Request, TransportRequests, encode},
         backend::LoginHint,
     },
-    updates::DISCUSSION,
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -108,10 +107,6 @@ impl Items for GitHub {
 
     fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
         Ok(github_rest::set_state(repo, item, state))
-    }
-
-    fn comment_key(&self) -> (&'static str, &'static str) {
-        (DISCUSSION, "id")
     }
 
     fn reply_key(&self) -> (&'static str, &'static str) {

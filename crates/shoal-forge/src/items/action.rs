@@ -25,7 +25,7 @@ use crate::{
         account::Account,
         api::{Request, TransportRequests},
     },
-    updates::{Edited, ItemDetails},
+    updates::{COMMENT_KEY, Edited, ItemDetails, posted_key},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -327,11 +327,11 @@ impl ForgeRepo {
     fn posted(&self, action: &Action, response: &serde_json::Value) -> Option<String> {
         let reply = matches!(action, Action::Thread(change) if change.reply.is_some());
         let key = match action {
-            Action::Comment { .. } => self.kind().comment_key(),
+            Action::Comment { .. } => COMMENT_KEY,
             _ if reply => self.kind().reply_key(),
             _ => return None,
         };
-        crate::updates::posted_key(key, response)
+        posted_key(key, response)
     }
 
     /// The requests that carry out `action`, after reading what it needs

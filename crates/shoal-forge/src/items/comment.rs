@@ -12,7 +12,7 @@ use crate::{
         reaction::Subject,
     },
     transport::{account::Account, api::TransportRequests},
-    updates::Edited,
+    updates::{COMMENT_KEY, Edited, posted_key},
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -167,11 +167,9 @@ impl ForgeRepo {
         let response = self.send(account, &request).await?;
         let key = match found.subject {
             Subject::ReviewComment(_) => self.kind().reply_key(),
-            _ => self.kind().comment_key(),
+            _ => COMMENT_KEY,
         };
-        Ok(crate::updates::posted_key(key, &response)
-            .into_iter()
-            .collect())
+        Ok(posted_key(key, &response).into_iter().collect())
     }
 }
 

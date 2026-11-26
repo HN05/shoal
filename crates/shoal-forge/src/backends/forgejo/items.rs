@@ -15,7 +15,6 @@ use crate::{
         api::{Request, TransportRequests, encode},
         backend::LoginHint,
     },
-    updates::DISCUSSION,
 };
 use shoal_forge_types::{
     ForgeRepo,
@@ -126,10 +125,6 @@ impl Items for Forgejo {
 
     fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request> {
         Ok(github_rest::set_state(repo, item, state))
-    }
-
-    fn comment_key(&self) -> (&'static str, &'static str) {
-        (DISCUSSION, "id")
     }
 
     /// Forgejo counts a reply in its review.

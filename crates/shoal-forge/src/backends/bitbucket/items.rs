@@ -222,10 +222,6 @@ impl Items for Bitbucket {
         })
     }
 
-    fn comment_key(&self) -> (&'static str, &'static str) {
-        (DISCUSSION, "id")
-    }
-
     fn reply_key(&self) -> (&'static str, &'static str) {
         (DISCUSSION, "id")
     }

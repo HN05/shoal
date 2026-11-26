@@ -144,10 +144,6 @@ pub(crate) trait Items: Backend {
 
     fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request>;
 
-    /// Where activity records a posted comment: its source, and the
-    /// response field that holds its ID.
-    fn comment_key(&self) -> (&'static str, &'static str);
-
     /// Where activity records a reply in a review thread.
     fn reply_key(&self) -> (&'static str, &'static str);
 

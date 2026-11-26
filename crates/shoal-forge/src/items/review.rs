@@ -22,7 +22,7 @@ use crate::{
         account::Account,
         api::{Request, TransportRequests},
     },
-    updates::Edited,
+    updates::{COMMENT_KEY, Edited, posted_key},
 };
 use diff::{Bases, Diff, DiffRequests, Placed};
 use shoal_forge_types::{
@@ -116,10 +116,9 @@ pub(crate) trait Reviews: Items {
         _review: &PlacedReview<'_>,
         responses: &[Value],
     ) -> Result<Vec<String>> {
-        let key = self.comment_key();
         Ok(responses
             .iter()
-            .filter_map(|response| crate::updates::posted_key(key, response))
+            .filter_map(|response| posted_key(COMMENT_KEY, response))
             .collect())
     }
 }

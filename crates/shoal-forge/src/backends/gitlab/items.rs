@@ -279,10 +279,6 @@ impl Items for GitLab {
         ))
     }
 
-    fn comment_key(&self) -> (&'static str, &'static str) {
-        (DISCUSSION, "id")
-    }
-
     fn reply_key(&self) -> (&'static str, &'static str) {
         (DISCUSSION, "id")
     }
