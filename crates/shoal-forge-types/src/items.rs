@@ -1,6 +1,7 @@
 //! Issues and PRs: what names them, what they hold and what changes them.
 pub mod action;
 pub mod attach;
+pub mod change;
 pub mod comment;
 pub mod create;
 pub mod issue;

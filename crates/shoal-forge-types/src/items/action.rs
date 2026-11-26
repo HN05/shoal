@@ -7,6 +7,7 @@ use shoal_refs::{BranchName, CommitId};
 use shoal_states::states;
 
 use crate::items::attach::Attachment;
+use crate::items::change::ItemChange;
 use crate::items::comment::CommentEdit;
 use crate::items::reaction::ReactionChange;
 use crate::items::review::NewReview;
@@ -204,34 +205,34 @@ impl Action {
 
     /// The action as an error names it, such as "request changes".
     pub fn verb(&self) -> String {
-        self.name().replace('_', " ")
+        self.name().verb()
     }
 
-    /// The action's name, which the log records; a review's is its
-    /// verdict's, so the log tells an approval from a comment.
-    pub fn name(&self) -> &'static str {
+    /// The change the log records; a review's is its verdict's, so the log
+    /// tells an approval from a comment.
+    pub fn name(&self) -> ItemChange {
         match self {
-            Self::Edit(_) => "edit",
-            Self::Comment { .. } => "comment",
-            Self::EditComment(_) => "edit_comment",
-            Self::Close => "close",
-            Self::Reopen => "reopen",
-            Self::Merge { .. } => "merge",
-            Self::AutoMerge { .. } => "auto_merge",
-            Self::CancelAutoMerge => "cancel_auto_merge",
-            Self::Update { .. } => "update",
+            Self::Edit(_) => ItemChange::Edit,
+            Self::Comment { .. } => ItemChange::Comment,
+            Self::EditComment(_) => ItemChange::EditComment,
+            Self::Close => ItemChange::Close,
+            Self::Reopen => ItemChange::Reopen,
+            Self::Merge { .. } => ItemChange::Merge,
+            Self::AutoMerge { .. } => ItemChange::AutoMerge,
+            Self::CancelAutoMerge => ItemChange::CancelAutoMerge,
+            Self::Update { .. } => ItemChange::Update,
             Self::Thread(change) => match change.resolve {
-                Some(true) => "resolve",
-                Some(false) => "unresolve",
-                None => "reply",
+                Some(true) => ItemChange::Resolve,
+                Some(false) => ItemChange::Unresolve,
+                None => ItemChange::Reply,
             },
             Self::Review(review) => match review.verdict {
-                ReviewVerdict::Comment => "review",
-                ReviewVerdict::Approve => "approve",
-                ReviewVerdict::RequestChanges => "request_changes",
+                ReviewVerdict::Comment => ItemChange::Review,
+                ReviewVerdict::Approve => ItemChange::Approve,
+                ReviewVerdict::RequestChanges => ItemChange::RequestChanges,
             },
-            Self::React(change) if change.remove => "unreact",
-            Self::React(_) => "react",
+            Self::React(change) if change.remove => ItemChange::Unreact,
+            Self::React(_) => ItemChange::React,
         }
     }
 

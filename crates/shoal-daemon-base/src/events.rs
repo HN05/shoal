@@ -209,7 +209,7 @@ pub fn record_item(
     id: &SpaceId,
     kind: impl Into<crate::forge::items::link::LinkKind>,
     url: &str,
-    action: &str,
+    action: crate::forge::items::change::ItemChange,
 ) -> Result<()> {
     let kind = kind.into();
     db.execute(

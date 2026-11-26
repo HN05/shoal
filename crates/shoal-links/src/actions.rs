@@ -21,6 +21,7 @@ use shoal_forge_types::{
     ForgeRepo,
     items::{
         action::{Action, Edit},
+        change::ItemChange,
         item::{Item, ItemState},
         link::ItemKind,
         reference::{ItemInput, ItemRef},
@@ -296,7 +297,7 @@ impl Links {
         daemon: &dyn Daemon,
         id: &SpaceId,
         target: Target,
-        name: &'static str,
+        name: ItemChange,
         own: Own,
     ) -> Result<()> {
         let id = id.to_owned();

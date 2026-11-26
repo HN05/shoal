@@ -1,4 +1,5 @@
 use super::*;
+use crate::forge::items::change::ItemChange;
 use crate::store::Store;
 use anyhow::Result;
 
@@ -190,7 +191,13 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
         workspace: None,
     };
     super::record_item_activity(&db, &SpaceId::from("w"), LinkKind::Ci, url, &update)?;
-    super::record_item(&db, &SpaceId::from("w"), LinkKind::Ci, url, "approve")?;
+    super::record_item(
+        &db,
+        &SpaceId::from("w"),
+        LinkKind::Ci,
+        url,
+        ItemChange::Approve,
+    )?;
     let records = db
         .prepare("SELECT record FROM space_events ORDER BY id")?
         .query_map([], |row| row.get::<_, String>(0))?

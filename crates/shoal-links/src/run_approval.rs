@@ -5,6 +5,7 @@ use shoal_forge::{ci::approval::ApprovalRequests, transport::account::Account};
 use shoal_forge_types::{
     ci::approval::RunsApproved,
     items::{
+        change::ItemChange,
         link::{ItemKind, LinkKind},
         reference::{ItemInput, ItemRef},
     },
@@ -114,7 +115,7 @@ impl Links {
         };
         let (id, url) = (workspace.id.clone(), url.to_owned());
         self.store
-            .run(move |db| events::record_item(db, &id, kind, &url, "approve"))
+            .run(move |db| events::record_item(db, &id, kind, &url, ItemChange::Approve))
             .await
     }
 }

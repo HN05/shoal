@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use shoal_daemon_base::events;
-use shoal_forge_types::items::{item::Item, link::ItemKind, reference::ItemRef};
+use shoal_forge_types::items::{
+    change::ItemChange, item::Item, link::ItemKind, reference::ItemRef,
+};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     links::pr::Action,
@@ -73,7 +75,7 @@ impl Links {
     async fn journal_created(&self, space: &SpaceId, kind: ItemKind, item: &Item) -> Result<()> {
         let (id, url) = (space.to_owned(), item.url.clone());
         self.store
-            .write(move |tx| events::record_item(tx, &id, kind, url.url(), "open"))
+            .write(move |tx| events::record_item(tx, &id, kind, url.url(), ItemChange::Open))
             .await
             .with_context(|| format!("{} was opened, but recording it failed", item.url))
     }

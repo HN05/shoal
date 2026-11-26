@@ -1,7 +1,10 @@
 //! What a log line says of an entry.
 use crate::model::EventCause;
 use crate::{
-    forge::{items::link::LinkKind, updates::UpdateKind},
+    forge::{
+        items::{change::ItemChange, link::LinkKind},
+        updates::UpdateKind,
+    },
     model::SpaceKind,
 };
 use shoal_protocol::{
@@ -309,20 +312,28 @@ fn item_changed(event: &EventDetails) -> (String, String) {
     };
     let kind = kind_name(item.kind);
     let reference = reference(&item.url);
-    let done = match item.action.as_str() {
-        "open" => "opened",
-        "edit" => "edited",
-        "close" => "closed",
-        "reopen" => "reopened",
-        "merge" => "merged",
-        "comment" => "comment",
-        "review" => "reviewed",
-        "approve" => "approved",
-        "request_changes" => "changes requested",
-        "rerun" => "rerun",
-        "cancel" => "canceled",
-        action => {
-            let action = action.replace('_', " ");
+    let done = match item.action {
+        ItemChange::Open => "opened",
+        ItemChange::Edit => "edited",
+        ItemChange::Close => "closed",
+        ItemChange::Reopen => "reopened",
+        ItemChange::Merge => "merged",
+        ItemChange::Comment => "comment",
+        ItemChange::Review => "reviewed",
+        ItemChange::Approve => "approved",
+        ItemChange::RequestChanges => "changes requested",
+        ItemChange::Rerun => "rerun",
+        ItemChange::Cancel => "canceled",
+        ItemChange::EditComment
+        | ItemChange::AutoMerge
+        | ItemChange::CancelAutoMerge
+        | ItemChange::Update
+        | ItemChange::Reply
+        | ItemChange::Resolve
+        | ItemChange::Unresolve
+        | ItemChange::React
+        | ItemChange::Unreact => {
+            let action = item.action.verb();
             return (format!("{kind} changed"), format!("{reference} {action}"));
         }
     };

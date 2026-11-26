@@ -60,7 +60,7 @@ impl Links {
     async fn record_ci_action(&self, id: &SpaceId, url: &str, action: CiAction) -> Result<()> {
         let (id, url) = (id.to_owned(), url.to_owned());
         self.store
-            .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, action.as_str()))
+            .run(move |db| events::record_item(db, &id, ItemKind::Pr, &url, action.into()))
             .await
     }
 }
