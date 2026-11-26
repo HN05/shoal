@@ -76,8 +76,7 @@ impl Fixture {
         author
     }
 
-    /// Merge the workspace  names into the default branch
-    /// locally, without pushing it.
+    /// Merges locally, without pushing the default branch.
     async fn merge_workspace(&self, selector: &str) -> anyhow::Result<crate::model::MergedBranch> {
         let selector = self.manager.named(selector).await;
         let workspace = self.manager.spaces.workspace(&selector).await?;

@@ -522,7 +522,7 @@ async fn a_starting_checkpoint_outlives_its_expiry_while_its_workspace_exists() 
     );
 }
 
-/// The checkpoint refs in the repository, sorted.
+/// Sorted.
 fn checkpoint_refs(repo: &std::path::Path) -> Vec<String> {
     let mut refs: Vec<String> = git(
         repo,

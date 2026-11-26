@@ -69,7 +69,6 @@ impl Fixture {
     }
 }
 
-/// Commit a new file `name` at `path`, returning the commit.
 fn add_commit(path: &Path, name: &str) -> String {
     fs::write(path.join(name), format!("{name}\n")).unwrap();
     commit(path, name);
