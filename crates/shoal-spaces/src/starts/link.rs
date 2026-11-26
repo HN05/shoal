@@ -1,7 +1,6 @@
 //! Linking a new space to the issue its start names, assigned, as the
-//! caller's account on the forge: what that warns of reaches the space's
-//! starter, and a new space whose issue cannot be linked is removed, since
-//! nothing ran in it yet.
+//! caller's account on the forge. A new space whose issue cannot be linked
+//! is removed, since nothing ran in it yet.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::OpenIssue;
@@ -17,9 +16,8 @@ use crate::{
     {log, notifications::AlertKind, scope::Caller},
 };
 
-/// The issue a new space starts on, by its URL, with the title and labels
-/// it was read open with, unless a launch that names the space could not
-/// read it.
+/// By its URL, with the title and labels it was read open with, unless a
+/// launch that names the space could not read it.
 pub struct StartIssue {
     pub url: ItemRef,
     pub title: Option<String>,
@@ -37,7 +35,7 @@ impl From<OpenIssue> for StartIssue {
 }
 
 impl From<&StartIssue> for LaunchIssue {
-    /// The issue an agent works on, titled by its URL where it was not read.
+    /// Titled by its URL where it was not read.
     fn from(issue: &StartIssue) -> Self {
         Self {
             url: issue.url.clone(),
@@ -48,9 +46,8 @@ impl From<&StartIssue> for LaunchIssue {
 }
 
 impl Spaces {
-    /// Assign `issue` to the `recorded` space, as `caller`'s account on
-    /// the forge, telling its starter what that warns of, which it returns.
-    /// A new space whose issue cannot be assigned is removed.
+    /// Tells the starter what that warns of, and returns it. A new space
+    /// whose issue cannot be assigned is removed.
     pub(super) async fn link_start_issue(
         &self,
         daemon: &dyn Daemon,
@@ -74,8 +71,8 @@ impl Spaces {
         Ok(warnings)
     }
 
-    /// Tell the starter of the new `space` what starting it warned of: the
-    /// agent of the nearest space above it with one, else the user.
+    /// The starter is the agent of the nearest space above with one, else
+    /// the user.
     pub async fn tell_start_warnings(
         &self,
         daemon: &dyn Daemon,
@@ -93,7 +90,7 @@ impl Spaces {
             .await;
     }
 
-    /// Remove the new `space`, which nothing ran in yet.
+    /// Nothing ran in it yet.
     async fn discard_new(&self, daemon: &dyn Daemon, space: &Space) {
         let removal = self
             .remove_selected(

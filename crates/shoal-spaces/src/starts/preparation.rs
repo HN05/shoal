@@ -1,9 +1,6 @@
 //! A new space's preparation, the only step of its start that depends on
-//! its kind: a chat has none, and the queue starts its agent; a workspace's
-//! creates the worktree it has yet to get, sets it up while it is
-//! preparing, links its PR and runs a new workspace's post-setup hook,
-//! unless it waits first, and its failure reaches the start's coordinator
-//! or the user.
+//! its kind. A chat has none; a workspace's creates and sets up its worktree
+//! unless it waits first.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::sync::Arc;
@@ -20,10 +17,9 @@ use crate::{
 };
 
 impl Spaces {
-    /// Begin the `recorded` space's preparation as `preparing` says, for
-    /// `caller`, its agent queued as `admission` says, returning the space
-    /// as the start left it, before a preparation changes it, and how its
-    /// agent starts.
+    /// The agent is queued as `admission` says. Returns the space as the
+    /// start left it, before a preparation changes it, and how its agent
+    /// starts.
     pub(super) async fn prepare_space(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -61,10 +57,9 @@ impl Spaces {
         Ok((workspace.into(), Started::Preparing { operation, reused }))
     }
 
-    /// Start the preparation `start` of `workspace` for `caller`, unless
-    /// it `may_wait` and what it waits for holds it, returning the
-    /// workspace as the start left it, before its preparation changes it,
-    /// and the preparation's operation once it starts.
+    /// Skipped while it `may_wait` and what it waits for holds it. Returns
+    /// the workspace as the start left it, before its preparation changes
+    /// it, and the preparation's operation once it starts.
     async fn begin_preparation(
         &self,
         daemon: &Arc<dyn Daemon>,

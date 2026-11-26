@@ -1,7 +1,5 @@
-//! Telling a start's caller of its failed preparation: the agent of the
-//! nearest space above the new workspace with one, or else the user,
-//! naming `shoal setup`, which retries the preparation, and what removes
-//! the workspace.
+//! Telling a start's caller of its failed preparation, naming `shoal setup`,
+//! which retries it, and what removes the workspace.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::sync::Arc;
@@ -17,10 +15,8 @@ use crate::{
 };
 
 impl Spaces {
-    /// Once the preparation of the workspace `id`, which `operation`
-    /// prepares, fails, tell its coordinator, the agent of the nearest
-    /// space above it with one, or else the user, naming what retries it
-    /// and what removes it. One that waits is told of once it starts.
+    /// Tells the coordinator, the agent of the nearest space above with one,
+    /// or else the user. A preparation that waits is told of once it starts.
     pub(super) fn report_preparation_failure(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -38,8 +34,7 @@ impl Spaces {
         });
     }
 
-    /// Tell the coordinator of the workspace `id`, or else the user, that its
-    /// preparation failed with `failure`, unless it is gone.
+    /// Does nothing once the workspace is gone.
     pub(super) async fn tell_preparation_failure(
         &self,
         daemon: &dyn Daemon,

@@ -1,6 +1,6 @@
 //! Queuing a new space's agent: the space takes the queue entry of the
 //! admitted launch a start carries out, or its agent queues through the
-//! queue's one request, waiting for the preparation its space awaits.
+//! queue's one request.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -14,9 +14,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// Give the `recorded` space the start's queue entry and queue the
-    /// agent `preparing` names there, linking its PR as it starts once
-    /// its blockers are done.
+    /// Links its PR as it starts once its blockers are done.
     pub(super) async fn queue_space_agent(
         &self,
         daemon: &dyn Daemon,
@@ -38,9 +36,8 @@ impl Spaces {
         ))
     }
 
-    /// Give the start's queue `entry` the `space` it recorded. A failure,
-    /// such as an entry that no longer starts, leaves the start to go on
-    /// without it.
+    /// A failure, such as an entry that no longer starts, leaves the start to
+    /// go on without it.
     async fn give_start_entry(&self, daemon: &dyn Daemon, entry: &QueueEntryId, space: &Space) {
         let attached = (daemon.queue_attach(entry, &SpaceSelector::id(&space.id))).await;
         if let Err(error) = attached {

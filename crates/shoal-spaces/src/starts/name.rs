@@ -1,6 +1,6 @@
-//! The name of a new space, as every start gives it, whoever sends it: the
-//! one the start names, else its issue's title, else the title of the PR a
-//! workspace opens at its head or links, else its home's.
+//! The name of a new space: the one the start names, else its issue's
+//! title, else the title of the PR a workspace opens at its head or links,
+//! else its home's.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -10,9 +10,7 @@ use super::{Preparing, StartIssue, home::Home};
 use crate::{config::modes::ModeName, log, protocol::operations::WorkspaceStart};
 
 impl Spaces {
-    /// The name of the space at `home` that a start `named`, on `issue`,
-    /// with what `preparing` says follows; `None` for a workspace named
-    /// after its branch.
+    /// `None` for a workspace named after its branch.
     pub(super) async fn start_name(
         &self,
         daemon: &dyn Daemon,
@@ -35,8 +33,7 @@ impl Spaces {
         self.home_name(daemon, home, &mode).await
     }
 
-    /// The title of the PR a workspace a start opens opens at its head or
-    /// links; a PR that cannot be read leaves it named after its branch,
+    /// A PR that cannot be read leaves the workspace named after its branch,
     /// and linking it reports why.
     async fn opened_pull_title(
         &self,
