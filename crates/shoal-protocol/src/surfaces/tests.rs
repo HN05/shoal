@@ -928,6 +928,33 @@ fn every_binding_of_an_answer_reads_the_values_it_enters() {
     );
 }
 
+#[test]
+fn a_context_s_format_string_reads_the_entered_data() {
+    let call = |value: &str| json!({"@call": "formatString", "args": {"value": value}});
+    let greeting = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["name", "greet"]},
+            {"id": "name", "component": "TextField", "label": "Name", "value": {"@path": "/name"}},
+            {"id": "greet", "component": "Button", "child": "greet-label",
+             "action": {"event": {"name": "greet", "context": {
+                 "name": {"@path": "/name"},
+                 "greeting": call("Hello ${/name}, \\${kept} ${/missing}!"),
+                 "dated": call("${formatDate(value:${/when}, format:'MM-dd')}")}}}},
+            {"id": "greet-label", "component": "Text", "text": "Greet"},
+        ]),
+        json!({"name": "Grace"}),
+    );
+    let resolved = greeting
+        .resolve("greet", values(&[("name", json!("Ada"))]))
+        .unwrap();
+    assert_eq!(resolved["greeting"], json!("Hello Ada, ${kept} !"));
+    // A call only a renderer can run stays as written.
+    assert_eq!(
+        resolved["dated"],
+        call("${formatDate(value:${/when}, format:'MM-dd')}")
+    );
+}
+
 /// A surface whose one text field enters `path`, with `data`.
 fn entering(path: &str, data: Value) -> Surface {
     surface(

@@ -167,7 +167,10 @@ Shoal refuses:
 
 The post records the action's whole context, read from the data model with
 the values given entered into it, as a renderer sends it. An input's bounds,
-such as an end date's earliest, read that data too.
+such as an end date's earliest, read that data too. Shoal runs a context's
+`@index` and its `formatString` over data paths itself. It records any other
+function call as written, since its result depends on the renderer, such as
+its locale or clock.
 
 ### Surfaces as text
 

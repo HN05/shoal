@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 mod actions;
 mod checks;
 mod dates;
+mod functions;
 mod markdown;
 mod schema;
 mod shorthand;

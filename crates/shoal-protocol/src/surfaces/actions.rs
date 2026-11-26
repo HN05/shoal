@@ -357,25 +357,6 @@ impl Surface {
         Some(scope)
     }
 
-    /// A literal context `entry` of an action placed in `scope` as its
-    /// event carries it: the item's index for a call of `@index`, which
-    /// counts the innermost list's items from 0 plus its `offset`, a number
-    /// or data it binds in `scope`; any other entry as written, another
-    /// function's call too, which only a renderer runs.
-    fn evaluated(&self, entry: &Value, scope: &str) -> Value {
-        if entry.get("@call").and_then(Value::as_str) != Some("@index") {
-            return entry.clone();
-        }
-        let item = (scope.rsplit('/').next()).and_then(|item| item.parse::<u32>().ok());
-        let offset = (entry.get("args").and_then(|args| args.get("offset")))
-            .and_then(|offset| self.value(offset, scope))
-            .map_or(Some(0.0), Value::as_f64);
-        match (item, offset) {
-            (Some(item), Some(offset)) => number_value(f64::from(item) + offset),
-            _ => entry.clone(),
-        }
-    }
-
     /// What the component `id` says, as a button's label: a `Text`'s
     /// text, its data read under `base`, or an `Icon`'s name.
     pub(super) fn label(&self, id: &str, base: &str) -> Option<String> {
@@ -404,15 +385,6 @@ impl SurfaceAction {
     fn keys(&self) -> String {
         let keys: Vec<&str> = self.inputs.iter().map(|input| input.key.as_str()).collect();
         keys.join(", ")
-    }
-}
-
-/// `number` as JSON: an integer when it is whole, as a renderer writes it.
-fn number_value(number: f64) -> Value {
-    if number.fract() == 0.0 && number.abs() < 1e15 {
-        Value::from(number as i64)
-    } else {
-        serde_json::Number::from_f64(number).map_or(Value::Null, Value::Number)
     }
 }
 
