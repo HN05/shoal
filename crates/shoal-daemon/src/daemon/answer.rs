@@ -202,5 +202,5 @@ pub(super) async fn answer_wait(
     let Some(_operation) = manager.gates.try_operation() else {
         return Ok(());
     };
-    protocol::write(&mut stream, &Response::new(request_id, body)).await
+    write_frames(&mut stream, Response::new(request_id, body)).await
 }

@@ -21,6 +21,23 @@ async fn an_oversized_reply_arrives_in_pieces_that_join() {
     assert_eq!(joined, env);
 }
 
+#[tokio::test]
+async fn an_oversized_answer_to_a_wait_arrives_in_pieces_too() {
+    let (_state, manager) = crate::daemon::test_support::manager().await;
+    let (client, stream) = tokio::net::UnixStream::pair().unwrap();
+    let env: std::collections::BTreeMap<String, String> =
+        [("VALUE".to_owned(), "x".repeat(MAX_FRAME))].into();
+    let waited = async { Ok(Body::SpaceEnvironment(env.clone())) };
+    answer_wait(stream, 9, &manager, waited).await.unwrap();
+    let response = protocol::read_response(&mut tokio::io::BufReader::new(client))
+        .await
+        .unwrap();
+    let Body::SpaceEnvironment(joined) = response.body else {
+        panic!("expected the environment");
+    };
+    assert_eq!(joined, env);
+}
+
 #[test]
 fn refusals_keep_their_codes_under_context() {
     use anyhow::Context as _;

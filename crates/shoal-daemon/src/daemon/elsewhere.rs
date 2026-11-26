@@ -214,7 +214,7 @@ async fn reply(
     request_id: u64,
     body: Body,
 ) -> Result<()> {
-    protocol::write(stream, &Response::new(request_id, body)).await
+    shoal_daemon_base::frames::write_frames(stream, Response::new(request_id, body)).await
 }
 
 /// Write the frames another machine's daemon answered with, as the answer
