@@ -1,7 +1,6 @@
-//! Workspace lifecycle reservation: holding a workspace in a transient
-//! state that excludes every other lifecycle operation, and recording the
-//! state it leaves it in, and waiting for such a state to pass or telling
-//! that one came and went.
+//! Workspace lifecycle reservations: a transient state that excludes every
+//! other lifecycle operation, the state it leaves the workspace in, and
+//! waiting for such a state to pass.
 
 use super::super::gates::GuardMode;
 use crate::Spaces;
@@ -32,7 +31,6 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::set_state`] while the workspace is still in the state `from`.
     pub async fn set_state_if(
         &self,
         id: &SpaceId,
@@ -52,7 +50,6 @@ impl Spaces {
             .await
     }
 
-    /// The lifecycle generation of the workspace `id`.
     pub async fn lifecycle_generation(&self, id: &SpaceId) -> Result<Generation> {
         match self.lifecycle(id).await? {
             Some(lifecycle) => Ok(lifecycle.generation),
@@ -60,9 +57,8 @@ impl Spaces {
         }
     }
 
-    /// Whether a lifecycle operation that passes holds the space `id` now,
-    /// or its lifecycle changed since it stood at `seen`, as one that came
-    /// and went changes it; a chat has none.
+    /// Also true when the lifecycle changed since `seen`, as an operation
+    /// that came and went changes it. A chat has none.
     pub async fn reserved_since(&self, id: &SpaceId, seen: Option<Generation>) -> Result<bool> {
         Ok(match self.lifecycle(id).await? {
             Some(Lifecycle { state, generation }) => state.passes() || seen != Some(generation),
@@ -70,9 +66,8 @@ impl Spaces {
         })
     }
 
-    /// Wait until no lifecycle operation that passes holds the workspace,
-    /// giving up with the error `wanted` returns, which it asks each time
-    /// it looks, and return the generation it then has.
+    /// Gives up with the error `wanted` returns, which it asks each time it
+    /// looks. Returns the generation the workspace then has.
     pub async fn await_reservation_end(
         &self,
         id: &SpaceId,
@@ -95,8 +90,7 @@ impl Spaces {
         self.store.run(move |db| lifecycle(db, &id)).await
     }
 
-    /// Move a ready or failed workspace into a transient lifecycle state,
-    /// excluding every other lifecycle operation until it is restored.
+    /// Excludes every other lifecycle operation until the state is restored.
     pub async fn reserve_lifecycle(
         &self,
         id: &SpaceId,
@@ -106,8 +100,8 @@ impl Spaces {
             .await
     }
 
-    /// Refuse what [`Self::reserve_lifecycle`] would refuse now, without
-    /// reserving, so a batch can check every target before acting on any.
+    /// Checks without reserving, so a batch can check every target before
+    /// acting on any.
     pub async fn check_lifecycle(&self, id: &SpaceId) -> Result<()> {
         self.reserve_lifecycle_inner(id, None, RemovalRules::default())
             .await?;
@@ -123,8 +117,7 @@ impl Spaces {
             .await
     }
 
-    /// Reserve the workspace in `state`, or only check that it could be
-    /// without `state`.
+    /// Only checks when `state` is `None`.
     async fn reserve_lifecycle_inner(
         &self,
         id: &SpaceId,
@@ -135,8 +128,9 @@ impl Spaces {
         let id = id.to_owned();
         self.store
             .write(move |tx| {
-                // Removal checks pending intent after reserving the lifecycle,
-                // so a confirmed-deleted worktree can release its ownership.
+                // Removal checks pending intent after reserving the
+                // lifecycle, so a confirmed-deleted worktree can release its
+                // ownership.
                 if state != Some(WorkspaceState::Reconciling) && !rules.allow_pending_rename {
                     store::ensure_no_pending_rename(tx, &id)?;
                 }
@@ -175,13 +169,12 @@ impl Spaces {
     }
 }
 
-/// What reserving a workspace for removal accepts besides a ready or failed
-/// workspace, and what it refuses.
+/// What reserving for removal accepts besides a ready or failed workspace.
 #[derive(Clone, Copy, Default)]
 pub struct RemovalRules {
     /// A pending rename, which removing a deleted worktree releases.
     pub allow_pending_rename: bool,
-    /// A preparing workspace whose setup never started; the caller waited
+    /// A preparing workspace whose setup never started. The caller waited
     /// for its creation to end and holds the repository's Git gate, under
     /// which setup starts.
     pub awaiting_setup: bool,

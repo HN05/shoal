@@ -1,4 +1,5 @@
-//! Base workspaces: the workspace whose branch a stacked workspace builds on.
+//! Base workspaces: the workspace whose branch a stacked workspace builds
+//! on.
 use crate::Spaces;
 use crate::model::EventCause;
 use shoal_ids::repository_ids::RepositoryId;
@@ -18,9 +19,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// Whether another workspace of its repository records the branch of
-    /// `workspace` as the branch it builds on, whatever base workspace it
-    /// links.
+    /// Whatever base workspace the other links.
     pub async fn branch_built_on(&self, workspace: &Workspace) -> Result<bool> {
         let Some(branch) = workspace.branch() else {
             return Ok(false);
@@ -39,14 +38,11 @@ impl Spaces {
             .await
     }
 
-    /// The workspace that owns `branch` in the repository of the workspace
-    /// `id`, which a workspace may build on.
     pub async fn branch_owner(&self, id: &SpaceId, branch: &BranchName) -> Result<Option<SpaceId>> {
         let repository_id = self.workspace_by_id(id).await?.repository().clone();
         self.branch_owner_in(&repository_id, branch).await
     }
 
-    /// The workspace that owns `branch` in the repository `repository_id`.
     pub async fn branch_owner_in(
         &self,
         repository_id: &RepositoryId,
@@ -58,8 +54,7 @@ impl Spaces {
             .await
     }
 
-    /// Record or clear the workspace whose branch this one builds on, which
-    /// must change it.
+    /// Fails when it would not change.
     pub async fn set_base_workspace(
         &self,
         selector: &SpaceSelector,
@@ -79,8 +74,8 @@ impl Spaces {
             None => None,
         };
         // The PR sweep restacks under the gates of a base and the workspaces
-        // stacked on it, so a change cannot land between its retarget and its
-        // recorded move, nor stack a workspace on a base it is removing.
+        // stacked on it, so a change cannot land between its retarget and
+        // its recorded move, nor stack a workspace on a base it is removing.
         let _gate = self
             .gates
             .lock_prs(base.iter().chain([&workspace.id]))
@@ -94,8 +89,7 @@ impl Spaces {
     }
 }
 
-/// Record the workspace `base` as the base of workspace `id`, or clear
-/// it without one, and journal the change. Fails when nothing would change.
+/// Journals the change. Fails when nothing would change.
 fn change_base(
     tx: &rusqlite::Transaction<'_>,
     repository_id: &RepositoryId,
@@ -118,8 +112,6 @@ fn change_base(
     Ok(())
 }
 
-/// Refuse to record `base` as the base of workspace `id` where that
-/// would make `id` build on itself.
 fn ensure_acyclic(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<()> {
     ensure!(
         !builds_on(db, base, id)?,
@@ -128,8 +120,7 @@ fn ensure_acyclic(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Whether the workspace `id` is `base` or builds on it, directly or
-/// through the workspaces stacked between.
+/// Directly or through the workspaces stacked between.
 pub fn builds_on(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<bool> {
     store::exists(
         db,
@@ -141,9 +132,8 @@ pub fn builds_on(db: &Connection, id: &SpaceId, base: &SpaceId) -> Result<bool> 
     )
 }
 
-/// Record `base` as the base of workspace `id` for `cause`, refusing one
-/// that would make it build on itself. The caller holds the PR gates of
-/// both, as every base change takes them.
+/// Refuses a base that would make the workspace build on itself. The
+/// caller holds the PR gates of both, as every base change takes them.
 pub fn stack_on(
     tx: &rusqlite::Transaction<'_>,
     id: &SpaceId,
@@ -158,7 +148,6 @@ pub fn stack_on(
     record_base_changed(tx, id, cause)
 }
 
-/// Journal the workspace's current base workspace.
 pub fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> Result<()> {
     db.execute(
         "INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
@@ -174,8 +163,7 @@ pub fn record_base_changed(db: &Connection, id: &SpaceId, cause: EventCause) -> 
     Ok(())
 }
 
-/// A workspace of the repository selected by number or ID, else by
-/// branch.
+/// By number or ID, else by branch.
 fn base_workspace(
     db: &Connection,
     repository_id: &RepositoryId,
@@ -193,8 +181,7 @@ fn base_workspace(
         .ok_or_else(|| Refusal::new(Reason::NotFound, format!("unknown workspace: {selector}")))?)
 }
 
-/// Fails unless the workspace `id`, which `shown` names, exists in the
-/// repository with a branch a stack can build on.
+/// `shown` is how the refusal names it.
 fn ensure_base(
     db: &Connection,
     repository_id: &RepositoryId,
@@ -228,7 +215,6 @@ fn ensure_base(
     Ok(())
 }
 
-/// Fill in the workspace's base and the workspaces stacked on it.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.base_workspace = db
         .prepare_cached(
@@ -256,8 +242,8 @@ fn row(row: &rusqlite::Row<'_>) -> rusqlite::Result<WorkspaceRef> {
     })
 }
 
-/// The branch an explicit base names, locally or on a remote, which another
-/// workspace may own. Unresolvable bases infer nothing; creation reports them.
+/// The branch may be local or on a remote, and another workspace may own
+/// it. An unresolvable base infers nothing; creation reports it.
 pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<BranchName>> {
     if let Some((_, branch)) = git::remote_branch(repo, base).await? {
         return Ok(Some(branch));
@@ -268,8 +254,7 @@ pub(super) async fn base_branch(repo: &Path, base: &str) -> Result<Option<Branch
     Ok(git::strip_local(reference.trim_end()).map(BranchName::from))
 }
 
-/// The workspace in `repository_id` that owns `branch`, one a new workspace
-/// may build on: none that becomes a chat.
+/// A workspace that becomes a chat is not one a new workspace may build on.
 pub(super) fn owner(
     db: &Connection,
     repository_id: &RepositoryId,
@@ -286,8 +271,7 @@ pub(super) fn owner(
         .optional()?)
 }
 
-/// Whether the workspace `id` becomes a chat once its agent's turn ends,
-/// after which nothing may build on it, as its worktree goes then.
+/// Once it does, nothing may build on it, as its worktree goes then.
 fn converting_to_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
     store::exists(
         db,

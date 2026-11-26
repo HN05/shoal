@@ -1,9 +1,5 @@
-//! Refresh: bring a workspace up to date with what it was made from while it
-//! holds nothing of its own. A branch workspace's branch moves only by
-//! fast-forward, a copy's follows its source's HEAD, and work of its own is
-//! refused, never carried over. The daemon also refreshes the branch of a
-//! workspace whose queued agent it admits, so the agent starts on what the
-//! branch builds on now.
+//! Bringing a workspace that holds nothing of its own up to date with what
+//! it was made from. See `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context, Result, ensure};
@@ -25,9 +21,8 @@ use own_work::{HoldsOwnWork, OwnWork};
 use target::{Found, Move, Target};
 
 impl Spaces {
-    /// `shoal refresh`: bring the workspace `selector` names up to date with
-    /// what it was made from, refusing one that holds work of its own, or in
-    /// which an execution other than `caller`'s own runs.
+    /// Refuses a workspace that holds work of its own, or where an execution
+    /// other than `caller`'s own runs.
     pub async fn refresh_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -42,14 +37,12 @@ impl Spaces {
         self.refresh_to(daemon, &workspace, target, caller).await
     }
 
-    /// Bring the branch of `workspace`, whose admitted agent is about to
-    /// start there, up to date with what it builds on while it holds
-    /// nothing of its own, as `shoal refresh` does, with what the checkout
-    /// has of the default branch; a fast-forward that cannot happen leaves
-    /// it as it was. A workspace at a commit, a copy, whose preparation
-    /// already made it of its source once what it waited for allowed, or
-    /// one that holds work of its own stays as it is, and one that cannot
-    /// be refreshed starts its agent as it is.
+    /// Runs before an admitted agent starts, as `shoal refresh` does, with
+    /// what the checkout has of the default branch. A fast-forward that
+    /// cannot happen leaves the branch as it was. A workspace at a commit, a
+    /// copy, whose preparation already brought it up to date, or one that
+    /// holds work of its own stays as it is. One that cannot be refreshed
+    /// starts its agent as it is.
     pub async fn refresh_admitted(&self, daemon: &dyn Daemon, workspace: &Workspace) {
         if workspace.copied_from.is_some() || workspace.branch().is_none() {
             return;
@@ -66,9 +59,6 @@ impl Spaces {
         }
     }
 
-    /// Bring `workspace` up to date with `target`, refusing one that holds
-    /// work of its own, or in which an execution other than `caller`'s own
-    /// runs.
     async fn refresh_to(
         &self,
         daemon: &dyn Daemon,
@@ -98,10 +88,9 @@ impl Spaces {
         })
     }
 
-    /// Sync the default branch `workspace` builds on before it refreshes to
-    /// it. The sync takes the repository's Git gate itself and records a
-    /// failure for status to show, after which the refresh goes on with the
-    /// local default branch as the checkout has it.
+    /// The sync takes the repository's Git gate itself and records a failure
+    /// for status to show. The refresh then goes on with the local default
+    /// branch as the checkout has it.
     async fn sync_default_branch(&self, daemon: &dyn Daemon, workspace: &Workspace) {
         let repository = (workspace.repository()).into();
         if let Err(error) = daemon.sync_repository(&repository).await {
@@ -112,8 +101,7 @@ impl Spaces {
         }
     }
 
-    /// Refresh the reserved `workspace`, which was in `state`, to `target`,
-    /// once nothing but the execution `own` runs in it.
+    /// Waits until nothing but the execution `own` runs in the workspace.
     async fn refresh_reserved(
         &self,
         daemon: &dyn Daemon,
@@ -152,9 +140,8 @@ impl Spaces {
         })
     }
 
-    /// Refuse to refresh `workspace`, which was in `state`, unless it is
-    /// ready, its worktree verifies with no Git operation under way, and no
-    /// execution but `own` runs in it.
+    /// The workspace must be ready, its worktree must verify with no Git
+    /// operation under way, and no execution but `own` may run in it.
     async fn ensure_refreshable(
         &self,
         daemon: &dyn Daemon,
@@ -173,9 +160,9 @@ impl Spaces {
         Ok(())
     }
 
-    /// Copy `source`'s files into the copy `workspace` again unless it has
-    /// what the copy started with, returning whether it did; work of the
-    /// copy's own refuses it, naming `fresh`, which makes a fresh copy.
+    /// Does nothing when the copy has what it started with. Returns whether
+    /// it copied. Work of the copy's own refuses it, naming `fresh`, which
+    /// makes a fresh copy.
     async fn copy_source_again(
         &self,
         daemon: &dyn Daemon,
@@ -194,8 +181,7 @@ impl Spaces {
         Ok(true)
     }
 
-    /// Move `workspace` as `moving` says unless it already has its commit,
-    /// returning whether it moved; work of its own refuses the move.
+    /// Returns whether it moved. Work of its own refuses the move.
     async fn move_to_target(
         &self,
         daemon: &dyn Daemon,

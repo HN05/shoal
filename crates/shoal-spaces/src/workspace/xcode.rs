@@ -22,14 +22,14 @@ use crate::{
     presets::{self, Preset, derived_data, xcode},
 };
 
-/// How long a package checkout nothing pins stays after a build last used it.
+/// How long a package checkout nothing pins stays after a build last used
+/// it.
 pub const CHECKOUTS_UNUSED_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 
 impl Spaces {
-    /// The workspace's settings when it uses the `xcode` preset, read while
-    /// its worktree's own config is there to read. A missing worktree's
-    /// settings come from its repository. Failing to read them keeps Xcode's
-    /// data rather than the workspace.
+    /// Read while the worktree's own config is there to read. A missing
+    /// worktree's settings come from its repository. Failing to read them
+    /// keeps Xcode's data rather than the workspace.
     pub async fn xcode_settings(
         &self,
         daemon: &dyn Daemon,
@@ -53,9 +53,9 @@ impl Spaces {
         }
     }
 
-    /// Delete what Xcode kept outside the removed worktree: the DerivedData
-    /// of every project inside it, which Xcode rebuilds on demand, and
-    /// package checkouts nothing pins any more.
+    /// Deletes the DerivedData of every project inside the removed worktree,
+    /// which Xcode rebuilds on demand, and package checkouts nothing pins
+    /// any more.
     pub async fn delete_xcode_data(
         &self,
         daemon: &dyn Daemon,
@@ -82,10 +82,9 @@ impl Spaces {
         }
     }
 
-    /// Delete the Xcode data that removed workspaces of the repository left
-    /// where `on` selects: DerivedData of projects whose worktree is gone,
-    /// and package checkouts nothing pins any more. Returns whether anything
-    /// was deleted.
+    /// Deletes, where `on` selects, the DerivedData of projects whose
+    /// worktree is gone and package checkouts nothing pins any more. Returns
+    /// whether anything was deleted.
     pub async fn delete_xcode_leftovers(
         &self,
         daemon: &dyn Daemon,
@@ -113,13 +112,12 @@ impl Spaces {
         deleted
     }
 
-    /// Delete the DerivedData of projects whose worktree directory in the
-    /// repository's directory is gone and no workspace record holds,
-    /// returning whether any went. A project missing from a live worktree
-    /// may be regenerating, and an absent repository directory, such as an
+    /// Deletes only projects whose worktree directory is gone and no
+    /// workspace record holds. A project missing from a live worktree may be
+    /// regenerating, and an absent repository directory, such as an
     /// unmounted volume, proves nothing gone. Creating, restoring and
     /// renaming a workspace hold the repository's Git gate, so holding it
-    /// keeps a worktree from coming back meanwhile; merging holds it through
+    /// keeps a worktree from coming back meanwhile. Merging holds it through
     /// a whole build, so a busy gate leaves the deletion to a later pass.
     async fn delete_left_derived_data(&self, repo: &Repository, location: PathBuf) -> bool {
         let name = repo.display_name();
@@ -147,8 +145,7 @@ impl Spaces {
         .await
     }
 
-    /// The recorded worktree paths of the repository's workspaces, whether
-    /// or not they exist.
+    /// Whether or not they exist.
     async fn recorded_worktrees(&self, repo: &Repository) -> Result<Vec<PathBuf>> {
         Ok(self
             .list_workspaces()
@@ -159,12 +156,11 @@ impl Spaces {
             .collect())
     }
 
-    /// Delete the package checkouts in the preset's `cache` that nothing
-    /// pins and no build used lately, returning whether any went. A workspace
-    /// being created, restored or renamed may be about to use checkouts no
-    /// worktree pins yet; each holds the repository's Git gate, and so does
-    /// repository removal, which may be removing this workspace, so a busy
-    /// gate leaves pruning to a later pass rather than waiting.
+    /// Deletes those nothing pins and no build used lately. A workspace being
+    /// created, restored or renamed may be about to use checkouts no
+    /// worktree pins yet. Each of those holds the repository's Git gate, and
+    /// so does repository removal, which may be removing this workspace, so
+    /// a busy gate leaves pruning to a later pass rather than waiting.
     async fn prune_checkouts(&self, repo: &Repository, cache: PathBuf) -> bool {
         let name = repo.display_name();
         let Some(_git) = self.gates.try_lock_git(&repo.id) else {
@@ -197,8 +193,8 @@ impl Spaces {
         }
     }
 
-    /// The keys of the package checkouts that the repository's checkout, a
-    /// worktree of it or its default branch's tip pins.
+    /// Pinned by the repository's checkout, a worktree of it, or its default
+    /// branch's tip.
     async fn pinned_checkouts(&self, repo: &Repository) -> Result<HashSet<String>> {
         let mut pins = Vec::new();
         for worktree in self.repository_worktrees(repo).await? {
@@ -210,8 +206,7 @@ impl Spaces {
         Ok(pins.iter().map(|pins| xcode::checkouts_key(pins)).collect())
     }
 
-    /// The repository's checkout and the worktrees of its workspaces that
-    /// exist; one that cannot be inspected stops pruning.
+    /// One that cannot be inspected stops pruning.
     async fn repository_worktrees(&self, repo: &Repository) -> Result<Vec<PathBuf>> {
         let mut worktrees = vec![repo.path.clone()];
         for workspace in self.list_workspaces().await? {
@@ -236,8 +231,8 @@ fn uses_xcode(settings: &Effective) -> bool {
         .contains(&Preset::Xcode)
 }
 
-/// The preset's shared cache directory, when the preset configures it and
-/// the repository owns the caches directory.
+/// None unless the preset configures it and the repository owns the caches
+/// directory.
 fn xcode_cache(repo: &Repository, settings: &Effective) -> Option<PathBuf> {
     if !settings.caches.contains_key(presets::XCODE_CACHE) {
         return None;
@@ -245,8 +240,6 @@ fn xcode_cache(repo: &Repository, settings: &Effective) -> Option<PathBuf> {
     crate::caches::Layout::of(repo).owned(presets::XCODE_CACHE)
 }
 
-/// Whether the worktree directory holding `project` in the repository's
-/// `directory` is gone.
 fn worktree_gone(directory: &Path, project: &Path) -> bool {
     project
         .strip_prefix(directory)
@@ -255,8 +248,8 @@ fn worktree_gone(directory: &Path, project: &Path) -> bool {
         .is_some_and(|worktree| matches!(directory.join(worktree).try_exists(), Ok(false)))
 }
 
-/// The content of every `Package.resolved` in the worktree; one deleted
-/// since the listing pins nothing, and one that cannot be read stops pruning.
+/// A file deleted since the listing pins nothing, and one that cannot be
+/// read stops pruning.
 pub async fn worktree_pins(worktree: &Path) -> Result<Vec<Vec<u8>>> {
     let files = git::files::in_worktree(worktree, xcode::PINS).await?;
     off_runtime::run(move || {
@@ -275,8 +268,7 @@ pub async fn worktree_pins(worktree: &Path) -> Result<Vec<Vec<u8>>> {
     .await
 }
 
-/// Delete the DerivedData of every project `deletes` selects, logging what
-/// went and returning whether any did; failure keeps it.
+/// Logs what went. A failure keeps the data.
 async fn delete_derived_data(
     owner: &str,
     location: PathBuf,

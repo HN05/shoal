@@ -1,7 +1,7 @@
 //! The records of local merges into the default branch, which `shoal
-//! unmerge` undoes. The daemon updates them when a merge or unmerge
-//! execution ends, from what the default branch holds then rather than what
-//! the worker reports, and drops the ones that can no longer be undone.
+//! unmerge` undoes. They follow what the default branch holds when a merge
+//! or unmerge execution ends, not what the worker reports, and the ones that
+//! can no longer be undone go.
 use crate::Spaces;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -22,7 +22,6 @@ use crate::{
     model::{MergePlan, Repository, UnmergePlan},
 };
 
-/// A local merge of a workspace's branch into its repository's default branch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalMerge {
     pub repository_id: RepositoryId,
@@ -40,7 +39,6 @@ pub struct LocalMerge {
     pub method: MergeMethod,
 }
 
-/// A stored [`LocalMerge`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordedMerge {
     pub id: i64,
@@ -50,9 +48,8 @@ pub struct RecordedMerge {
 pub use shoal_daemon_base::merges::RecordChange;
 
 impl Spaces {
-    /// Bring the merge records in line with what the execution behind
-    /// `change` left the default branch at. The caller holds the repository
-    /// Git gate. Failure only logs, so the execution's outcome stands.
+    /// The caller holds the repository's Git gate. A failure only logs, so
+    /// the execution's outcome stands.
     pub async fn update_merge_records(&self, change: &RecordChange) {
         let updated = match change {
             RecordChange::Merge(plan) => self.record_merge(plan).await,
@@ -63,10 +60,10 @@ impl Spaces {
         }
     }
 
-    /// Record the merge `plan` made, as the default branch's first-parent
-    /// history shows it, so a commit made after it is not taken for part of
-    /// it: a failed, rolled back or empty merge records nothing. Records the
-    /// upstream now has go, since they can no longer be undone.
+    /// Records the merge as the default branch's first-parent history shows
+    /// it, so a commit made after it is not taken for part of it. A failed,
+    /// rolled back or empty merge records nothing. Records the upstream now
+    /// has go, since they can no longer be undone.
     pub async fn record_merge(&self, plan: &MergePlan) -> Result<()> {
         let repo = &plan.repo.path;
         let default = &plan.default_refresh.branch;
@@ -94,8 +91,7 @@ impl Spaces {
         self.forget_merges(pushed).await
     }
 
-    /// The merges into `repo`'s `default` that it still holds, oldest
-    /// first; records of merges it no longer holds go.
+    /// Oldest first. Records of merges it no longer holds go.
     pub async fn held_merges(
         &self,
         repo: &Repository,
@@ -115,9 +111,9 @@ impl Spaces {
         Ok(held)
     }
 
-    /// Update the records after the unmerge `plan` planned: drop the undone
-    /// merge's, and rewrite the commits of later merges a replay recreated.
-    /// A default branch the unmerge left as it was changes nothing.
+    /// Drops the undone merge's record, and rewrites the commits of later
+    /// merges a replay recreated. A default branch the unmerge left as it
+    /// was changes nothing.
     async fn record_unmerge(&self, plan: &UnmergePlan) -> Result<()> {
         let repo = &plan.repo.path;
         let now = git::status::local_branch_commit(repo, &plan.default_branch).await?;
@@ -146,8 +142,7 @@ impl Spaces {
             .await
     }
 
-    /// The merges into `repo`'s `default` that its upstream holds, as the
-    /// last fetch saw it.
+    /// As the last fetch saw it.
     async fn pushed_merges(&self, repo: &Repository, default: &BranchName) -> Result<Vec<i64>> {
         let Some(tracking) = tracking_ref(&repo.path, default).await? else {
             return Ok(Vec::new());
@@ -179,11 +174,11 @@ impl Spaces {
     }
 }
 
-/// Each commit a replay recreated, and the merge's result, mapped to the
-/// commit that took its place now that the default branch is at `now`;
-/// `None` unless `now` is that replay: the merged branch's commits gone, and
-/// each commit in place of one before with the same author, date and
-/// message, so other changes to the default branch rewrite no record.
+/// Maps each commit a replay recreated, and the merge's result, to the
+/// commit that took its place. `None` unless `now` is that replay: the
+/// merged branch's commits gone, and each commit in place of one before with
+/// the same author, date and message, so other changes to the default
+/// branch rewrite no record.
 async fn replayed_commits(
     plan: &UnmergePlan,
     now: &CommitId,
@@ -212,9 +207,7 @@ async fn replayed_commits(
     Ok(Some(rewritten))
 }
 
-/// Delete the record `undone` of the merge a replay took out, and point the
-/// other records of `repository_id`'s `default` at the commits `rewritten`
-/// maps theirs to, together.
+/// Does both in one transaction.
 fn replace_replayed(
     tx: &rusqlite::Transaction<'_>,
     undone: i64,
@@ -249,7 +242,7 @@ fn insert(db: &Connection, merge: &LocalMerge) -> Result<()> {
     Ok(())
 }
 
-/// The recorded merges into `repository_id`'s `default` branch, oldest first.
+/// Oldest first.
 fn list(
     db: &Connection,
     repository_id: &RepositoryId,
@@ -279,8 +272,6 @@ fn list(
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-/// Point `recorded`'s default-branch commits at the commits `rewritten`
-/// maps them to.
 fn rewrite(
     db: &Connection,
     recorded: &RecordedMerge,

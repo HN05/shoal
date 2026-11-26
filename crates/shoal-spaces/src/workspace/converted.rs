@@ -1,6 +1,5 @@
-//! The worktree of a chat that becomes a workspace: on the branch it names,
-//! an existing one or a new one, through the creation path every workspace
-//! on a branch takes, with the chat's record turned into the workspace's.
+//! The worktree of a chat that becomes a workspace. See
+//! `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, bail};
@@ -19,11 +18,10 @@ use crate::{
 };
 
 impl Spaces {
-    /// Create the workspace `converting` turns its chat into, on `branch`:
-    /// the local or remote branch of that name, or else a new one from
-    /// `base` or the default branch, leaving out what `options` say. It is
-    /// recorded in place of the chat before its worktree is made; a
-    /// worktree that fails gives the chat back.
+    /// Uses the local or remote branch of that name, or else a new one from
+    /// `base` or the default branch. The workspace replaces the chat's
+    /// record before its worktree is made. A worktree that fails gives the
+    /// chat back.
     pub async fn create_converted_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -43,7 +41,7 @@ impl Spaces {
         .await
     }
 
-    /// [`Self::create_converted_workspace`] once the hand-overs are held.
+    /// Call once the hand-overs are held.
     async fn create_converted(
         &self,
         daemon: &dyn Daemon,
@@ -58,8 +56,8 @@ impl Spaces {
             .await?;
         git::check_branch_name(&branch)?;
         let source = self.converted_source(daemon, &repo, &branch, base).await?;
-        // An existing branch goes under its local name, without its remote,
-        // and a new one takes the name every new branch is allocated, its
+        // An existing branch goes under its local name, without its remote.
+        // A new one takes the name every new branch is allocated, its
         // directory named after the branch asked for.
         let (name, branch) = match &source {
             WorkspaceSource::Existing { branch, .. } => {
@@ -83,9 +81,7 @@ impl Spaces {
         created
     }
 
-    /// Refuse `mode` for the agent of the converted `workspace` unless the
-    /// settings of its worktree, which may differ from the checkout's on its
-    /// branch, define it.
+    /// The worktree's settings may differ from the checkout's on its branch.
     pub(super) async fn ensure_worktree_mode(
         &self,
         daemon: &dyn Daemon,
@@ -96,8 +92,7 @@ impl Spaces {
         crate::conversions::ensure_mode(&settings, mode)
     }
 
-    /// Where the worktree of a converted chat starts: the existing branch
-    /// `branch`, which no workspace may hold, or a new branch from `base`.
+    /// An existing branch must not be any workspace's.
     async fn converted_source(
         &self,
         daemon: &dyn Daemon,
@@ -126,10 +121,9 @@ impl Spaces {
         }
     }
 
-    /// Whether `branch` names a local branch, or a branch a remote
-    /// advertises, by its name or with its remote, such as `origin/topic`,
-    /// as opening an existing branch finds them; without the remotes, as
-    /// offline, only the local and fetched ones count.
+    /// Finds branches as opening an existing branch does: by name, or with
+    /// the remote, such as `origin/topic`. Without the remotes, as offline,
+    /// only the local and fetched ones count.
     async fn branch_exists(&self, repo: &Repository, branch: &str) -> Result<bool> {
         let names = match git::existing_branch::list(&repo.path).await {
             Ok(branches) => (branches.iter())
@@ -162,10 +156,9 @@ impl Spaces {
         Ok(names.iter().any(|name| name == branch))
     }
 
-    /// Give back the chat `chat` whose workspace failed to be made, removing
-    /// what of its worktree was made once it is proven the workspace's.
-    /// Without that proof, or when a step fails, the workspace stays, failed,
-    /// for the user to remove, and the failure is logged.
+    /// Removes what was made of the worktree once it is proven the
+    /// workspace's. Without that proof, or when a step fails, the workspace
+    /// stays, failed, for the user to remove, and the failure is logged.
     async fn give_chat_back(
         &self,
         daemon: &dyn Daemon,
@@ -215,9 +208,8 @@ impl Spaces {
         }
     }
 
-    /// Refuse a worktree at the path of `workspace` that is not proven to
-    /// be its own: registered with the repository and of the identity it
-    /// recorded.
+    /// It must be registered with the repository and have the identity the
+    /// workspace recorded.
     async fn prove_own_worktree(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<()> {
         anyhow::ensure!(
             self.is_registered_worktree(daemon, workspace).await?,

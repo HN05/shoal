@@ -1,4 +1,4 @@
-//! Explicitly transfer a linked worktree into Shoal's normal lifecycle.
+//! Adopting a linked worktree into Shoal's lifecycle.
 use super::creation::{
     Configured, PendingWorktree, creates_branch_at, existing_base, recorded_base,
 };
@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use tokio::sync::OwnedMutexGuard;
 
 impl Spaces {
-    /// Take the linked worktree at `path` into Shoal's lifecycle, or with
-    /// `copy` a new worktree with its files on a branch of its own.
+    /// With `copy`, creates a new worktree with its files on a branch of its
+    /// own instead.
     pub async fn adopt_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -90,11 +90,12 @@ impl Spaces {
             },
             git_dir: git_dir.clone(),
         };
-        // A marker naming no recorded workspace outlived its record or a reset
-        // state directory; one naming a recorded workspace refuses adoption.
+        // A marker naming no recorded workspace outlived its record or a
+        // reset state directory. One naming a recorded workspace refuses
+        // adoption.
         self.release_stale_owner(&git_dir, &workspace.id).await?;
-        // Marked before the record exists, so no record is ever without its
-        // proof; a refused insertion leaves a marker naming no workspace,
+        // Mark before the record exists, so no record is ever without its
+        // proof. A refused insertion leaves a marker naming no workspace,
         // which the next claim of the directory clears.
         self.record_git_dir(&workspace, git_dir).await?;
         self.verify_worktree(daemon, &workspace).await?;
@@ -104,9 +105,7 @@ impl Spaces {
             .await
     }
 
-    /// Record a workspace on a new branch named after `source_branch` that
-    /// copies the linked worktree at `source`, outside Shoal, and create
-    /// its worktree as a pending one's is.
+    /// Creates the worktree as a pending one's is.
     async fn copy_and_adopt(
         &self,
         daemon: &dyn Daemon,
@@ -132,7 +131,8 @@ impl Spaces {
             Head::Branch(branch),
             WorkspaceState::Preparing,
         );
-        // Reserve the branch and destination before Git creates the worktree.
+        // Reserve the branch and destination before Git creates the
+        // worktree.
         let pending = PendingWorktree::outside(source.to_owned());
         let workspace = self
             .insert_workspace(workspace, None, None, Some(pending), true)
@@ -141,11 +141,10 @@ impl Spaces {
             .await
     }
 
-    /// Give the recorded `workspace` its worktree on its new branch at the
-    /// HEAD of the linked worktree at `source`, outside Shoal, or verify the
-    /// one an earlier try created, copy the source's files into it and
-    /// record its base. It takes no seed build and needs no setup, whose
-    /// outputs the copied files hold.
+    /// Creates the worktree at the source's HEAD, or verifies the one an
+    /// earlier try created, then copies the source's files into it and
+    /// records its base. It takes no seed build and needs no setup: the
+    /// copied files hold their outputs.
     pub(super) async fn create_outside_copy(
         &self,
         daemon: &dyn Daemon,
@@ -178,9 +177,9 @@ impl Spaces {
         })
     }
 
-    /// Ready the worktree an earlier try of `workspace` created for its
-    /// files once a checkpoint keeps what it holds, refusing one whose HEAD
-    /// is no longer the source's, which the files copied now would not fit.
+    /// Waits for a checkpoint to keep what it holds. Refuses a worktree whose
+    /// HEAD is no longer the source's, which the files copied now would not
+    /// fit.
     async fn reuse_copied_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -202,8 +201,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Create the worktree of `workspace` on its new branch at the HEAD of
-    /// the worktree at `source`, and own it before its files are copied.
+    /// Owns the worktree before its files are copied.
     async fn add_copied_worktree(
         &self,
         repo: &crate::model::Repository,
@@ -220,12 +218,11 @@ impl Spaces {
         )
         .await
         .context("create copied workspace")?;
-        // Mark and persist the Git admin directory before the potentially long
-        // file copy. A restart can therefore verify and remove the worktree.
+        // Mark and store the Git admin directory before the possibly long
+        // file copy, so a restart can verify and remove the worktree.
         self.record_copy_identity(workspace).await
     }
 
-    /// Mark and persist the Git admin directory for a copied worktree.
     async fn record_copy_identity(&self, workspace: &Workspace) -> Result<()> {
         let git_dir = git::git_dir(&workspace.path).await?;
         self.release_stale_owner(&git_dir, &workspace.id).await?;

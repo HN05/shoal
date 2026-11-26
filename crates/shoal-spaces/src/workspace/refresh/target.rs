@@ -15,20 +15,17 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a workspace was made from, which a refresh brings it up to date
-/// with.
 pub(super) enum Target {
-    /// Its branch's upstream, the branch `reference` on `remote`.
+    /// The branch `reference` on `remote`.
     Upstream { remote: String, reference: String },
-    /// The revision its branch builds on, resolved as `--base` resolves it:
+    /// The revision the branch builds on, resolved as `--base` resolves it:
     /// its base workspace's branch, or the branch its recorded base names.
     Base(String),
-    /// The local default branch, synced first.
+    /// Synced first.
     DefaultBranch,
     /// The branch a workspace at a commit was made for, by the name given.
     BranchTip(String),
-    /// The head of the PR a workspace at a commit was made for, as the
-    /// forge reported it.
+    /// As the forge reported it.
     PrHead(PullHead),
     /// The live workspace a copy copied, whose files it takes again.
     Copy(SpaceId),
@@ -36,21 +33,19 @@ pub(super) enum Target {
     Fixed(String),
 }
 
-/// What a refresh found its target at.
 pub(super) enum Found {
-    /// What never moves, by how a reader knows it.
     Fixed(String),
     Moving(Move),
-    /// The live workspace a copy copied, as a copy starts from it, and the
-    /// command that makes a fresh copy of it.
+    /// The live workspace as a copy starts from it, and the command that
+    /// makes a fresh copy of it.
     Copy {
         source: Box<Source>,
         fresh: String,
     },
 }
 
-/// The commit a refresh moves a workspace to, how Git or Shoal names what
-/// holds it, and how the workspace gets there.
+/// The commit, how Git or Shoal names what holds it, and how the workspace
+/// gets there.
 pub(super) struct Move {
     pub(super) commit: CommitId,
     pub(super) label: String,
@@ -58,15 +53,13 @@ pub(super) struct Move {
 }
 
 pub(super) enum How {
-    /// Fast-forward its branch.
     FastForward,
     /// Check out the commit, without a branch, as where it starts.
     Restart,
 }
 
 impl Spaces {
-    /// What `workspace` was made from, with where a PR's head is read from
-    /// the forge as `caller`.
+    /// Reads a PR's head from the forge as `caller`.
     pub(super) async fn refresh_target(
         &self,
         daemon: &dyn Daemon,
@@ -92,9 +85,8 @@ impl Spaces {
         }
     }
 
-    /// What the copy `workspace` refreshes to: the live workspace it
-    /// `copied`, which `caller`'s scope must reach as it must to copy it,
-    /// while a copy of a checkpoint never moves.
+    /// The live workspace it copied, which `caller`'s scope must reach as it
+    /// must to copy it. A copy of a checkpoint never moves.
     async fn copy_target(
         &self,
         daemon: &dyn Daemon,
@@ -132,8 +124,7 @@ impl Spaces {
         }
     }
 
-    /// The head of PR `number` of the repository of `workspace`, read as
-    /// `caller`.
+    /// Read as `caller`.
     async fn pr_head(
         &self,
         daemon: &dyn Daemon,
@@ -147,8 +138,8 @@ impl Spaces {
         Ok(Target::PrHead(pull_head(pull)?))
     }
 
-    /// Where `target` is now in `repo`, fetching what it names on a remote;
-    /// the caller holds the repository's Git gate.
+    /// Fetches what it names on a remote. The caller holds the repository's
+    /// Git gate.
     pub(super) async fn find_target(
         &self,
         daemon: &dyn Daemon,
@@ -195,9 +186,8 @@ impl Spaces {
     }
 }
 
-/// What the branch workspace on `branch` builds on: its upstream, else its
-/// base workspace's branch or the branch its recorded base names, else the
-/// default branch.
+/// Its upstream, else its base workspace's branch or the branch its
+/// recorded base names, else the default branch.
 async fn branch_target(
     repo: &Repository,
     workspace: &Workspace,
@@ -218,8 +208,7 @@ async fn branch_target(
     })
 }
 
-/// What a workspace at a commit made for `name` follows: a branch's tip,
-/// while a tag never moves.
+/// A branch's tip. A tag never moves.
 async fn made_for_ref(repo: &Repository, name: &str) -> Result<Target> {
     // A branch only a remote has, never fetched, resolves to nothing here.
     let reference = git::symbolic_revision(&repo.path, name, git::run_isolated).await;
@@ -231,8 +220,8 @@ async fn made_for_ref(repo: &Repository, name: &str) -> Result<Target> {
     })
 }
 
-/// Where `pull`'s head is: the ref its forge serves it under, else its
-/// branch here, at the commit the forge reported.
+/// The ref its forge serves it under, else its branch here, at the commit
+/// the forge reported.
 fn pull_head(pull: PullRequest) -> Result<PullHead> {
     let reference = match pull.head_ref {
         Some(reference) => reference,
@@ -252,14 +241,12 @@ fn pull_head(pull: PullRequest) -> Result<PullHead> {
     })
 }
 
-/// The commit `revision`, which `label` names, has in `repo`.
 async fn resolve(repo: &Repository, revision: &str, label: &str) -> Result<CommitId> {
     git::resolve_commit(&repo.path, revision, git::run_isolated)
         .await
         .with_context(|| format!("{label} is not a commit here"))
 }
 
-/// A branch's name as Git shortens its full ref.
 fn short_ref(reference: &str) -> &str {
     git::strip_local(reference)
         .or_else(|| git::strip_remote(reference))
