@@ -298,23 +298,35 @@ pub(super) fn plain(text: &str, newlines: bool) -> bool {
 
 /// The first catalog other than the basic one that `value` names, as a
 /// surface's `catalogId`, a component's `@catalogId` or a function call's
-/// `catalogId`; data, a context or metadata names none, whatever its keys.
+/// `catalogId`; data, metadata and a context's literal entries name none,
+/// whatever their keys, while a context's function calls may.
 fn other_catalog(value: &Value) -> Option<&str> {
-    const PAYLOAD: &[&str] = &["dataModel", "context", "metadata", "@metadata"];
+    const PAYLOAD: &[&str] = &["dataModel", "metadata", "@metadata"];
     match value {
         Value::Object(fields) => {
             let own = ["catalogId", "@catalogId"]
                 .into_iter()
                 .filter_map(|key| fields.get(key)?.as_str())
                 .find(|id| *id != CATALOG_ID);
-            let below = (fields.iter())
-                .filter(|(key, _)| !PAYLOAD.contains(&key.as_str()))
-                .find_map(|(_, value)| other_catalog(value));
+            let below = (fields.iter()).find_map(|(key, value)| match key.as_str() {
+                "context" => context_catalog(value),
+                key if PAYLOAD.contains(&key) => None,
+                _ => other_catalog(value),
+            });
             own.or(below)
         }
         Value::Array(values) => values.iter().find_map(other_catalog),
         _ => None,
     }
+}
+
+/// The first catalog other than the basic one that a function call among
+/// the entries of `context` names.
+fn context_catalog(context: &Value) -> Option<&str> {
+    (context.as_object().into_iter())
+        .flat_map(|entries| entries.values())
+        .filter(|entry| entry.get("@call").is_some())
+        .find_map(other_catalog)
 }
 
 /// The targets of the Markdown images in every text `value` holds, such

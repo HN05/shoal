@@ -729,7 +729,12 @@ fn data_may_hold_a_catalog_id_key() {
         ]),
         json!({"catalogId": "products"}),
     );
-    shop.checked(&[]).unwrap();
+    shop.clone().checked(&[]).unwrap();
+    // A function call in a context names a catalog like any other.
+    let mut custom = shop.clone();
+    custom.0["createSurface"]["components"][0]["action"]["event"]["context"]["label"] =
+        json!({"@call": "formatString", "catalogId": "custom", "args": {"value": "x"}});
+    assert!(refusal(custom, &[]).contains("not custom"));
 }
 
 #[test]
