@@ -677,6 +677,42 @@ async fn an_alert_with_more_actions_than_fit_keeps_its_reply_hint() {
 }
 
 #[tokio::test]
+async fn an_answer_s_own_text_fits_a_post_whatever_its_label() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let (child, parent) = (caller(&tree.child), caller(&tree.parent));
+    let thread = open(fixture, Some(&child), None).await;
+    let long = "x".repeat(shoal_protocol::threads::MAX_POST_LEN + 10);
+    post_as(
+        fixture,
+        &thread,
+        &child,
+        asking("Which?", &[" ", &long], None),
+    )
+    .await
+    .unwrap();
+    // A blank label leaves the action's id as the answer's text.
+    let blank = post_as(fixture, &thread, &parent, answering("1", None))
+        .await
+        .unwrap();
+    assert_eq!(blank.last_post().unwrap().post.text, "1");
+    post_as(
+        fixture,
+        &thread,
+        &child,
+        asking("Again?", &[" ", &long], None),
+    )
+    .await
+    .unwrap();
+    let cut = post_as(fixture, &thread, &parent, answering("2", None))
+        .await
+        .unwrap();
+    let text = &cut.last_post().unwrap().post.text;
+    assert!(text.len() <= shoal_protocol::threads::MAX_POST_LEN);
+    assert!(text.ends_with('…'));
+}
+
+#[tokio::test]
 async fn an_answer_checked_before_a_newer_surface_arrived_is_refused() {
     let tree = tree().await;
     let fixture = &tree.fixture;

@@ -154,7 +154,7 @@ choice picker's option values.
 
 `--action ID` answers the latest surface the other side posted with that
 action. `--value KEY=VALUE` gives each value. Repeat a key to select several
-options, or give it empty, as `--value tags=`, to select none. The action's label is the post's text, unless the post gives its own.
+options, or give it empty, as `--value tags=`, to select none. The action's label, or its id where the label is blank, is the post's text, cut to fit a post, unless the post gives its own.
 Shoal never reads text as an action.
 
 Shoal refuses:

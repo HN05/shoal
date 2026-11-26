@@ -61,11 +61,28 @@ fn interacting(
     if let Some(answer) = post.answer.take() {
         let (answer, label) = answered(thread, side, answer)?;
         if post.text.trim().is_empty() {
-            post.text = label;
+            post.text = answer_text(&label, &answer.action);
         }
         post.answer = Some(answer);
     }
     Ok(post)
+}
+
+/// The text an answer without its own takes: the action's label, or its
+/// id where the label is blank, cut to what a post holds.
+fn answer_text(label: &str, action: &str) -> String {
+    let text = [label, action]
+        .into_iter()
+        .find(|text| !text.trim().is_empty())
+        .unwrap_or("Answered");
+    if text.len() <= MAX_POST_LEN {
+        return text.to_owned();
+    }
+    let mut end = MAX_POST_LEN - '…'.len_utf8();
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &text[..end])
 }
 
 /// `answer` from `side` of `thread` as it is recorded: on the latest
