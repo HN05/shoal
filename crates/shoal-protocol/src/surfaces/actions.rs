@@ -136,7 +136,7 @@ impl Surface {
             super::checks::plain(id, false),
             "an action's id holds no control characters"
         );
-        super::checks::check_characters(&Value::Object(values.clone()))?;
+        super::checks::check_data(&Value::Object(values.clone()))?;
         let Some(action) = self.action(id) else {
             let ids: Vec<String> = self.actions().into_iter().map(|action| action.id).collect();
             match &ids[..] {

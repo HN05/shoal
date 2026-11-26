@@ -223,21 +223,40 @@ const NAMING: &[&str] = &[
     "@call",
 ];
 
-/// Refuse control characters in any text of `value`, which the terminal
-/// and agents' alerts print as it is: in every key and every name, and in
-/// other text all but the newlines Markdown takes.
+/// Refuse control characters in any text of `value`, a surface, which the
+/// terminal and agents' alerts print as it is: in every key and every
+/// name, and in other text, its data's included, all but the newlines
+/// Markdown takes.
 pub(super) fn check_characters(value: &Value) -> Result<()> {
-    check_text(value, false)
+    check_text(value, Text::Surface)
 }
 
-/// [`check_characters`] for `value`, a name, or held by one, when `naming`.
-fn check_text(value: &Value, naming: bool) -> Result<()> {
+/// [`check_characters`] for `value`, data such as an answer's values,
+/// whose keys name nothing a command prints as a word.
+pub(super) fn check_data(value: &Value) -> Result<()> {
+    check_text(value, Text::Data)
+}
+
+/// What a text of a surface is, which decides the characters it takes.
+#[derive(Clone, Copy, PartialEq)]
+enum Text {
+    /// Part of the surface's own structure.
+    Surface,
+    /// A name, such as a component's id or an action's.
+    Name,
+    /// Data, the data model's or a context's, whatever its keys.
+    Data,
+}
+
+/// [`check_characters`] for `value`, a text of the kind `text` or holding
+/// such texts.
+fn check_text(value: &Value, text: Text) -> Result<()> {
     match value {
-        Value::String(text) => ensure!(
-            plain(text, !naming),
+        Value::String(string) => ensure!(
+            plain(string, text != Text::Name),
             "{} holds a control character{}",
-            serde_json::to_string(text)?,
-            if naming {
+            serde_json::to_string(string)?,
+            if text == Text::Name {
                 "; a name takes none, nor a newline"
             } else {
                 ""
@@ -245,7 +264,7 @@ fn check_text(value: &Value, naming: bool) -> Result<()> {
         ),
         Value::Array(values) => {
             for value in values {
-                check_text(value, naming)?;
+                check_text(value, text)?;
             }
         }
         Value::Object(fields) => {
@@ -255,7 +274,12 @@ fn check_text(value: &Value, naming: bool) -> Result<()> {
                     "the key {} holds a control character",
                     serde_json::to_string(key)?
                 );
-                check_text(value, NAMING.contains(&key.as_str()))?;
+                let inner = match (text, key.as_str()) {
+                    (Text::Data, _) | (_, "dataModel" | "context") => Text::Data,
+                    (_, key) if NAMING.contains(&key) => Text::Name,
+                    _ => Text::Surface,
+                };
+                check_text(value, inner)?;
             }
         }
         _ => {}

@@ -663,3 +663,22 @@ fn an_action_past_the_placing_bound_stays_answerable() {
     assert!(long.action("done#1501").is_none());
     assert!(long.action("done").is_none());
 }
+
+#[test]
+fn data_and_answers_take_newlines_whatever_their_keys() {
+    let noted = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["name", "save"]},
+            {"id": "name", "component": "TextField", "variant": "longText", "label": "Name",
+             "value": {"@path": "/name"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save",
+                 "context": {"name": {"@path": "/name"}, "content": "first\nsecond"}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"name": "Ada\nLovelace", "content": "a\nb"}),
+    );
+    let checked = noted.checked(&[]).unwrap();
+    let answer = checked.resolve("save", values(&[("name", json!("Grace\nHopper"))]));
+    assert_eq!(answer.unwrap()["name"], json!("Grace\nHopper"));
+}
