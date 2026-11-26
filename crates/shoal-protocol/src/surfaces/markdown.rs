@@ -84,17 +84,25 @@ fn closing(text: &str, from: usize, open: char, close: char) -> Option<usize> {
 }
 
 /// The targets of the reference definitions `[label]: target` in `text`,
-/// by their labels, which match without regard to case.
+/// by their labels, which match without regard to case. A target may
+/// stand on the line after its label.
 fn definitions(text: &str) -> BTreeMap<String, &str> {
     let mut defined = BTreeMap::new();
-    for line in text.lines() {
+    let mut lines = text.lines().peekable();
+    while let Some(line) = lines.next() {
         let Some(rest) = line.trim_start().strip_prefix('[') else {
             continue;
         };
         let Some((label, target)) = rest.split_once("]:") else {
             continue;
         };
-        if let Some(target) = target.split_whitespace().next() {
+        let target = match target.split_whitespace().next() {
+            Some(target) => Some(target),
+            None => lines
+                .next_if(|next| !next.trim().is_empty())
+                .and_then(|next| next.split_whitespace().next()),
+        };
+        if let Some(target) = target {
             defined
                 .entry(label.to_lowercase())
                 .or_insert(unbracketed(target));

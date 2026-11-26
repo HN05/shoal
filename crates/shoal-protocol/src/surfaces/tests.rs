@@ -474,6 +474,13 @@ fn images_by_reference_name_attached_files_too() {
         refused.contains("image https://example.com/y.png"),
         "{refused}"
     );
+    // A definition's target may stand on the next line.
+    let below = surface(
+        json!([{"id": "root", "component": "Text",
+            "text": "![chart][ref]\n\n[ref]:\n  https://example.com/chart.png"}]),
+        json!({}),
+    );
+    assert!(refusal(below, &[]).contains("image https://example.com/chart.png"));
     // A bracket without a definition is text, not an image.
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),
