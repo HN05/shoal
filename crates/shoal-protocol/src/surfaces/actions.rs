@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::{Map, Value};
 
-use super::{Placed, Surface, binding, dates::Dates, scoped};
+use super::{Component, Placed, Surface, binding, dates::Dates, scoped};
 
 /// An action a surface offers.
 #[derive(Debug, Clone, PartialEq)]
@@ -62,9 +62,61 @@ impl Surface {
             .collect()
     }
 
-    /// Its action `id`.
+    /// Its action `id`, found from the id itself rather than by placing
+    /// every component, so an action past the bound placing keeps stays
+    /// answerable: the button that dispatches the event, under the lists
+    /// that repeat it, in the items the id numbers.
     pub fn action(&self, id: &str) -> Option<SurfaceAction> {
-        self.actions().into_iter().find(|action| action.id == id)
+        let (event, numbers) = match id.split_once('#') {
+            Some((event, numbers)) => (event, numbers.split('.').collect()),
+            None => (id, Vec::new()),
+        };
+        let button = (self.components()).find(|component| component.event_name() == Some(event))?;
+        let lists = self.lists_above(button);
+        if lists.len() != numbers.len() {
+            return None;
+        }
+        let mut placed = Placed {
+            component: button,
+            scope: String::new(),
+            items: Vec::new(),
+        };
+        for (list, number) in lists.into_iter().zip(numbers) {
+            let item = number.parse::<usize>().ok()?.checked_sub(1)?;
+            let (_, path) = list.template()?;
+            let items = scoped(&placed.scope, path);
+            let count = self
+                .data(&items)
+                .and_then(Value::as_array)
+                .map_or(0, Vec::len);
+            if item >= count {
+                return None;
+            }
+            placed.scope = format!("{items}/{item}");
+            placed.items.push(item);
+        }
+        self.action_of(&placed).filter(|action| action.id == id)
+    }
+
+    /// The lists whose templates hold `component`, the outermost first.
+    /// It climbs at most once per component, so a stored surface whose
+    /// components name each other in a loop ends the climb.
+    fn lists_above(&self, component: Component<'_>) -> Vec<Component<'_>> {
+        let parent =
+            |id: &str| (self.components()).find(|parent| parent.references().contains(&id));
+        let mut lists = Vec::new();
+        let mut current = component;
+        for _ in 0..self.components().count() {
+            let Some(above) = (current.id != "root").then(|| parent(current.id)).flatten() else {
+                break;
+            };
+            if (above.template()).is_some_and(|(template, _)| template == current.id) {
+                lists.push(above);
+            }
+            current = above;
+        }
+        lists.reverse();
+        lists
     }
 
     /// The recommended action's label.
@@ -132,7 +184,7 @@ impl Surface {
                 .and_then(|child| self.label(child, &placed.scope))
                 .unwrap_or_else(|| id.clone()),
             recommended: component.literal("variant") == Some("primary"),
-            inputs: self.inputs(&event, &placed.scope),
+            inputs: self.inputs(&event, placed),
             id,
             event,
             scope: placed.scope.clone(),
@@ -151,19 +203,28 @@ impl Surface {
         .collect()
     }
 
-    /// The inputs of the event `event` dispatched in `scope`: the keys of
-    /// its context that bind data an input component enters, in the order
+    /// The inputs of `button`'s event: the keys of its context that bind
+    /// data an input component enters in the button's items, in the order
     /// those components render. A key that binds data no component enters
     /// takes the data as it is.
-    fn inputs(&self, event: &str, scope: &str) -> Vec<Input> {
-        let placed = self.placed();
+    fn inputs(&self, event: &str, button: &Placed<'_>) -> Vec<Input> {
+        let lists = self.lists_above(button.component);
         let mut entered: Vec<(usize, Input)> = (self.context(event).into_iter())
             .filter_map(|(key, value)| {
-                let path = scoped(scope, binding(value)?);
-                let at = (placed.iter()).position(|placed| entering(placed, &path))?;
+                let path = scoped(&button.scope, binding(value)?);
+                let (at, input) =
+                    (self.tree_order().into_iter().enumerate()).find_map(|(at, component)| {
+                        let scope = self.scope_beside(component, &lists, &button.items)?;
+                        let placed = Placed {
+                            component,
+                            scope,
+                            items: Vec::new(),
+                        };
+                        entering(&placed, &path).then_some((at, placed))
+                    })?;
                 let input = Input {
                     key: key.clone(),
-                    kind: self.entry(&placed[at])?,
+                    kind: self.entry(&input)?,
                     initial: self.data(&path).cloned(),
                 };
                 Some((at, input))
@@ -171,6 +232,21 @@ impl Surface {
             .collect();
         entered.sort_by_key(|(at, _)| *at);
         entered.into_iter().map(|(_, input)| input).collect()
+    }
+
+    /// The scope of `component` in the items `items` of the lists `lists`
+    /// repeat a button in: none unless the lists that repeat `component`
+    /// are the outermost of those.
+    fn scope_beside(
+        &self,
+        component: Component<'_>,
+        lists: &[Component<'_>],
+        items: &[usize],
+    ) -> Option<String> {
+        let own = self.lists_above(component);
+        let shared = (own.len() <= lists.len())
+            && own.iter().zip(lists).all(|(own, list)| own.id == list.id);
+        shared.then(|| scope_in(&own, items))?
     }
 
     /// What the component `id` says, as a button's label: a `Text`'s
@@ -202,6 +278,17 @@ impl SurfaceAction {
         let keys: Vec<&str> = self.inputs.iter().map(|input| input.key.as_str()).collect();
         keys.join(", ")
     }
+}
+
+/// The data path the items `items` of the lists `lists` read under, the
+/// outermost first; none when a list has no template.
+fn scope_in(lists: &[Component<'_>], items: &[usize]) -> Option<String> {
+    let mut scope = String::new();
+    for (list, item) in lists.iter().zip(items) {
+        let (_, path) = list.template()?;
+        scope = format!("{}/{item}", scoped(&scope, path));
+    }
+    Some(scope)
 }
 
 /// The component types that enter data, which their `value` binds.

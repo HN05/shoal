@@ -73,6 +73,22 @@ impl Surface {
         self.components().find(|component| component.id == id)
     }
 
+    /// Its components in the order they render from the root, depth
+    /// first, each once, a list's template once.
+    fn tree_order(&self) -> Vec<Component<'_>> {
+        let mut order = Vec::new();
+        let mut seen = BTreeSet::new();
+        let mut next = vec!["root"];
+        while let Some(id) = next.pop() {
+            let Some(component) = self.component(id).filter(|_| seen.insert(id)) else {
+                continue;
+            };
+            next.extend(component.references().into_iter().rev());
+            order.push(component);
+        }
+        order
+    }
+
     /// Its components in the order they render: from the root, depth
     /// first, a list's template once for each item of its data, each once
     /// in a scope, and at most [`MAX_PLACED`] of them.
@@ -220,6 +236,11 @@ impl<'a> Component<'a> {
         let template = self.get("children")?.as_object()?;
         let id = template.get("componentId")?.as_str()?;
         Some((id, template.get("path")?.as_str()?))
+    }
+
+    /// The name of the agent event its action dispatches.
+    fn event_name(&self) -> Option<&'a str> {
+        self.event()?.get("name")?.as_str()
     }
 
     /// The agent event its action dispatches, for a button whose action is

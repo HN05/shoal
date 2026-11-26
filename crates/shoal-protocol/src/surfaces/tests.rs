@@ -624,3 +624,22 @@ fn placing_a_list_that_repeats_itself_stays_within_its_bound() {
     );
     assert!(looping.placed().len() <= MAX_PLACED);
 }
+
+#[test]
+fn an_action_past_the_placing_bound_stays_answerable() {
+    let tasks: Vec<Value> = (0..1500).map(|task| json!({"id": task})).collect();
+    let long = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "row", "path": "/tasks"}},
+            {"id": "row", "component": "Button", "child": "row-label",
+             "action": {"event": {"name": "done", "context": {"task": {"@path": "id"}}}}},
+            {"id": "row-label", "component": "Text", "text": "Done"},
+        ]),
+        json!({ "tasks": tasks }),
+    );
+    assert!(long.actions().iter().all(|action| action.id != "done#1500"));
+    let resolved = long.resolve("done#1500", serde_json::Map::new()).unwrap();
+    assert_eq!(Value::Object(resolved), json!({"task": 1499}));
+    assert!(long.action("done#1501").is_none());
+    assert!(long.action("done").is_none());
+}
