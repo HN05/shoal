@@ -1,10 +1,6 @@
-//! Viewers of simulator demos: a tool, serve-sim unless the demo names
-//! another, that streams the demo's device and takes its input on a port,
-//! which a demo stream then carries as it carries a web demo's. The first
-//! open starts it in the demo's verified worktree, marked as the demo's
-//! execution, so stopping, removal and recovery stop it with the demo's
-//! other processes. The daemon records its process with the demo, by which
-//! it spares the viewer between the demo's runs, across its own restarts too.
+//! Viewers of simulator demos. A viewer carries the demo's execution's
+//! marker, so stopping, removal and recovery stop it with the demo's other
+//! processes.
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     ffi::OsString,

@@ -1,6 +1,4 @@
-//! What demos need of the rest of the daemon, which implements it: the
-//! spaces they run in, the executions that run them and their processes,
-//! and the ports their viewers serve on.
+//! What demos need of the rest of the daemon.
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 
@@ -17,10 +15,8 @@ use shoal_protocol::space_names::SpaceSelector;
 
 /// The spaces demos run in.
 pub trait Spaces: Send + Sync {
-    /// The workspace or chat `selector` names.
     fn space<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, Result<Space>>;
 
-    /// The workspace or chat `id`, while it exists.
     fn find_space<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<Space>>>;
 }
 
@@ -29,10 +25,8 @@ pub trait Executions: Send + Sync {
     /// Whether the launch `launch` ended before its command ran.
     fn launch_ended_unrun(&self, launch: &str) -> bool;
 
-    /// Whether the execution `execution` is completing.
     fn completing(&self, execution: &ExecutionId) -> bool;
 
-    /// The record of the execution `id`, while it exists.
     fn execution<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<Option<Execution>>>;
 
     /// The scope token the commands of the execution `id` act under.
@@ -113,8 +107,6 @@ pub enum Reserved {
     Unreserved,
 }
 
-/// Everything demos need of the daemon, which each of their operations that
-/// reaches beyond them takes.
 pub trait Daemon: Spaces + Executions + Ports {}
 
 impl<T: Spaces + Executions + Ports> Daemon for T {}

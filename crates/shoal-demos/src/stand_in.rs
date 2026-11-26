@@ -1,9 +1,6 @@
 //! A stand-in for the rest of the daemon, which the tests of demos build
-//! the service over: a home with its state directory under a temporary
-//! directory, the workspaces a test records, each demo's execution recorded
-//! with its scope token and run from the test process, and the ports a test
-//! reserves, kept in memory. Stopping and inspecting executions is the
-//! daemon's, which tests across subsystems reach.
+//! the service over. It does not stop or inspect executions, so tests of
+//! those live in `shoal-daemon`.
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, Mutex};
 

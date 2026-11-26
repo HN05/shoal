@@ -1,5 +1,4 @@
-//! The store's record of each demo with the execution that runs it, which
-//! the transactions that register an execution and its runs write.
+//! The store's record of each demo with the execution that runs it.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use shoal_ids::execution_ids::ExecutionId;

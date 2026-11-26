@@ -1,6 +1,4 @@
-//! Fixtures the tests of demos share with the daemon's tests of demos
-//! across subsystems: viewers that serve as a test needs, helper processes
-//! a viewer leaves behind, and the viewer records an earlier daemon left.
+//! Fixtures the tests of demos share with the daemon's tests of demos.
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Duration;
