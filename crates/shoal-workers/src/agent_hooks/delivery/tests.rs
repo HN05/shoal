@@ -22,6 +22,7 @@ fn attached_files_follow_the_message_text() {
         updates: Vec::new(),
         alerts: vec![message("See the crash"), message("")],
         leftovers: Vec::new(),
+        built_directly: None,
         timed_out: false,
         superseded: false,
     };
@@ -54,6 +55,7 @@ fn hook_context_lists_alerts_and_item_activity() {
         }],
         alerts: vec![alert("Stop the dev server")],
         leftovers: Vec::new(),
+        built_directly: None,
         timed_out: false,
         superseded: false,
     };
@@ -114,4 +116,23 @@ fn alert(text: &str) -> Alert {
         files: Vec::new(),
         machine: None,
     }
+}
+
+#[test]
+fn hook_context_tells_an_agent_that_built_directly_how_far_its_memory_rose() {
+    let updates = Updates {
+        updates: Vec::new(),
+        alerts: Vec::new(),
+        leftovers: Vec::new(),
+        built_directly: Some(3 << 30),
+        timed_out: false,
+        superseded: false,
+    };
+    let inbox = Inbox {
+        space: "worker".into(),
+        kind: "workspace",
+    };
+    let context = inbox.hook_context(&updates);
+    assert!(context.contains("3.0 GiB more memory"), "{context}");
+    assert!(context.contains("`shoal run <name>`"), "{context}");
 }

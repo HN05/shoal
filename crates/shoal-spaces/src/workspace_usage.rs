@@ -12,6 +12,7 @@ use shoal_daemon_base::containers::ContainerUsage;
 use tokio::time::Instant;
 
 use crate::{
+    agent_peaks::AgentPeaks,
     log,
     model::WorkspaceUsage,
     process::{
@@ -117,6 +118,8 @@ pub struct WorkspaceUsages {
     /// The latest sample read every project's containers it tried, so its
     /// memory holds all of theirs.
     containers_complete: bool,
+    /// How far each space's agent rose during its latest tool call.
+    peaks: AgentPeaks,
 }
 
 impl WorkspaceUsages {
@@ -137,6 +140,9 @@ impl WorkspaceUsages {
                 self.usage = usage(previous.as_ref(), &sample, &mut self.pending);
                 let (containers, missed) = self.read_containers(containers);
                 add_containers(&mut self.usage, containers, previous.is_some());
+                let agents = self.usage.iter();
+                (self.peaks)
+                    .observe(agents.map(|(id, usage)| (id.clone(), usage.agent_memory_bytes())));
                 self.latest = Some(sample);
                 (!self.containers_complete).then(|| missed.join("; "))
             }
@@ -224,6 +230,11 @@ impl WorkspaceUsages {
             all,
             outside_slice: all.saturating_sub(in_slice),
         })
+    }
+
+    /// See [`AgentPeaks::rise_after_call`].
+    pub fn rise_after_call(&mut self, space: &SpaceId, now: Instant) -> Option<u64> {
+        self.peaks.rise_after_call(space, now)
     }
 
     /// None while the workspace has no processes or containers, or once

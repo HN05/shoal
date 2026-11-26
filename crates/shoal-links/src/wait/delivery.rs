@@ -174,6 +174,7 @@ impl Links {
             alerts: messages,
             updates,
             leftovers,
+            built_directly: daemon.rise_after_call(&id),
             timed_out: false,
             superseded: false,
         })

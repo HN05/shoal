@@ -77,7 +77,11 @@ async fn deliver_to_hook(
     let (inbox, updates) = tokio::time::timeout_at(deadline, hook_updates(paths))
         .await
         .context("the daemon did not answer in time")??;
-    if updates.updates.is_empty() && updates.alerts.is_empty() && updates.leftovers.is_empty() {
+    if updates.updates.is_empty()
+        && updates.alerts.is_empty()
+        && updates.leftovers.is_empty()
+        && updates.built_directly.is_none()
+    {
         return Ok(());
     }
     shoal_core::outln!("{}", super::output(input, &inbox.hook_context(&updates)));
@@ -165,17 +169,14 @@ impl Inbox {
     /// What an agent hook tells the agent about `updates`.
     fn hook_context(&self, updates: &Updates) -> String {
         let heading = format!("New Shoal alerts for this {}:", self.kind);
-        let mut context = hook_context(&heading, self.kind, updates);
+        let mut parts = vec![hook_context(&heading, self.kind, updates)];
         if !updates.leftovers.is_empty() {
-            let notice =
-                leftovers::notice(self.kind, &updates.leftovers, crate::time::UnixTime::now());
-            context = [context, notice]
-                .into_iter()
-                .filter(|part| !part.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n");
+            let now = crate::time::UnixTime::now();
+            parts.push(leftovers::notice(self.kind, &updates.leftovers, now));
         }
-        context
+        parts.extend(updates.built_directly.map(built_directly));
+        parts.retain(|part| !part.is_empty());
+        parts.join("\n")
     }
 
     /// Shown once: the alerts, updates and leftovers a hook printed do not
@@ -206,6 +207,15 @@ fn hook_context(heading: &str, space: &str, updates: &Updates) -> String {
         lines.extend(updates.updates.iter().map(|update| format!("- {update}")));
     }
     lines.join("\n")
+}
+
+/// What the hook tells an agent whose own memory rose by `rise` bytes during
+/// its last tool call, as a build or test it ran directly makes it.
+fn built_directly(rise: u64) -> String {
+    format!(
+        "Your own processes held {} more memory during your last tool call, as a build or test run directly does. Run builds and tests through `shoal run <name>` (`shoal run` lists the configured ones) or `shoal run -- <command>`: those wait until their memory is free, so the builds on this machine take turns.",
+        crate::client::output::queue::size_label(rise)
+    )
 }
 
 /// Whether the hook input names the subagent whose tool call ran the hook,

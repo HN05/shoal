@@ -345,6 +345,10 @@ impl Messages for StandIn {
         Ok(Vec::new())
     }
 
+    fn rise_after_call(&self, _: &SpaceId) -> Option<u64> {
+        None
+    }
+
     fn wakes_held<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(async { Ok(false) })
     }

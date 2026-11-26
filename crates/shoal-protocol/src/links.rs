@@ -75,6 +75,12 @@ pub struct Updates {
     /// only the hook after a tool call delivers.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub leftovers: Vec<Leftover>,
+    /// How far, in bytes, the agent's own memory rose during its latest
+    /// tool call, as a build or test it ran directly rather than through
+    /// `shoal run` makes it, which only the hook after a tool call
+    /// delivers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub built_directly: Option<u64>,
     pub timed_out: bool,
     /// A newer wait in the same workspace took over before this one received
     /// updates; they stay pending for the newer wait.

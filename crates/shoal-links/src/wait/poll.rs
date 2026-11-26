@@ -235,6 +235,7 @@ pub async fn wait_for_updates<F: std::future::Future<Output = Result<Vec<Update>
                 updates,
                 alerts: Vec::new(),
                 leftovers: Vec::new(),
+                built_directly: None,
                 timed_out: false,
                 superseded: false,
             });

@@ -20,6 +20,7 @@ use shoal_protocol::{agent, links, model, protocol, state, time, validate};
 use shoal_store::{self as store, Store};
 
 pub mod absorb;
+pub mod agent_peaks;
 pub mod carried_commits;
 pub mod carried_sessions;
 pub mod chat_marks;

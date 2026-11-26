@@ -39,6 +39,7 @@ impl UpdatesExt for Updates {
             updates: Vec::new(),
             alerts: Vec::new(),
             leftovers: Vec::new(),
+            built_directly: None,
             timed_out: false,
             superseded: true,
         }
@@ -49,6 +50,7 @@ impl UpdatesExt for Updates {
             updates: Vec::new(),
             alerts: Vec::new(),
             leftovers: Vec::new(),
+            built_directly: None,
             timed_out: true,
             superseded: false,
         }
@@ -59,6 +61,7 @@ impl UpdatesExt for Updates {
             updates: Vec::new(),
             alerts: messages,
             leftovers: Vec::new(),
+            built_directly: None,
             timed_out: false,
             superseded: false,
         }

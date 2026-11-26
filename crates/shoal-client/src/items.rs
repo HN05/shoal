@@ -113,6 +113,7 @@ pub async fn await_updates(
                 updates: Vec::new(),
                 alerts: Vec::new(),
                 leftovers: Vec::new(),
+                built_directly: None,
                 timed_out: true,
                 superseded: false,
             }),

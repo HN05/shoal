@@ -34,6 +34,11 @@ impl Messages for Manager {
         self.spaces.leftovers.undelivered(id, room)
     }
 
+    fn rise_after_call(&self, id: &SpaceId) -> Option<u64> {
+        let now = tokio::time::Instant::now();
+        (self.spaces.usage).with_workspaces(|usages| usages.rise_after_call(id, now))
+    }
+
     fn wakes_held<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>> {
         Box::pin(self.agents.wakes_held(id))
     }

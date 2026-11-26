@@ -203,6 +203,11 @@ pub trait Messages: Send + Sync {
     /// as many as one delivery names in `room` bytes.
     fn undelivered_leftovers(&self, id: &SpaceId, room: usize) -> Result<Vec<Leftover>>;
 
+    /// As a tool call of the agent of the space `id` ends, how far the
+    /// agent's own memory rose during it, when it should hear that it ran a
+    /// build directly.
+    fn rise_after_call(&self, id: &SpaceId) -> Option<u64>;
+
     /// Whether the updates of the space `id` wake its agent for no turn for
     /// now, since one would fail as its last did.
     fn wakes_held<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<bool>>;

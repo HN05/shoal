@@ -56,6 +56,7 @@ async fn item_wait_continues_on_the_replacement_daemon() {
             updates: Vec::new(),
             alerts: Vec::new(),
             leftovers: Vec::new(),
+            built_directly: None,
             timed_out: true,
             superseded: false,
         };
