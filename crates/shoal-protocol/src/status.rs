@@ -249,8 +249,7 @@ pub struct WorktreeStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssueStatus {
     pub url: crate::forge::items::reference::ItemRef,
-    /// `open` or `closed`.
-    pub state: Option<String>,
+    pub state: Option<crate::forge::items::item::ItemState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }

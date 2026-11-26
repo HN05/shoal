@@ -11,7 +11,7 @@ fn forgejo_details_distinguish_merged_prs_and_refuse_prs_as_issues() {
             "draft": false, "pull_request": {"merged": true},
             "requested_reviewers": [{"login": "kim"}], "requested_reviewers_teams": [{"name": "core"}]});
     let details = github_rest::details(&pull, ItemKind::Pr, 541, "team").unwrap();
-    assert_eq!(details.state, "merged");
+    assert_eq!(details.state, ItemState::Merged);
     assert_eq!(details.labels, ["type/chore"]);
     assert_eq!(details.assignees, ["kim"]);
     assert_eq!(details.milestone.as_deref(), Some("v2"));

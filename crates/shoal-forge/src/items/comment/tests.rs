@@ -1,6 +1,7 @@
 use super::*;
 use shoal_forge_types::activity::view::{Comment, Review, ReviewComment};
 use shoal_forge_types::items::attach::Attachment;
+use shoal_forge_types::items::item::ItemState;
 
 #[test]
 fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies() {
@@ -25,7 +26,7 @@ fn comments_list_discussion_then_inline_comments_with_their_authors_and_bodies()
     let details = Details {
         number: 4,
         title: String::new(),
-        state: String::new(),
+        state: ItemState::Open,
         author: "ann".into(),
         created_at: String::new(),
         labels: Vec::new(),

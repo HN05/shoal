@@ -48,11 +48,10 @@ impl ForgeRepo {
         Ok(issue)
     }
 
-    /// Whether the issue `issue`, of this repository, is closed.
-    pub async fn issue_closed(&self, account: &Account, issue: &ItemRef) -> Result<bool> {
+    /// The state of the issue `issue`, of this repository.
+    pub async fn state_of_issue(&self, account: &Account, issue: &ItemRef) -> Result<ItemState> {
         issue.belongs_to(self)?;
-        let state = self.issue_state(account, issue.issue()?).await?;
-        Ok(state == ItemState::Closed)
+        self.issue_state(account, issue.issue()?).await
     }
 
     /// The open issues the forge records as blocking issue `number`.

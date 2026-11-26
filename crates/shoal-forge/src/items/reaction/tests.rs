@@ -1,5 +1,6 @@
 use super::*;
 use shoal_forge_types::activity::view::{Comment, Review, ReviewComment};
+use shoal_forge_types::items::item::ItemState;
 use shoal_forge_types::items::reaction::Reaction;
 
 fn listed(content: &str, login: &str) -> Listed {
@@ -61,7 +62,7 @@ fn reactions_go_to_the_item_its_comments_and_its_inline_comments() {
     let mut details = Details {
         number: 4,
         title: String::new(),
-        state: String::new(),
+        state: ItemState::Open,
         author: String::new(),
         created_at: String::new(),
         labels: Vec::new(),

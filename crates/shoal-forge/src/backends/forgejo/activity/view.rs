@@ -18,7 +18,7 @@ use crate::{
 use shoal_forge_types::activity::view::{AutoMerge, Details, Review, ReviewComment};
 use shoal_forge_types::{
     ForgeRepo,
-    items::link::ItemKind,
+    items::{item::ItemState, link::ItemKind},
     numbers::{CommentId, PullNumber},
 };
 
@@ -30,7 +30,7 @@ pub(crate) async fn details(
 ) -> Result<Details> {
     let item = repo.read_value(account, kind, number).await?;
     let mut details = github_rest::details(&item, kind, number, repo.owner())?;
-    let open = details.state == "open";
+    let open = details.state == ItemState::Open;
     if let Some(pr) = details.pr.as_mut().filter(|_| open) {
         let endpoint = repo.repo_endpoint(&format!("issues/{number}/timeline"));
         pr.auto_merge = scheduled_merge(&repo.pages(account, &endpoint).await?);

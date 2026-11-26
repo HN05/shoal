@@ -50,17 +50,17 @@ async fn issue_status(
     remote: &Result<Option<String>>,
     url: &ItemRef,
 ) -> IssueStatus {
-    let closed = async {
+    let state = async {
         let remote = pr::origin(remote, "issue lookup needs an origin remote")?;
         let forge = ForgeRepo::resolve(remote, hosts).await?;
-        forge.issue_closed(account, url).await
+        forge.state_of_issue(account, url).await
     }
     .await;
     let url = url.clone();
-    match closed {
-        Ok(closed) => IssueStatus {
+    match state {
+        Ok(state) => IssueStatus {
             url,
-            state: Some(if closed { "closed" } else { "open" }.into()),
+            state: Some(state),
             error: None,
         },
         Err(error) => IssueStatus {

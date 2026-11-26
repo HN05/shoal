@@ -15,7 +15,7 @@ use crate::{
     forge::{
         activity::view::{AutoMerge, Details, PrDetails, Review},
         ci::{checks::CheckLog, run_view::JobRef},
-        items::{link::Selection, reaction::Reaction, reference::ItemRef},
+        items::{item::ItemState, link::Selection, reaction::Reaction, reference::ItemRef},
     },
     model::Relation,
     protocol::{ItemContext, RepoTarget},
@@ -223,7 +223,7 @@ pub(super) fn render_relations(relations: &[Relation]) {
 
 fn render_details(url: &ItemRef, details: &Details, palette: Palette, emoji: bool) {
     match &details.pr {
-        Some(pr) => render_pr(url, &details.state, pr, palette),
+        Some(pr) => render_pr(url, details.state, pr, palette),
         None => outln!("State:    {}", details.state),
     }
     outln!("Author:   {}", details.author);
@@ -265,7 +265,7 @@ fn render_details(url: &ItemRef, details: &Details, palette: Palette, emoji: boo
     }
 }
 
-fn render_pr(url: &ItemRef, state: &str, pr: &PrDetails, palette: Palette) {
+fn render_pr(url: &ItemRef, state: ItemState, pr: &PrDetails, palette: Palette) {
     let conflicts = match pr.merge_conflicts {
         Some(true) => format!(", {}", palette.paint(Style::Error, "merge conflicts")),
         Some(false) => ", no merge conflicts".into(),

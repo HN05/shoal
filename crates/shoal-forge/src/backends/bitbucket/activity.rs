@@ -141,7 +141,7 @@ async fn view_details(
     Ok(Details {
         number,
         title: current.item.title,
-        state: current.item.state.as_str().into(),
+        state: current.item.state,
         author: nickname(author),
         created_at: text(&value["created_on"]).unwrap_or_default(),
         labels: Vec::new(),

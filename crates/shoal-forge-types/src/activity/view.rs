@@ -8,7 +8,10 @@ use shoal_refs::BranchName;
 use crate::{
     activity::status::{CheckResult, PrStatus, ReviewState},
     ci::{approval::WaitingRun, checks::CheckLog},
-    items::{action::MergeMethod, link::ItemKind, reaction::Reaction, reference::ItemRef},
+    items::{
+        action::MergeMethod, item::ItemState, link::ItemKind, reaction::Reaction,
+        reference::ItemRef,
+    },
     numbers::CommentId,
 };
 
@@ -30,8 +33,7 @@ pub struct ItemView {
 pub struct Details {
     pub number: u64,
     pub title: String,
-    /// `open`, `closed`, or `merged` for a PR.
-    pub state: String,
+    pub state: ItemState,
     pub author: String,
     pub created_at: String,
     pub labels: Vec<String>,

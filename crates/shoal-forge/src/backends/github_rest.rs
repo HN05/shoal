@@ -93,15 +93,10 @@ pub(crate) fn details(item: &Value, kind: ItemKind, number: u64, owner: &str) ->
             )?
         }),
     };
-    let state = if item["merged"].as_bool() == Some(true) {
-        "merged".to_owned()
-    } else {
-        required(&item["state"], "state")?
-    };
     Ok(Details {
         number,
         title: required(&item["title"], "title")?,
-        state,
+        state: item_state(item)?,
         author: login(&item["user"]),
         created_at: text_field(&item["created_at"]),
         labels: labels(&item["labels"]),
@@ -160,14 +155,7 @@ pub(crate) fn current(
     }
     let url = repo.item_url(kind, number)?;
     let title = text(&value["title"]).context("item has no title")?;
-    let merged =
-        value["merged"].as_bool().unwrap_or_default() || value["merged_at"].as_str().is_some();
-    let state = match (text(&value["state"]).as_deref(), merged) {
-        (_, true) => ItemState::Merged,
-        (Some("open"), _) => ItemState::Open,
-        (Some("closed"), _) => ItemState::Closed,
-        (state, _) => anyhow::bail!("unrecognized item state {state:?}"),
-    };
+    let state = item_state(value)?;
     let labels = value["labels"]
         .as_array()
         .into_iter()
@@ -211,7 +199,7 @@ pub(crate) fn current(
         head_sha: text(&value["head"]["sha"]).map(Into::into),
         base_sha: text(&value["base"]["sha"]).map(Into::into),
         // GitHub also reports the test merge of an open PR here.
-        merge_commit: merged
+        merge_commit: (state == ItemState::Merged)
             .then(|| text(&value["merge_commit_sha"]))
             .flatten()
             .map(Into::into),
@@ -225,6 +213,18 @@ pub(crate) fn current(
         milestone_id: None,
         merge_style: None,
         replaced_labels: Vec::new(),
+    })
+}
+
+/// The state of the REST item `value`; a merged PR still reports `closed`.
+fn item_state(value: &Value) -> Result<ItemState> {
+    let merged =
+        value["merged"].as_bool().unwrap_or_default() || value["merged_at"].as_str().is_some();
+    Ok(match (text(&value["state"]).as_deref(), merged) {
+        (_, true) => ItemState::Merged,
+        (Some("open"), _) => ItemState::Open,
+        (Some("closed"), _) => ItemState::Closed,
+        (state, _) => anyhow::bail!("unrecognized item state {state:?}"),
     })
 }
 
