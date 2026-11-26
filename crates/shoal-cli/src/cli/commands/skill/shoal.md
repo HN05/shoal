@@ -1183,6 +1183,25 @@ state, never its config. `ls` is open to every space. `pause`, `resume` and
 `--payload` and `--header` give a webhook trigger the request to fire with,
 without its signature.
 
+## Builds and tests
+
+```sh
+shoal run                       # The configured commands
+shoal run test -- -p api        # A configured command, with arguments
+shoal run -- cargo build        # Any command
+shoal run --now test            # At once, whatever memory is free
+```
+
+`shoal run` waits until the memory the command's earlier runs used is free,
+so the builds on the machine take turns: a configured command's runs share one
+estimate under its name, and `shoal run -- …` goes by its exact arguments.
+While it waits, it prints what it waits for and `shoal queue` lists it. Under
+memory pressure Shoal stops the newest commands before any agent; a stopped
+command runs again once it fits, and gives up after its third stop. Run builds
+and tests this way, a long one in the background, since one may wait longer
+than your tool's timeout. `--now` follows the space's `limits`
+[permission](#permitted-actions). `shoal log` shows each run's peak memory.
+
 ## Processes
 
 After a tool call, Shoal names the processes your space's commands left

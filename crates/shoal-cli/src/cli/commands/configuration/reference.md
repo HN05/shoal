@@ -1192,7 +1192,10 @@ review-worktree = ["tuicr", "-w"]
 
 Each entry is a shortcut that `shoal run <name>` runs. It is an argument
 array whose executable resolves through `PATH`. It runs in the workspace,
-without shell expansion. A higher layer replaces the whole array.
+without shell expansion. A higher layer replaces the whole array. Each run
+waits until the memory the entry's earlier runs used is free, and a
+workspace's agent is told to build and test through these entries; see
+[waiting for memory](../../../../../../docs/reference/run.md#waiting-for-memory).
 
 These placeholders expand once: `{workspace}`, `{branch}`, `{path}`, and
 `{diff_base}`, the fork point `shoal diff` compares against. A standalone

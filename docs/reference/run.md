@@ -42,6 +42,38 @@ agent's start makes. The command waits for that operation to end and then runs.
 When the operation leaves the workspace failed, Shoal refuses the command as not
 ready. A workspace that is being set up or removed refuses the command at once.
 
+## Waiting for memory
+
+`shoal run <name>` and `shoal run -- <command>` wait until the memory the
+command's earlier runs used is free, so the builds and tests on a machine take
+turns instead of running it out of memory together. The
+[agent queue](queue.md#commands-and-seed-builds) admits the command at that
+estimate. Meanwhile `shoal queue` lists it and the command prints what it
+waits for, such as `waits for memory: needs 12.0 GiB, 7.0 GiB left`. `--now`
+runs it at once, as the space's [`limits` permission](modes.md#permitted-actions)
+allows. A configured `edit` command waits like any other; `shoal edit` with
+`$VISUAL` or `$EDITOR` does not wait.
+
+A `shoal run` inside an admitted command, such as one a configured script
+runs, starts at once, since the enclosing run's admission counts it. An
+interrupt or the end of the terminal's session ends a command that waits.
+
+A configured command's runs share one estimate under its name, whatever
+arguments follow it, so `shoal run test -- -p foo` counts at what
+`shoal run test` used. Define a second entry to keep them apart. The estimate of
+`shoal run -- <command>` goes by its exact arguments. A command that has never
+run starts as soon as anything fits, and that run gives it an estimate. Each run
+adds a `Command ran` entry to the space's [log](log.md) with its peak memory and
+how long it ran.
+
+Under memory pressure, [protection](load.md) stops the newest commands holding
+memory before it stops any agent. A stopped command prints
+`stopped for critical memory pressure at <time>; runs again once it fits`, waits
+for healthy readings and its memory, and runs again, so its caller sees a slow
+command rather than a failure. Build tools such as Cargo keep what they
+finished, so the rerun redoes only what was being built. After its third stop
+the command gives up and exits non-zero, naming the stop.
+
 ## Agents are not commands
 
 `shoal run <name>` runs only `[commands]` entries, even one named after an

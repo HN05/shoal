@@ -258,7 +258,11 @@ tool call or prompt, the hook gives it as additional context:
   next watch;
 - the [leftovers](daemon.md#untracked-processes) of its workspace or chat that
   it has not been told about, with their PIDs, commands and running times and
-  `shoal stop --leftovers`.
+  `shoal stop --leftovers`;
+- when its own memory, outside the commands its space runs, rose more than
+  2 GiB above what it held at the call's start, as a build or test it ran
+  directly makes it, how far, and to run them through
+  [`shoal run`](run.md#waiting-for-memory), at most once an hour per space.
 
 A delivery through the hook replaces a running watch in the workspace, which
 ends with `superseded: true`. A subagent's tool call, which the hook input

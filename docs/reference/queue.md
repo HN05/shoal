@@ -71,14 +71,15 @@ waits for it.
 ### Memory of new agents
 
 For its first three minutes, a new agent counts at the memory a settled agent
-uses. That is the average resident memory of the workspaces of the agents
-that have run longer, at the latest usage sample. It is at least 1 GiB, and
+uses. That is the average resident memory of the agents that have run longer,
+outside the commands their spaces run, at the latest usage sample. It is at least 1 GiB, and
 2 GiB before any agent has run that long.
 
 A start must fit the memory left below the warning threshold, after:
 
 - every such new agent uses what it is expected to, and
-- every running [CI job](ci.md#job-admission) uses what it has yet to use.
+- every running [CI job](ci.md#job-admission), command and seed build uses
+  what it has yet to use.
 
 No agent starts while memory stall is past its warning level. With no agent
 running, one starts however little room memory and disk leave, unless a
@@ -110,6 +111,30 @@ reviews.
 
 Disk protection stops every running reviewer. Shoal queues each stopped
 review again, and it starts over once readings are healthy.
+
+## Commands and seed builds
+
+A [`shoal run` command](run.md#waiting-for-memory) and a repository's
+[seed build](setup.md#seed-builds) hold no slot either. Each waits until the
+memory its earlier runs used fits: the 95th percentile of the peaks of its
+latest 30 whole runs, as for a [CI job](ci.md#job-admission). A command that
+has never run counts at nothing. Until it ends, it holds what it has yet to
+use of that.
+
+- It does not wait the 10 seconds between starts, since it counts at its whole
+  estimate from its start. An agent or job admitted beside it waits for the
+  next pass.
+- With no CI job, command or seed build running, one starts whatever it
+  needs, since the agents beside it free no memory by its waiting.
+- Under a fixed `machine.max_heavy_agents`, they start at once.
+- A waiting command ranks with its workspace. A seed build ranks at priority
+  0, so it starts after the work of every other priority, however long it
+  waits.
+
+Protection stops them after CI jobs and before demos and agents. Each then
+waits again, for healthy readings too, before it runs again. Agents count at
+their own memory, without their space's commands, so no agent reserves memory
+for builds it may run later.
 
 ## Launch a new workspace
 
@@ -437,18 +462,20 @@ What holds an entry back is one of:
 - a critical or missing reading,
 - a busy CPU, with its percentage and the level a job waits at.
 
-The stagger between starts is too brief to show. A restore shows its agent.
+The stagger between starts is too brief to show. A restore shows its agent,
+and a command its `shoal run` command.
 `shoal list` shows the entries after the workspaces.
 
 On a terminal, `shoal queue` picks a waiting entry. It then starts it, with or
-without attaching, or cancels it.
+without attaching to the agent it starts, or cancels it.
 
 ### The queue as JSON
 
 `shoal queue --json` gives each entry with:
 
-- `kind`: `launch`, `restore` or `job`;
+- `kind`: `launch`, `restore`, `job`, `command` or `seed_build`;
 - for a restore, its stopped `execution`; for a job, its `job` with its run;
+  for a command, its `command`;
 - `blockers` while any remain, among them the setup of the workspace it opens;
 - `waits_for_update` for a restore of an idle agent;
 - `held_by`, with its `reason`:
@@ -479,12 +506,13 @@ refuses:
 
 With `--attach` on a terminal, it then waits for the session the agent runs
 in, and attaches to it as `shoal attach` does. It waits up to ten minutes,
-since setup comes first.
+since setup comes first. Only a launch or a restore starts an agent to attach.
 
 `shoal queue cancel` removes a waiting entry. A cancelled restore stops the
 waiting wrapper as `shoal stop` does, and leaves the agent for
-`shoal resume`. `shoal rm` also removes a waiting launch by its ID. A starting
-entry belongs to its workspace.
+`shoal resume`. A cancelled command exits, naming the cancel, and a cancelled
+seed build waits for the next check. `shoal rm` also removes a waiting launch
+by its ID. A starting entry belongs to its workspace.
 
 ### Scope
 

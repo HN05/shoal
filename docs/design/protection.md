@@ -75,12 +75,16 @@ Protection stops work in one stop order, by what each stop loses.
 `shoal-schedule` computes it beside the queue order from the same snapshot, so
 one policy defines both.
 
-The order holds three kinds of work:
+The order holds four kinds of work:
 
 1. CI jobs, newest first. A rerun loses nothing, and the newest job has done
    the least.
-2. Demos, which Shoal restarts.
-3. Connected tracked agents. A stop goes through the agent's execution wrapper
+2. `shoal run` commands and seed builds, newest first. Each waits for
+   admission again and runs again, so a stopped build redoes only what its
+   build tool had not finished, and its caller sees a slow command rather than
+   a failure. A command gives up after its third stop.
+3. Demos, which Shoal restarts.
+4. Connected tracked agents. A stop goes through the agent's execution wrapper
    and keeps its work and leases.
 
 The daemon, places and workers are never in the order. A one-shot run, such as
@@ -125,8 +129,9 @@ An agent without turn reports counts as working.
 Each consumer of the order takes the first entry that frees what it needs:
 
 - Load protection takes the first entry that holds memory worth freeing. It
-  never stops a light agent for its own sake, nor a space whose processes use
-  negligible memory at the latest usage sample.
+  never stops a light agent for its own sake, nor a command or a space whose
+  processes use negligible memory. Agents thus stop only once no job or
+  command holding memory is left.
 - Disk protection takes every agent.
 - [Making room](agent-lifecycle.md#making-room) takes an idle agent with a
   slot and no running agent below it. Putting an idle agent to sleep must
@@ -163,6 +168,9 @@ The daemon therefore maps the entries of the order onto scores from 900 down
 to 200. It lowers its own score to the floor its service manager allows
 without privilege. That floor differs between machines, so the service unit
 cannot state it.
+
+A command's processes are those of its execution, and a seed build's those of
+its running step's process group.
 
 The kernel kills a CI job's scope whole. A job that loses a process fails
 anyway, so killing all of it frees all its memory.
@@ -212,6 +220,11 @@ The daemon samples what each workspace's processes use, found by the workspace
 identity in their environment. The user can then see which workspace loads the
 machine. Admission learns a settled agent's memory from these samples, and
 load protection reads them to pass over a space that frees too little.
+
+The samples count apart what a space's commands, such as its `shoal run`
+commands and demos, and what they started hold. Admission thus learns a
+settled agent's memory outside them. A tool call over which the agent's own
+memory rose by a build's worth tells it to build through `shoal run`.
 
 A workspace's containers count in its usage. The daemon reads them from the
 container runtime's stats, by the project name Shoal gave them. A settled

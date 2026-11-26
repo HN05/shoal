@@ -78,8 +78,8 @@ not stretch, and they are what break a machine.
 
 Agents start one at a time, with a stagger between starts. An agent reads files
 before it edits and compiles, so its memory grows after it starts. A recent
-start therefore reserves what a settled agent's workspace uses until its own
-memory is measured. Admission learns that as the settled agents' average, with
+start therefore reserves what a settled agent uses, outside the commands its
+space runs, until its own memory is measured. Admission learns that as the settled agents' average, with
 a floor.
 
 ### The target
@@ -90,8 +90,6 @@ mechanism. Memory protection stays the safety net when settled agents grow
 later.
 
 An idle machine always admits one agent. Critical readings admit none.
-
-Per-agent memory profiles remain a proposal.
 
 ## Memory kept for higher-ranked work
 
@@ -183,6 +181,75 @@ Agents never wait for it.
 
 The reading comes from the overload monitor's samples, taken while dynamic job
 admission applies. No second sampler runs.
+
+## Commands and seed builds
+
+An agent's memory comes from the builds and tests it runs later, which range
+from nothing to a whole test suite. Agents build at once often enough that a
+machine running N agents has about N builds at its worst moments. A memory
+profile per agent would over-reserve for most agents, or under-reserve for the
+heaviest quarter. So the commands that do the heavy work wait for memory,
+measured per command, while agents read and think beside them.
+
+Every `shoal run` command, a `[commands]` entry or `shoal run -- …`, and every
+seed build takes admission as a one-shot run of its own kind. No flag opts a
+command in: a light command, such as `edit`, measures small and fits at once.
+
+### Expected memory of a command
+
+A command is expected to use what its earlier runs estimate, as a job is. Its
+key is a configured command's name, so an entry run with narrower arguments
+errs high, or the exact arguments of `shoal run -- …`. A seed build's key is
+its repository. One that has not run counts at nothing, starts as soon as
+anything fits, and its first run gives it an estimate.
+
+### Reservation of a command
+
+A command reserves what it has yet to use until it ends, as a job does, from
+its own reports of what it holds. Its reservation counts its whole estimate
+from its start, so it needs no stagger. It holds no slot, since no count of
+builds fits every machine.
+
+With no job, command or seed build running, one starts whatever its estimate.
+The agents beside it free no memory by its waiting, so it would wait for good.
+
+Low disk holds back every command and seed build, the first too, under a fixed
+limit as well. A build writes much of what it uses to disk.
+
+### Waiting commands
+
+A waiting command is a queue entry ranked with its workspace. A seed build
+ranks at the lowest priority, since new workspaces only start faster for it.
+
+The wrapper holds the admission over a connection of its own, separate from
+its execution's, so a long wait holds back no daemon update. After a daemon
+restart it asks again as its running execution's, which only that execution's
+wrapper may.
+
+A `shoal run` inside an admitted command or a CI job takes no admission of its
+own. The enclosing run's reads count what it holds, and waiting for memory the
+enclosing run holds would never end.
+
+### Agents count at their base
+
+An agent counts at its base, what it uses outside its space's commands. No
+agent thus reserves memory for a build it may never run.
+
+An agent that builds directly takes no admission. Its instructions name the
+configured commands and say to build through `shoal run`. Its hook says so
+again when its own memory rises by a build's worth during a tool call.
+Protection stays the backstop.
+
+### Rejected alternatives
+
+A shim for build tools on `PATH`, or a rewrite of the agent's tool calls, would
+change those tools invisibly, miss calls by full path or from scripts, and
+need matching per language. Named commands are explicit and keep a stable
+estimate per name.
+
+Protection stops commands rather than freezing them. Pushing a frozen build's
+memory to swap frees memory only where swap has room, and a frozen run wakes
+with its wall-clock guards expired.
 
 ## Restores
 

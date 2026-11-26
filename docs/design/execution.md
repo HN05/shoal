@@ -182,3 +182,29 @@ top-level command prints clap's error and a line that points to
 
 `shoal edit` runs through the same wrapper. The editor thus gets the
 workspace's scope and port variables, and counts as activity.
+
+## Commands that wait for memory
+
+A `shoal run` command, configured or not, waits for the agent queue to admit
+it by its memory, as [queue.md](queue.md) says, before its wrapper registers
+its execution. Its wrapper prints what holds it back. It holds the admission
+over a connection of its own while the command runs, so a long wait holds back
+no daemon update.
+
+The wrapper tells the daemon what the command holds every few seconds. As the
+command ends, it reports its peak, how long it ran, whether it ended on its own
+and whether the OOM killer hit it. On Linux it reads the command's scope every
+second for that. On macOS, and wherever no scope starts, it reads the command's
+process tree every second, since the daemon's ten-second sample misses short
+peaks. It sums what each process holds as the daemon's samples do, with what
+it swapped out, which a scope's reads also count.
+
+Protection's stop reaches the command through its admission. The wrapper stops
+the command, which counts as cut short, and reports its execution's end. It
+then asks for admission again and runs the command again in a new execution.
+After its third stop it exits non-zero, naming the stop.
+
+After a daemon restart, the wrapper asks for admission again as its running
+execution's. The daemon admits it at once only when the connection comes from
+that execution's wrapper, since that skips the wait that `--now` needs the
+`limits` permission for.

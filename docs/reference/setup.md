@@ -319,6 +319,11 @@ The daemon checks every minute, one repository at a time. It waits while memory
 or free disk space is past its `[machine.overload.warning]` threshold. It
 retries a failed build only after such a change or a daemon restart.
 
+A build then waits in the [agent queue](queue.md#commands-and-seed-builds)
+until the memory its earlier builds used fits, as a `shoal run` command does.
+Protection stops it, newest first, before any agent. A stopped build is no
+failure, and runs again at the next check once readings are healthy.
+
 The seed's command runs as `setup.command` does. Preset commands run in the
 worktree's root. The build gets the repository's `[env]`, with placeholders
 rendered for the seed worktree. It gets no inherited `SHOAL_*` variables and

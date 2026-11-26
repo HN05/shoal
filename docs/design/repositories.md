@@ -255,6 +255,11 @@ A seed is best effort. Its failures notify and never fail creation. Builds and
 spare clones wait while the host is under pressure, so they never add load an
 agent would feel.
 
+A build also takes admission in the agent queue at the memory its earlier
+builds used, as a `shoal run` command does. It reads its steps' process trees
+every second for its peak. Protection stops it before any agent. A stopped
+build is no failure, and builds again once readings recover.
+
 ## Build tool presets
 
 A repository's `presets` name the build tools it uses. Each preset sets up

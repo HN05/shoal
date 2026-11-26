@@ -52,8 +52,11 @@ The stop order lists the running work in the order a stop of it loses least,
 first first:
 
 1. CI jobs this machine runs, newest first. A rerun loses nothing.
-2. [Demos](demos.md). Shoal runs their commands again.
-3. Agents, a workspace's or a chat's. An agent comes only after every running
+2. [`shoal run` commands](run.md#waiting-for-memory) and
+   [seed builds](setup.md#seed-builds), newest first. Each runs again once it
+   fits, and its build tool keeps what it finished.
+3. [Demos](demos.md). Shoal runs their commands again.
+4. Agents, a workspace's or a chat's. An agent comes only after every running
    agent below its space, so a coordinator never stops while its children
    work.
 
@@ -74,6 +77,9 @@ before it tie:
 Protection stops the first entry whose stop frees what the pressure presses:
 
 - A CI job's stop always does, so agents stop only once no job runs.
+- A command's or seed build's stop does under CPU pressure. Under memory
+  pressure it does only where it holds at least 64 MiB, so agents stop only
+  once no command holding memory runs either.
 - A demo's or a heavy agent's stop does under CPU pressure. Under memory
   pressure it does only where its space's processes used at least 64 MiB at
   the latest usage sample, or have no sample.
@@ -108,7 +114,7 @@ records an `agent_stopped` alert. The alert names the pressure reason, the
 execution ID, and whether the agent [restores on its own](#automatic-restore)
 or needs `shoal resume`.
 
-Protection never selects ordinary commands, desktop handoffs or disconnected
+Protection never selects other commands, desktop handoffs or disconnected
 executions.
 
 ### Idle agents
@@ -275,8 +281,15 @@ there, and the most memory the scope held, counted as the slice's memory is.
 - A CI job's peak raises the memory its [cost](ci.md#job-admission) counts. Its kills
   add a `job_ended` entry to its workspace's [log](log.md) that names them,
   such as a build's compiler killed for memory.
+- A `shoal run` command's peak and kills count for its
+  [estimate](run.md#waiting-for-memory), and its `command_ran` entry in the
+  space's log shows its peak.
 - An agent's kills show as `oom_kills` in its `agent_exited` or
   `agent_stopped` entry, and in the alert its exit sends.
+
+On macOS, and wherever no scope starts, the wrapper of a `shoal run` command
+reads its process tree every second instead, summing what each process holds
+as the usage samples do, with what it swapped out.
 
 A scope the kernel killed whole is gone before its last read. A command it
 ended with SIGKILL therefore counts a kill when the slice counted one since the
