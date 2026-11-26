@@ -13,7 +13,7 @@ pub struct ConflictsConfig {
 }
 
 impl ConflictsConfig {
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         for pattern in self.sensitive.iter().flatten() {
             ensure!(
                 !pattern.is_empty()

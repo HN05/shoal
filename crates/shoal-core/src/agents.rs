@@ -27,12 +27,13 @@ use crate::{
 };
 
 pub use args::{
-    add_dir_args, chat_dir_args, chat_dirs, insert_options, model_args, restored_instruction_args,
-    workspace_args, workspace_dir_args, workspace_dirs, writable_config_dir,
+    add_dir_args, chat_dirs, insert_options, model_args, restored_instruction_args, workspace_dirs,
+    writable_config_dir,
 };
+pub(crate) use checks::programs;
 pub use checks::{
     NO_AGENT, check_model, check_queued_launch, checked_agent, ensure_available, ensure_forks,
-    named_agent, programs, resolve_launch, resolve_model,
+    resolve_launch, resolve_model,
 };
 pub use homes::{AgentHome, HomeRecords};
 pub use installed::{installed, installed_agents, names};
@@ -256,7 +257,7 @@ pub fn integration(kind: IntegrationKind) -> &'static dyn Integration {
 /// pickers and completion leave the agents of one that is off out.
 pub struct Added {
     pub name: &'static str,
-    pub integration: &'static dyn Integration,
+    pub(crate) integration: &'static dyn Integration,
     off: fn(&Effective) -> Option<&'static str>,
 }
 
@@ -273,7 +274,7 @@ pub const ADDED: &[Added] = &[
     },
 ];
 
-pub fn added(name: &Agent) -> Option<&'static Added> {
+pub(crate) fn added(name: &Agent) -> Option<&'static Added> {
     ADDED.iter().find(|added| *name == added.name)
 }
 
@@ -307,7 +308,7 @@ pub fn agent_off(settings: &Effective, name: &Agent) -> Option<&'static str> {
 
 /// How updates reach an agent with `integration` launched under `settings`:
 /// pushed when it wakes for them.
-pub fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
+pub(crate) fn delivery(integration: &dyn Integration, settings: &Effective) -> templates::Delivery {
     match integration.wakes() {
         Wake::Hook => templates::Delivery::Pushed,
         Wake::Prompt if crate::terminal::agents_can_be_prompted(settings) => {

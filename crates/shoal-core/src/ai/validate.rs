@@ -10,7 +10,7 @@ use super::{Agent, Agents, resolve::runs_as_agent};
 use crate::config::named_commands::{self, Commands};
 
 /// Each tool `agents` describes after every layer.
-pub fn validate(agents: &Agents) -> Result<()> {
+pub(crate) fn validate(agents: &Agents) -> Result<()> {
     for (name, agent) in agents {
         entry(name, agent)?;
         if let Some(argv) = &agent.command {
@@ -42,7 +42,7 @@ pub fn validate(agents: &Agents) -> Result<()> {
 
 /// What one tool's description must hold whatever the other tools are, so a
 /// single layer can be checked before it is saved.
-pub fn entry(name: &str, agent: &Agent) -> Result<()> {
+pub(crate) fn entry(name: &str, agent: &Agent) -> Result<()> {
     crate::validate::name("AI tool", name)?;
     not_reserved(name)?;
     ensure!(
@@ -110,7 +110,7 @@ fn validate_command(name: &str, argv: &[String]) -> Result<()> {
 
 /// A name `--agent` takes: a portable one, which may be a built-in or
 /// configured command's too, since agents are not commands.
-pub fn agent_name(name: &str) -> Result<()> {
+pub(crate) fn agent_name(name: &str) -> Result<()> {
     ensure!(
         name.parse::<crate::agent::Agent>().is_ok(),
         "{name:?} cannot name an agent; use lowercase letters, digits, '-' or '_'"
@@ -203,7 +203,7 @@ fn refuse_arguments(argv: &[String], placeholders: &[&str]) -> Result<()> {
 }
 
 /// Each configured skill directory is absolute or under the home.
-pub fn skill_dirs(
+pub(crate) fn skill_dirs(
     machine: &BTreeMap<String, crate::config::agents::MachineAgent>,
     home: &Path,
 ) -> Result<()> {

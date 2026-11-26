@@ -31,7 +31,7 @@ impl Shared {
     }
 
     /// The shared config beside the global config of `home`.
-    pub fn path_for_home(home: &Path) -> PathBuf {
+    pub(crate) fn path_for_home(home: &Path) -> PathBuf {
         Config::path_for_home(home).with_file_name(FILE)
     }
 
@@ -70,7 +70,7 @@ impl Shared {
 
     /// `text` as the shared config. Every machine reads it, also one whose
     /// own file sets nothing, so it must be valid over the defaults alone.
-    pub fn parse(text: &str, paths: &Paths) -> Result<Self> {
+    pub(crate) fn parse(text: &str, paths: &Paths) -> Result<Self> {
         let parse::GlobalFile {
             machine,
             repository,

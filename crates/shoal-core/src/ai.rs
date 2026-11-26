@@ -10,40 +10,43 @@ use anyhow::Result;
 mod builtin;
 mod launch;
 mod resolve;
-pub mod validate;
+pub(crate) mod validate;
 
-pub use builtin::{PROVIDERS, default_commands};
-pub use launch::{Arguments, Environment, ReviewFields, Schema, oneshot_command};
-pub use resolve::{DEFAULT_PROMPT_CACHE, LaunchProfile, Tool, Tools, inherit_launchers, tools};
+pub use builtin::PROVIDERS;
+pub(crate) use builtin::default_commands;
+pub(crate) use launch::Arguments;
+pub use launch::{Environment, ReviewFields, Schema, oneshot_command};
+pub use resolve::{DEFAULT_PROMPT_CACHE, Tool, tools};
+pub(crate) use resolve::{LaunchProfile, Tools, inherit_launchers};
 pub use shoal_protocol::integrations::IntegrationKind;
-pub use validate::validate;
+pub(crate) use validate::validate;
 
-pub type Agents = BTreeMap<String, Agent>;
+pub(crate) type Agents = BTreeMap<String, Agent>;
 
 /// One AI tool as its settings and this machine describe it.
 #[derive(Debug, Default)]
 pub struct Agent {
-    pub skill_dir: Option<PathBuf>,
-    pub command: Option<Vec<String>>,
-    pub instructions: Option<Vec<String>>,
-    pub resume: Option<Vec<String>>,
-    pub resume_latest: Option<Vec<String>>,
-    pub fork: Option<Vec<String>>,
-    pub add_dir: Option<Vec<String>>,
-    pub model: Option<String>,
-    pub effort: Option<String>,
-    pub model_args: Option<Vec<String>>,
-    pub effort_args: Option<Vec<String>>,
-    pub review: Option<Vec<String>>,
-    pub review_resume: Option<Vec<String>>,
-    pub gate: Option<Vec<String>>,
-    pub gate_resume: Option<Vec<String>>,
-    pub base: Option<String>,
-    pub env: BTreeMap<String, String>,
-    pub env_remove: Vec<String>,
-    pub retry: Option<bool>,
-    pub prompt_cache_minutes: Option<u64>,
-    pub proxy: Option<String>,
+    pub(crate) skill_dir: Option<PathBuf>,
+    pub(crate) command: Option<Vec<String>>,
+    pub(crate) instructions: Option<Vec<String>>,
+    pub(crate) resume: Option<Vec<String>>,
+    pub(crate) resume_latest: Option<Vec<String>>,
+    pub(crate) fork: Option<Vec<String>>,
+    pub(crate) add_dir: Option<Vec<String>>,
+    pub(crate) model: Option<String>,
+    pub(crate) effort: Option<String>,
+    pub(crate) model_args: Option<Vec<String>>,
+    pub(crate) effort_args: Option<Vec<String>>,
+    pub(crate) review: Option<Vec<String>>,
+    pub(crate) review_resume: Option<Vec<String>>,
+    pub(crate) gate: Option<Vec<String>>,
+    pub(crate) gate_resume: Option<Vec<String>>,
+    pub(crate) base: Option<String>,
+    pub(crate) env: BTreeMap<String, String>,
+    pub(crate) env_remove: Vec<String>,
+    pub(crate) retry: Option<bool>,
+    pub(crate) prompt_cache_minutes: Option<u64>,
+    pub(crate) proxy: Option<String>,
 }
 
 /// The names of the tools that run as agents.

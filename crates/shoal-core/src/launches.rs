@@ -99,7 +99,7 @@ fn ensure_worker_fits(launch: &Launch) -> Result<()> {
 }
 
 /// The flags the launch sets that only a workspace takes.
-pub fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
+pub(crate) fn workspace_flags(launch: &Launch) -> Vec<&'static str> {
     [
         ("--branch", launch.branch.is_some()),
         ("--pr", launch.pr.is_some()),
@@ -136,7 +136,7 @@ pub fn ensure_begins_as_chat(launch: &Launch) -> Result<()> {
 
 /// The kind of space the arguments other than the mode fit: a workspace
 /// for a flag only a workspace takes or a PR or branch link.
-pub fn fitting_kind(launch: &Launch) -> Option<SpaceKind> {
+pub(crate) fn fitting_kind(launch: &Launch) -> Option<SpaceKind> {
     (links_branch(launch) || !workspace_flags(launch).is_empty()).then_some(SpaceKind::Workspace)
 }
 
@@ -234,7 +234,7 @@ pub fn named_issue(launch: &Launch) -> Result<Option<ItemInput>> {
 /// The repository the positional argument may name: a repository's, or a
 /// number, which names a repository of that name until the start decides it
 /// names an issue.
-pub fn positional_repository(launch: &Launch) -> Option<&str> {
+pub(crate) fn positional_repository(launch: &Launch) -> Option<&str> {
     match &launch.target {
         Some(StartTarget::Repository(named) | StartTarget::Number(named)) => Some(named),
         _ => None,
@@ -251,7 +251,7 @@ pub fn named_pull(launch: &Launch) -> Option<ItemInput> {
 }
 
 /// The issue, PR and CI run the arguments name by URL.
-pub fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
+pub(crate) fn linked_items(launch: &Launch) -> impl Iterator<Item = &ItemRef> {
     let flagged = [&launch.issue, &launch.pr, &launch.ci]
         .into_iter()
         .filter_map(|item| match item {

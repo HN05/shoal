@@ -37,7 +37,7 @@ struct Changed {
 impl LeftFiles {
     /// Read the files left in `dir`, a worktree of `repo` that Git disowned,
     /// against `head`.
-    pub async fn read(repo: &Path, dir: &Path, head: &CommitId) -> Result<Self> {
+    pub(crate) async fn read(repo: &Path, dir: &Path, head: &CommitId) -> Result<Self> {
         let index_dir = tempfile::tempdir().context("create a temporary index directory")?;
         let left = Self {
             git_dir: super::super::common_dir(repo).await?,
@@ -72,7 +72,7 @@ impl LeftFiles {
     /// The files that differ from the commit's, as `git status --porcelain`
     /// lists them, paths quoted as Git quotes them: a changed one with its
     /// status letter, an untracked one with `??`.
-    pub async fn status(&self) -> Result<String> {
+    pub(crate) async fn status(&self) -> Result<String> {
         let changed = self
             .run(&["diff-files", "--name-status", SUBMODULES])
             .await?;

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::value::Value;
 
-pub type Proxies = BTreeMap<String, Proxy>;
+pub(crate) type Proxies = BTreeMap<String, Proxy>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -16,7 +16,7 @@ pub struct Proxy {
     /// CLIProxyAPI's; without one, each agent's go where they would without
     /// the proxy.
     #[serde(default)]
-    pub upstream: Option<String>,
+    pub(crate) upstream: Option<String>,
     /// The key the upstream gets instead of the agent's own credentials;
     /// without one, the agent's pass through. Only an `upstream` takes one,
     /// so an agent's own API never gets a gateway's key.
@@ -24,7 +24,7 @@ pub struct Proxy {
     pub key: Option<Value>,
 }
 
-pub fn validate(proxies: &Proxies) -> Result<()> {
+pub(crate) fn validate(proxies: &Proxies) -> Result<()> {
     for (name, proxy) in proxies {
         crate::validate::name("proxy", name)?;
         if let Some(upstream) = &proxy.upstream {
@@ -49,7 +49,7 @@ pub fn validate(proxies: &Proxies) -> Result<()> {
 }
 
 /// `ai.<name>.proxy` names a defined proxy.
-pub fn validate_references(
+pub(crate) fn validate_references(
     agents: &BTreeMap<String, crate::config::agents::MachineAgent>,
     proxies: &Proxies,
 ) -> Result<()> {
@@ -67,7 +67,7 @@ pub fn validate_references(
 /// No Codex tool names a proxy whose `upstream` is Codex's own API URL
 /// rather than a server root: Codex's requests reach the upstream under
 /// `/v1`, so such an upstream would get it twice, or a path ChatGPT lacks.
-pub fn validate_routes(tools: &crate::ai::Tools, proxies: &Proxies) -> Result<()> {
+pub(crate) fn validate_routes(tools: &crate::ai::Tools, proxies: &Proxies) -> Result<()> {
     let codex = tools
         .values()
         .filter(|tool| tool.integration == crate::ai::IntegrationKind::Codex);
@@ -97,7 +97,7 @@ fn is_codex_api(url: &str) -> bool {
     host.eq_ignore_ascii_case("chatgpt.com") || path == "v1" || path.ends_with("/v1")
 }
 
-pub fn routes(tools: &crate::ai::Tools, proxies: &Proxies) -> BTreeMap<String, Proxy> {
+pub(crate) fn routes(tools: &crate::ai::Tools, proxies: &Proxies) -> BTreeMap<String, Proxy> {
     tools
         .values()
         .filter_map(|tool| {

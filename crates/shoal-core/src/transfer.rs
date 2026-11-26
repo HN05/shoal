@@ -44,7 +44,7 @@ use shoal_protocol::transcripts::Environments;
 /// The first line of a package names its format and the Shoal version that
 /// wrote it; another version refuses the package, since the shapes it holds
 /// change freely between versions.
-pub const FORMAT: &str = "shoal workspace";
+pub(crate) const FORMAT: &str = "shoal workspace";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Why a package of `version`, another than this Shoal's, is refused: a

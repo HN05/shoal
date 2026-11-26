@@ -18,7 +18,7 @@ pub mod existing_branch;
 pub mod fetch;
 pub mod files;
 pub mod fold;
-pub mod ignored;
+pub(crate) mod ignored;
 pub mod merge_into;
 mod merge_methods;
 mod merge_tree;

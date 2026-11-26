@@ -21,16 +21,16 @@ const SEARCH_DAYS: usize = 8;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Timer {
-    pub schedule: Schedule,
+    pub(crate) schedule: Schedule,
     /// The IANA name of its time zone; the local one when none.
-    pub timezone: Option<String>,
+    pub(crate) timezone: Option<String>,
     /// How old a missed firing may be and still run once the daemon is
     /// back: one interval for `every`, 24 hours for `at`, unless set.
-    pub catch_up: Span,
+    pub(crate) catch_up: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Schedule {
+pub(crate) enum Schedule {
     /// The interval from the last firing.
     Every(Span),
     /// The clock times, earliest first, on the days it fires.
@@ -50,7 +50,7 @@ pub struct ClockTime {
 /// A day of the week as config writes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum Day {
+pub(crate) enum Day {
     Mon,
     Tue,
     Wed,
@@ -76,7 +76,7 @@ pub struct Due {
 impl Timer {
     /// A timer firing every `every` or at the clock times `at` on `days`,
     /// every day without them, in `timezone`, catching up within `catch_up`.
-    pub fn new(
+    pub(crate) fn new(
         every: Option<Span>,
         at: Option<Vec<ClockTime>>,
         days: Option<Vec<Day>>,
@@ -281,7 +281,7 @@ fn instant(zone: &TimeZone, date: Date, time: ClockTime) -> UnixTime {
 }
 
 impl Day {
-    pub const ALL: [Self; 7] = [
+    pub(crate) const ALL: [Self; 7] = [
         Self::Mon,
         Self::Tue,
         Self::Wed,

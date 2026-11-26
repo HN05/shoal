@@ -10,10 +10,10 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 /// The score of the first entry of the stop order.
-pub const FIRST: i16 = 900;
+pub(crate) const FIRST: i16 = 900;
 /// The score of the last entry, which the command an execution's wrapper
 /// starts takes from its start, until the daemon gives it its place.
-pub const LAST: i16 = 200;
+pub(crate) const LAST: i16 = 200;
 
 /// [`LAST`] as written to a score file, which a child writes before exec
 /// without formatting it.

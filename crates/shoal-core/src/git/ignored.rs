@@ -66,7 +66,7 @@ struct Entry {
 /// limits the copy to the entries it matches; `exclude` holds gitignore-style
 /// patterns of entries to leave out. Entries that hold another worktree, or
 /// another tool's state, are never copied.
-pub async fn copy(workspace: &Path, exclude: &[String]) -> Result<u64> {
+pub(crate) async fn copy(workspace: &Path, exclude: &[String]) -> Result<u64> {
     let worktrees = registered_worktrees(workspace).await?;
     let checkout = worktrees
         .first()

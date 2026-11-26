@@ -35,7 +35,8 @@ pub struct FakeSubvolumes {
 
 impl FakeSubvolumes {
     /// A fake whose subvolumes the caller may destroy.
-    pub fn destroying() -> Self {
+    #[cfg(test)]
+    pub(crate) fn destroying() -> Self {
         Self {
             destroys: true,
             ..Self::default()
@@ -59,7 +60,7 @@ impl FakeSubvolumes {
     }
 
     /// Count the existing directory `path` as a subvolume.
-    pub fn add_root(&self, path: &Path) {
+    pub(crate) fn add_root(&self, path: &Path) {
         self.roots.lock().unwrap().insert(path.to_owned());
     }
 

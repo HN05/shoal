@@ -386,7 +386,7 @@ fn agent_output_under(setting: Option<&OsStr>) -> Option<(&'static str, &'static
 /// This process's [`OUTPUT`] setting, empty when it has none, for a launch
 /// that starts in another environment, such as the daemon's, to use in place
 /// of that environment's own.
-pub fn output_setting() -> (String, String) {
+pub(crate) fn output_setting() -> (String, String) {
     (OUTPUT.into(), std::env::var(OUTPUT).unwrap_or_default())
 }
 
@@ -412,7 +412,7 @@ pub fn own_chat() -> Option<SpaceId> {
 
 /// Whether this process carries a scope other than its own chat's, which
 /// names its own workspace, as a scope a starter handed it does.
-pub fn workspace_scope() -> bool {
+pub(crate) fn workspace_scope() -> bool {
     is_scoped() && own_chat().is_none()
 }
 

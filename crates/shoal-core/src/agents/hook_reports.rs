@@ -56,7 +56,7 @@ pub struct Kept {
     /// runs in no execution, such as a chat's: one of them is the agent
     /// that made the report, which a restore replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ancestors: Vec<u32>,
+    pub(crate) ancestors: Vec<u32>,
     pub at: SystemTime,
     /// Why the daemon did not record it, when the hook learned why before
     /// it ended.

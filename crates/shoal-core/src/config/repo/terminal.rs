@@ -12,81 +12,81 @@ use serde::{Deserialize, Serialize};
 pub struct TerminalConfig {
     #[option(default = DefaultHost::default(), resolve = DefaultHost::resolve -> HostName)]
     pub default_host: Option<DefaultHost>,
-    pub focus: Option<bool>,
+    pub(crate) focus: Option<bool>,
     #[option(default = true)]
-    pub close_when_done: Option<bool>,
+    pub(crate) close_when_done: Option<bool>,
     #[option(default = false)]
-    pub nested_zmx: Option<bool>,
+    pub(crate) nested_zmx: Option<bool>,
     #[option(section)]
-    pub herdr: HerdrConfig,
+    pub(crate) herdr: HerdrConfig,
     #[option(section)]
-    pub rex: RexConfig,
+    pub(crate) rex: RexConfig,
     #[option(section)]
-    pub tmux: TmuxConfig,
+    pub(crate) tmux: TmuxConfig,
     #[option(section)]
-    pub zellij: ZellijConfig,
+    pub(crate) zellij: ZellijConfig,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Herdr)]
-pub struct HerdrConfig {
+pub(crate) struct HerdrConfig {
     #[option(default = true)]
-    pub enabled: Option<bool>,
-    pub tab_name: Option<String>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) tab_name: Option<String>,
     #[option(default = true)]
-    pub new_tab: Option<bool>,
+    pub(crate) new_tab: Option<bool>,
     #[option(default = "{repo}".into())]
-    pub workspace_name: Option<String>,
-    pub close_when_done: Option<bool>,
-    pub nested_zmx: Option<bool>,
+    pub(crate) workspace_name: Option<String>,
+    pub(crate) close_when_done: Option<bool>,
+    pub(crate) nested_zmx: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Rex)]
-pub struct RexConfig {
+pub(crate) struct RexConfig {
     #[option(default = true)]
-    pub enabled: Option<bool>,
+    pub(crate) enabled: Option<bool>,
     #[option(default = true)]
-    pub new_window: Option<bool>,
+    pub(crate) new_window: Option<bool>,
     #[option(default = Placement::default())]
-    pub placement: Option<Placement>,
-    pub window_name: Option<String>,
+    pub(crate) placement: Option<Placement>,
+    pub(crate) window_name: Option<String>,
     #[option(default = "{repo}".into())]
-    pub session_name: Option<String>,
-    pub close_when_done: Option<bool>,
-    pub nested_zmx: Option<bool>,
+    pub(crate) session_name: Option<String>,
+    pub(crate) close_when_done: Option<bool>,
+    pub(crate) nested_zmx: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Tmux)]
-pub struct TmuxConfig {
-    pub enabled: Option<bool>,
+pub(crate) struct TmuxConfig {
+    pub(crate) enabled: Option<bool>,
     #[option(default = true)]
-    pub new_window: Option<bool>,
+    pub(crate) new_window: Option<bool>,
     #[option(default = Placement::default())]
-    pub placement: Option<Placement>,
-    pub window_name: Option<String>,
+    pub(crate) placement: Option<Placement>,
+    pub(crate) window_name: Option<String>,
     #[option(default = "{repo}".into())]
-    pub session_name: Option<String>,
-    pub close_when_done: Option<bool>,
-    pub nested_zmx: Option<bool>,
+    pub(crate) session_name: Option<String>,
+    pub(crate) close_when_done: Option<bool>,
+    pub(crate) nested_zmx: Option<bool>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = Zellij)]
-pub struct ZellijConfig {
-    pub enabled: Option<bool>,
+pub(crate) struct ZellijConfig {
+    pub(crate) enabled: Option<bool>,
     #[option(default = true)]
-    pub new_tab: Option<bool>,
+    pub(crate) new_tab: Option<bool>,
     #[option(default = TabPlacement::default())]
-    pub placement: Option<TabPlacement>,
-    pub tab_name: Option<String>,
-    pub close_when_done: Option<bool>,
-    pub nested_zmx: Option<bool>,
+    pub(crate) placement: Option<TabPlacement>,
+    pub(crate) tab_name: Option<String>,
+    pub(crate) close_when_done: Option<bool>,
+    pub(crate) nested_zmx: Option<bool>,
 }
 
 states!(

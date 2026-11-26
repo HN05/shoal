@@ -7,7 +7,7 @@ pub fn render(template: &str, fields: &[(&str, &str)]) -> String {
     output
 }
 
-pub fn render_os(template: &str, fields: &[(&str, &OsStr)]) -> OsString {
+pub(crate) fn render_os(template: &str, fields: &[(&str, &OsStr)]) -> OsString {
     let mut output = OsString::new();
     render_into(template, fields, |value| output.push(value));
     output

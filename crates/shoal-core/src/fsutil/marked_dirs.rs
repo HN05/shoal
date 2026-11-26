@@ -13,7 +13,7 @@ pub(crate) static CREATING_MARKED: std::sync::Mutex<()> = std::sync::Mutex::new(
 /// Create `root` marked as `owner`'s when it is missing; an existing one,
 /// even one appearing meanwhile, is never claimed and is left for
 /// [`is_marked_dir`] to judge.
-pub fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
+pub(crate) fn create_marked_dir(root: &Path, owner: &str) -> io::Result<()> {
     let _creating = CREATING_MARKED
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -40,13 +40,13 @@ pub(crate) fn marked_owner(root: &Path) -> Option<String> {
 /// Whether `root` is a real directory marked as `owner`'s, so nothing Shoal
 /// creates or deletes there is reached through a symlink or belongs to anyone
 /// else.
-pub fn is_marked_dir(root: &Path, owner: &str) -> bool {
+pub(crate) fn is_marked_dir(root: &Path, owner: &str) -> bool {
     check_marked_dir(root, owner).unwrap_or(false)
 }
 
 /// [`is_marked_dir`], failing when `root` or its marker exists but cannot be
 /// read, rather than taking that for a directory Shoal did not create.
-pub fn check_marked_dir(root: &Path, owner: &str) -> io::Result<bool> {
+pub(crate) fn check_marked_dir(root: &Path, owner: &str) -> io::Result<bool> {
     match fs::symlink_metadata(root) {
         Ok(metadata) if metadata.is_dir() => {}
         Ok(_) => return Ok(false),

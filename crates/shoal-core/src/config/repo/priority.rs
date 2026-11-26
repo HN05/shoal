@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 #[options(resolved = PrioritySettings)]
 pub struct PriorityConfig {
     #[option(named)]
-    pub labels: BTreeMap<String, Priority>,
+    pub(crate) labels: BTreeMap<String, Priority>,
 }
 
 impl PrioritySettings {

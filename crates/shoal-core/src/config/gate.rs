@@ -16,36 +16,36 @@ pub struct GateConfig {
     pub agent: Option<Agent>,
     #[serde(deserialize_with = "crate::agent::configured")]
     pub fallback_agent: Option<Agent>,
-    pub instructions: Option<String>,
+    pub(crate) instructions: Option<String>,
     /// The cases the gate passes to the user, each of which an escalation
     /// quotes word for word.
     #[option(default = Vec::new())]
-    pub escalate: Option<Vec<String>>,
+    pub(crate) escalate: Option<Vec<String>>,
     #[option(section)]
-    pub issue_open: GateKeyConfig,
+    pub(crate) issue_open: GateKeyConfig,
     #[option(section)]
-    pub pr_open: GateKeyConfig,
+    pub(crate) pr_open: GateKeyConfig,
     #[option(section)]
-    pub issue_other_repositories: GateKeyConfig,
+    pub(crate) issue_other_repositories: GateKeyConfig,
     #[option(section)]
-    pub merge: GateKeyConfig,
+    pub(crate) merge: GateKeyConfig,
     #[option(section)]
-    pub push: GateKeyConfig,
+    pub(crate) push: GateKeyConfig,
 }
 
 /// What `[gate.KEY]` adds to `[gate]` for the requests the key governs.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = GateKey)]
-pub struct GateKeyConfig {
-    pub instructions: Option<String>,
+pub(crate) struct GateKeyConfig {
+    pub(crate) instructions: Option<String>,
     #[option(default = Vec::new())]
-    pub escalate: Option<Vec<String>>,
+    pub(crate) escalate: Option<Vec<String>>,
 }
 
 impl GateConfig {
     /// Refuse an escalation case without text, which no verdict could quote.
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let tables = [
             ("gate", &self.escalate),
             ("gate.issue_open", &self.issue_open.escalate),

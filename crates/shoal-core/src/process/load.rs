@@ -5,6 +5,6 @@ mod memory;
 
 pub use cpu::{CpuTicks, cpu_ticks};
 pub use memory::{
-    Memory, MemoryLevel, MemoryLevels, MemoryPressure, MemoryReading, SampledWork, Stall,
-    WorkLimit, WorkMemory, memory, ram,
+    Memory, MemoryPressure, MemoryReading, SampledWork, Stall, WorkLimit, WorkMemory, memory, ram,
 };
+pub(crate) use memory::{MemoryLevel, MemoryLevels};

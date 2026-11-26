@@ -173,7 +173,7 @@ impl Disk {
 pub struct Recovery {
     pub enabled: bool,
     pub memory_used_percent: u8,
-    pub memory_stall_percent: u8,
+    pub(crate) memory_stall_percent: u8,
     pub cpu_used_percent: u8,
     pub sustained_seconds: u64,
 }
@@ -198,7 +198,7 @@ pub struct Warning {
     pub memory_stall_percent: u8,
     pub cpu_used_percent: u8,
     pub cpu_sustained_seconds: u64,
-    pub disk_free_gib: u64,
+    pub(crate) disk_free_gib: u64,
     pub repeat_minutes: u64,
 }
 
@@ -243,7 +243,7 @@ impl Overload {
 
     /// Set the CPU and memory thresholds `written`, the `[machine.overload]` table as
     /// the file spells it, leaves out from `load`.
-    pub fn follow_load(&mut self, load: Load, written: &toml::Table) {
+    pub(crate) fn follow_load(&mut self, load: Load, written: &toml::Table) {
         let unset = |table: &str, key: &str| {
             written
                 .get(table)
@@ -308,7 +308,7 @@ impl Overload {
         }
     }
 
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         ensure!(
             (50..=99).contains(&self.memory.used_percent),
             "machine.overload.memory.used_percent must be between 50 and 99"

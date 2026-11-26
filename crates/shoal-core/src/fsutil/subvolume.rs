@@ -200,28 +200,28 @@ mod ioctl {
     /// `struct btrfs_ioctl_vol_args`.
     #[repr(C)]
     pub(super) struct VolArgs {
-        pub fd: i64,
-        pub name: [u8; 4088],
+        pub(crate) fd: i64,
+        pub(crate) name: [u8; 4088],
     }
 
     /// `struct btrfs_ioctl_vol_args_v2`, without quota group inheritance.
     #[repr(C)]
     pub(super) struct VolArgsV2 {
-        pub fd: i64,
-        pub transid: u64,
-        pub flags: u64,
-        pub unused: [u64; 4],
-        pub name: [u8; 4040],
+        pub(crate) fd: i64,
+        pub(crate) transid: u64,
+        pub(crate) flags: u64,
+        pub(crate) unused: [u64; 4],
+        pub(crate) name: [u8; 4040],
     }
 
     /// `struct btrfs_ioctl_get_subvol_rootref_args`: the subvolumes whose
     /// parent is the one the descriptor is in.
     #[repr(C)]
     pub(super) struct RootRefArgs {
-        pub min_treeid: u64,
-        pub rootref: [[u64; 2]; 255],
-        pub num_items: u8,
-        pub align: [u8; 7],
+        pub(crate) min_treeid: u64,
+        pub(crate) rootref: [[u64; 2]; 255],
+        pub(crate) num_items: u8,
+        pub(crate) align: [u8; 7],
     }
 
     /// Whether `path` lies on a btrfs filesystem.

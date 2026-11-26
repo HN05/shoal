@@ -37,7 +37,7 @@ impl StopExt for Stop {
 
 /// When the file at `path` was last saved, which is when a saved agent
 /// stopped.
-pub fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
+pub(crate) fn saved_at(path: &Path) -> Option<crate::time::UnixTime> {
     let modified = std::fs::metadata(path).and_then(|metadata| metadata.modified());
     Some(crate::time::UnixTime::from_system_time(modified.ok()?))
 }

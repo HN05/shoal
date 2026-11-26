@@ -19,7 +19,7 @@ pub struct Environment {
 
 impl Environment {
     /// The values set, with a leading `~/` naming a path under `home`.
-    pub fn values(&self, home: &Path) -> BTreeMap<String, OsString> {
+    pub(crate) fn values(&self, home: &Path) -> BTreeMap<String, OsString> {
         self.set
             .iter()
             .map(|(variable, value)| {
@@ -43,7 +43,7 @@ impl Environment {
 
     /// These changes with `variable` also set to `effort`, when both are
     /// given.
-    pub fn with_effort(&self, variable: Option<&str>, effort: Option<&str>) -> Self {
+    pub(crate) fn with_effort(&self, variable: Option<&str>, effort: Option<&str>) -> Self {
         let mut environment = self.clone();
         if let (Some(variable), Some(effort)) = (variable, effort) {
             environment.remove.remove(variable);
@@ -67,15 +67,15 @@ impl Environment {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Arguments {
     pub instructions: Option<Vec<String>>,
-    pub resume: Option<Vec<String>>,
-    pub resume_latest: Option<Vec<String>>,
-    pub fork: Option<Vec<String>>,
-    pub add_dir: Option<Vec<String>>,
-    pub model_args: Option<Vec<String>>,
-    pub effort_args: Option<Vec<String>>,
+    pub(crate) resume: Option<Vec<String>>,
+    pub(crate) resume_latest: Option<Vec<String>>,
+    pub(crate) fork: Option<Vec<String>>,
+    pub(crate) add_dir: Option<Vec<String>>,
+    pub(crate) model_args: Option<Vec<String>>,
+    pub(crate) effort_args: Option<Vec<String>>,
     pub review: Option<Vec<String>>,
     pub review_resume: Option<Vec<String>>,
-    pub gate: Option<Vec<String>>,
+    pub(crate) gate: Option<Vec<String>>,
     pub gate_resume: Option<Vec<String>>,
 }
 

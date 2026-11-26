@@ -20,13 +20,13 @@ macro_rules! tools {
         pub enum Tool { $($tool),+ }
 
         impl Tool {
-            pub const ALL: &[Self] = &[$(Self::$tool),+];
+            pub(crate) const ALL: &[Self] = &[$(Self::$tool),+];
 
             pub const fn program(self) -> &'static str {
                 match self { $(Self::$tool => $program),+ }
             }
 
-            pub fn dependency(self) -> Option<Dependency> {
+            pub(crate) fn dependency(self) -> Option<Dependency> {
                 match self { $(Self::$tool => $dependency),+ }
             }
         }

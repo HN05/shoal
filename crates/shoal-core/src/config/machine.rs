@@ -59,8 +59,8 @@ impl KeepAwake {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Machine {
-    pub root_dir: Option<PathBuf>,
-    pub load: overload::Load,
+    pub(crate) root_dir: Option<PathBuf>,
+    pub(crate) load: overload::Load,
     #[serde(deserialize_with = "KeepAwake::deserialize")]
     pub keep_awake: KeepAwake,
     pub availability: shoal_protocol::hub::availability::AvailabilitySetting,
@@ -70,7 +70,7 @@ pub struct Machine {
     #[serde(skip_serializing_if = "MemoryLimitSetting::follows_load")]
     pub memory_limit: MemoryLimitSetting,
     pub overload: overload::Overload,
-    pub agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
+    pub(crate) agents: std::collections::BTreeMap<String, super::agents::MachineAgent>,
     pub proxies: crate::config::proxies::Proxies,
     pub forges: forges::Forges,
     pub git_profiles: crate::config::git_profiles::Git,
@@ -81,7 +81,7 @@ pub struct Machine {
     pub containers: Containers,
     /// The options of `[machine]` that take another's value.
     #[serde(skip)]
-    pub same_as: same_as::References,
+    pub(crate) same_as: same_as::References,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -148,7 +148,7 @@ pub struct Hub {
     pub enabled: bool,
     pub listen: std::net::SocketAddr,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub url: Option<shoal_protocol::hub::HubUrl>,
+    pub(crate) url: Option<shoal_protocol::hub::HubUrl>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub connect: Vec<String>,
     pub auto_update: bool,
@@ -157,7 +157,7 @@ pub struct Hub {
     pub default_machine: Option<String>,
     pub placement: shoal_schedule::placement::Policy,
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub forward: std::collections::BTreeMap<
+    pub(crate) forward: std::collections::BTreeMap<
         shoal_protocol::hub::app_servers::PathPrefix,
         std::net::SocketAddr,
     >,

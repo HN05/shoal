@@ -16,7 +16,7 @@ use crate::{
     model::{ChatHome, Head, SpaceKind, SpaceLinks, Workspace},
 };
 
-pub use crate::placeholders::render;
+pub(crate) use crate::placeholders::render;
 
 const WORKSPACE_FACTS: &str = include_str!("templates/facts/workspace.md");
 const COMMIT_WORKSPACE_FACTS: &str = include_str!("templates/facts/commit_workspace.md");
@@ -42,7 +42,7 @@ const REVIEW_BASE_MARKER: &str = "<!-- base -->\n";
 /// Whether a rule's text repeats the opening of the facts of a space, as a
 /// copy of an earlier worker template does, although every launch already
 /// receives them.
-pub fn repeats_guidance(template: &str) -> bool {
+pub(crate) fn repeats_guidance(template: &str) -> bool {
     let openings = [
         WORKSPACE_FACTS,
         COMMIT_WORKSPACE_FACTS,
@@ -76,7 +76,7 @@ fn review_fixed() -> &'static str {
 }
 
 /// The review style the `review` rule starts from.
-pub fn review_base() -> &'static str {
+pub(crate) fn review_base() -> &'static str {
     REVIEW
         .split_once(REVIEW_BASE_MARKER)
         .map_or("", |(_, base)| base)
@@ -173,7 +173,7 @@ pub struct Subject {
     /// The subject as the first message states it, the same in every mode.
     pub text: String,
     /// The issue it names, for the `{issue.*}` fields.
-    pub issue: Option<IssueFields>,
+    pub(crate) issue: Option<IssueFields>,
 }
 
 impl Subject {
@@ -253,22 +253,22 @@ fn comment_count(comments: Option<u64>) -> String {
 }
 
 #[derive(Debug, Clone)]
-pub struct IssueFields {
-    pub number: u64,
-    pub title: String,
-    pub url: String,
+pub(crate) struct IssueFields {
+    pub(crate) number: u64,
+    pub(crate) title: String,
+    pub(crate) url: String,
 }
 
 impl IssueFields {
     /// The fields of the issue `links` assign, for an agent restored
     /// without its subject.
-    pub fn linked(links: &SpaceLinks) -> Option<Self> {
+    pub(crate) fn linked(links: &SpaceLinks) -> Option<Self> {
         let issue = links.issue()?;
         Some(Self::at(&issue.url, issue.title.clone()))
     }
 
     /// The fields of `issue`, titled `title`, without asking the forge.
-    pub fn at(issue: &ItemRef, title: Option<String>) -> Self {
+    pub(crate) fn at(issue: &ItemRef, title: Option<String>) -> Self {
         Self {
             number: issue.number().get(),
             title: title.unwrap_or_default(),
@@ -312,7 +312,7 @@ pub fn brief(
 /// The system text of an agent in `mode` at `place` on `issue`, as an
 /// agent that already has its first message, such as a restored one, takes
 /// it again.
-pub fn system(
+pub(crate) fn system(
     settings: &Settings,
     mode: &modes::ModeName,
     place: Place<'_>,

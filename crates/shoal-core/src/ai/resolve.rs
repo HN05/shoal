@@ -19,32 +19,32 @@ use crate::{
 };
 
 /// Every built-in and configured AI tool by name.
-pub type Tools = BTreeMap<String, Tool>;
+pub(crate) type Tools = BTreeMap<String, Tool>;
 
 /// One AI tool after its lineage: each setting is its own, else the
 /// nearest base's, else the built-in tool's its lineage ends at.
 #[derive(Debug, Clone)]
 pub struct Tool {
     /// Identity: what `--agent`, `shoal run <name>` and recovery records use.
-    pub name: String,
+    pub(crate) name: String,
     /// Whether it runs as an agent of its own, as `shoal run <name>` does:
     /// built in, or configured with a launcher or a base. A tool with only
     /// a skill directory or argument templates is not one.
-    pub runs_as_agent: bool,
+    pub(crate) runs_as_agent: bool,
     /// What its launcher takes: the argument templates of its
     /// `[agents.<name>]` entry and its bases.
     pub launch: LaunchProfile,
     pub integration: IntegrationKind,
     /// The tools it is a launch profile of, nearest first. A launcher is
     /// resolved per config layer, so it is looked up along them there.
-    pub bases: Vec<String>,
+    pub(crate) bases: Vec<String>,
     skill_dir: Option<SkillDir>,
     /// Whether Shoal retries a turn an API failure ended; on by default for
     /// the Claude integration.
     pub retry: bool,
     /// The `[machine.proxies.<name>]` its tracked agents reach their API through: the
     /// one named nearest in its lineage.
-    pub proxy: Option<String>,
+    pub(crate) proxy: Option<String>,
     /// `prompt_cache_minutes` configured nearest in its lineage.
     configured_prompt_cache: Option<Duration>,
     /// The lifetime of its prompt cache when neither its configuration nor
@@ -52,7 +52,7 @@ pub struct Tool {
     /// [`DEFAULT_PROMPT_CACHE`].
     default_prompt_cache: Duration,
     /// The `model` and `effort` each configured nearest in its lineage.
-    pub model: ModelChoice,
+    pub(crate) model: ModelChoice,
     /// How its review result comes back: as the built-in tool its lineage
     /// ends at returns it, else as the whole result.
     pub review_result: &'static ResultFormat,
@@ -71,7 +71,7 @@ pub struct LaunchProfile {
     pub environment: Environment,
     /// The variable that sets the reasoning effort over the effort
     /// arguments, which a launch with an effort sets to the same value.
-    pub effort_variable: Option<&'static str>,
+    pub(crate) effort_variable: Option<&'static str>,
 }
 
 impl LaunchProfile {
@@ -106,7 +106,7 @@ impl Tool {
 
     /// The tool's user-level skill directory for a launch from this process;
     /// `None` when it has none.
-    pub fn skill_dir(&self, home: &Path) -> Result<Option<PathBuf>> {
+    pub(crate) fn skill_dir(&self, home: &Path) -> Result<Option<PathBuf>> {
         match &self.skill_dir {
             None => Ok(None),
             Some(SkillDir::Configured(directory)) => skill_dir(directory, home).map(Some),
@@ -139,7 +139,7 @@ pub(super) fn runs_as_agent(entries: &Agents, name: &str) -> bool {
 /// Give each launch profile without a launcher of its own in `commands` the
 /// nearest one of its bases there, so it follows whatever layer set it.
 /// `commands` may carry each launcher's layer with it.
-pub fn inherit_launchers<T: Clone>(tools: &Tools, commands: &mut BTreeMap<String, T>) {
+pub(crate) fn inherit_launchers<T: Clone>(tools: &Tools, commands: &mut BTreeMap<String, T>) {
     for (name, tool) in tools {
         if commands.contains_key(name) {
             continue;

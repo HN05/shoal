@@ -27,27 +27,27 @@ mod simulators;
 mod sleep;
 mod terminal;
 
-pub use agent::*;
-pub use alerts::*;
+pub(crate) use agent::*;
+pub(crate) use alerts::*;
 pub use app::*;
 pub use caches::*;
-pub use cleanup::*;
-pub use conflicts::*;
-pub use containers::*;
-pub use hooks::*;
-pub use issue::*;
+pub(crate) use cleanup::*;
+pub(crate) use conflicts::*;
+pub(crate) use containers::*;
+pub(crate) use hooks::*;
+pub(crate) use issue::*;
 pub use load::*;
 pub use merge::*;
 pub use ports::*;
-pub use pr::*;
-pub use priority::*;
+pub(crate) use pr::*;
+pub(crate) use priority::*;
 pub use review::*;
 pub use runner::*;
 pub use setup::*;
-pub use shoal_protocol::config::repo::{ConfigLayer, ConflictPolicy, PortDefinition};
-pub use shoal_protocol::containers::ContainerStart;
+pub(crate) use shoal_protocol::config::repo::ConfigLayer;
+pub use shoal_protocol::{config::repo::ConflictPolicy, containers::ContainerStart};
 pub use simulators::*;
-pub use sleep::*;
+pub(crate) use sleep::*;
 pub use terminal::*;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
@@ -57,7 +57,7 @@ pub struct RepoConfig {
     #[option(named)]
     pub commands: crate::config::named_commands::Commands,
     #[option(named_sections, default = crate::config::agents::built_in())]
-    pub agents: BTreeMap<String, crate::config::agents::AgentToolConfig>,
+    pub(crate) agents: BTreeMap<String, crate::config::agents::AgentToolConfig>,
     pub git_profile: Option<String>,
     #[option(section)]
     pub agent: AgentConfig,
@@ -85,7 +85,7 @@ pub struct RepoConfig {
     pub caches: BTreeMap<String, Cache>,
     /// MCP servers agents start, with the presets'.
     #[option(named_sections, resolve = crate::config::mcp::resolve -> crate::config::mcp::Servers)]
-    pub mcp: BTreeMap<String, crate::config::mcp::ServerConfig>,
+    pub(crate) mcp: BTreeMap<String, crate::config::mcp::ServerConfig>,
     #[option(named)]
     pub demos: BTreeMap<String, shoal_protocol::demos::Demo>,
     /// Machine-specific, so the global config or local config sets it, never
@@ -121,7 +121,7 @@ pub struct RepoConfig {
     #[option(section)]
     pub conflicts: ConflictsConfig,
     #[option(section)]
-    pub permissions: crate::config::permissions::PermissionsConfig,
+    pub(crate) permissions: crate::config::permissions::PermissionsConfig,
     #[option(section)]
     pub runner: RunnerConfig,
     /// What starts agents on its own, by name. A repository's triggers
@@ -134,7 +134,7 @@ pub struct RepoConfig {
         skip_serializing_if = "crate::config::same_as::References::is_empty"
     )]
     #[option(references)]
-    pub same_as: crate::config::same_as::References,
+    pub(crate) same_as: crate::config::same_as::References,
 }
 
 fn preset_environment(
@@ -172,7 +172,7 @@ impl RepoConfig {
 
     /// Each option's value on its own; layers combine into settings that
     /// [`Stack::resolve`](crate::config::resolve::Stack::resolve) checks again.
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         crate::config::named_commands::validate(&self.commands)?;
         crate::config::agents::validate(&self.agents)?;
         crate::config::modes::validate(self)?;

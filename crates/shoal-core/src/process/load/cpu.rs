@@ -125,7 +125,7 @@ fn mach_cpu(ticks: [u64; 4]) -> CpuTicks {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub fn cpu_ticks() -> Result<CpuTicks> {
+pub(crate) fn cpu_ticks() -> Result<CpuTicks> {
     anyhow::bail!("CPU monitoring is unsupported on this platform")
 }
 

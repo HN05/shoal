@@ -8,7 +8,7 @@ use shoal_protocol::reviews::FailureReason;
 pub(super) const SCAN_LIMIT: usize = 64 * 1024;
 
 /// The failure a backend's message names, if it names a known one.
-pub fn classify_text(text: &str) -> Option<FailureReason> {
+pub(crate) fn classify_text(text: &str) -> Option<FailureReason> {
     let text = head(text, SCAN_LIMIT).to_lowercase().replace('’', "'");
     if usage_limit(&text) {
         Some(FailureReason::UsageLimit)
@@ -25,7 +25,7 @@ pub fn classify_text(text: &str) -> Option<FailureReason> {
 
 /// The failure in a result's error fields, or in a Claude result's text
 /// when it carries no structured review; never the review's own text.
-pub fn classify_envelope(raw: &Value) -> Option<FailureReason> {
+pub(crate) fn classify_envelope(raw: &Value) -> Option<FailureReason> {
     let raw = raw.as_object()?;
     let mut fields: Vec<&Value> = ["error", "errors"]
         .iter()
@@ -53,7 +53,7 @@ pub fn classify_envelope(raw: &Value) -> Option<FailureReason> {
 
 /// The failure a CLI's diagnostic output names in its error lines and error
 /// events, ignoring echoed prompts and tool output.
-pub fn classify_diagnostic(text: &str) -> Option<FailureReason> {
+pub(crate) fn classify_diagnostic(text: &str) -> Option<FailureReason> {
     text.lines().find_map(|line| {
         let line = strip_colors(line);
         let line = line.trim();

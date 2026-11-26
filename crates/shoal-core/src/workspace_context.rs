@@ -17,7 +17,7 @@ impl ScopeOrder {
     /// Whether selection with this order consults the current directory: a
     /// scoped caller that puts its scope first never does, so it needs no
     /// readable working directory.
-    pub fn reads_directory(self, scoping: Scoping) -> bool {
+    pub(crate) fn reads_directory(self, scoping: Scoping) -> bool {
         !(scoping == Scoping::Scoped && matches!(self, Self::BeforeDirectory))
     }
 }

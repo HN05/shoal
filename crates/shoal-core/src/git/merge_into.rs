@@ -41,10 +41,10 @@ pub struct Merged {
     pub updated: bool,
     /// True when a merge fast-forwarded the target branch instead of
     /// making a merge commit.
-    pub fast_forward: bool,
+    pub(crate) fast_forward: bool,
 }
 
-pub async fn merge(repo: &Path, source: &Source<'_>, target: &Target<'_>) -> Result<Merged> {
+pub(crate) async fn merge(repo: &Path, source: &Source<'_>, target: &Target<'_>) -> Result<Merged> {
     let contained = git::is_ancestor(
         repo,
         source.commit.as_str(),

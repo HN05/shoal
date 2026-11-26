@@ -1,14 +1,14 @@
 //! Shoal's configuration: the global file, the repository schema its
 //! repository layers share, and the settings they resolve to.
-pub mod agents;
-pub mod apps;
+pub(crate) mod agents;
+pub(crate) mod apps;
 pub mod edit;
 pub mod forges;
 pub mod gate;
 pub mod git_profiles;
 pub mod hooks;
 pub mod machine;
-pub mod mcp;
+pub(crate) mod mcp;
 pub mod memory_limit;
 pub mod modes;
 pub mod named_commands;
@@ -16,11 +16,11 @@ pub mod overload;
 mod parse;
 pub mod permissions;
 pub mod presets;
-pub mod proxies;
+pub(crate) mod proxies;
 pub mod repo;
 pub mod resolve;
-pub mod same_as;
-pub mod shared;
+pub(crate) mod same_as;
+pub(crate) mod shared;
 pub mod span;
 pub mod templates;
 #[cfg(test)]
@@ -36,12 +36,13 @@ use std::{
 };
 
 use crate::paths::Paths;
-pub use machine::{Machine, MachineLimit};
-pub use repo::{
-    AutoCleanup, Cleanup, Herdr, Issue, MergedCleanup, Ports, Restore, Rex, Runner, Settings,
-    Simulators, Tmux, Zellij,
+pub(crate) use machine::Machine;
+pub use machine::MachineLimit;
+pub(crate) use repo::{
+    AutoCleanup, Cleanup, Herdr, MergedCleanup, Restore, Rex, Settings, Tmux, Zellij,
 };
 use repo::{ConfigLayers, RepoConfig};
+pub use repo::{Ports, Runner, Simulators};
 pub use resolve::Effective;
 use resolve::GlobalLayer;
 pub use shared::Shared;
@@ -105,23 +106,23 @@ pub struct Config {
     pub repository: RepoConfig,
     /// The file each mode's instructions or rule's text came from, once
     /// [`Self::load_with_templates`] read them.
-    pub template_files: modes::Files,
+    pub(crate) template_files: modes::Files,
     /// The shared config's values for the options a repository may
     /// override, under [`Self::repository`].
-    pub shared: RepoConfig,
+    pub(crate) shared: RepoConfig,
     /// The file each of the shared config's texts came from.
-    pub shared_template_files: modes::Files,
+    pub(crate) shared_template_files: modes::Files,
 }
 
 impl Ports {
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         validate_port_range(Some(self.start), Some(self.end))
     }
 }
 
 /// Agent directories are absolute or under the home directory (`~/`), since
 /// agents run in different working directories.
-pub fn validate_agent_dirs(directories: &[String]) -> Result<()> {
+pub(crate) fn validate_agent_dirs(directories: &[String]) -> Result<()> {
     for directory in directories {
         ensure!(
             Path::new(directory).is_absolute() || directory.starts_with("~/"),
@@ -133,7 +134,7 @@ pub fn validate_agent_dirs(directories: &[String]) -> Result<()> {
 
 /// The bounds one layer states; a range split across layers is checked
 /// again once they combine.
-pub fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
+pub(crate) fn validate_port_range(start: Option<u16>, end: Option<u16>) -> Result<()> {
     ensure!(start != Some(0), "ports.start must be between 1 and 65535");
     if let (Some(start), Some(end)) = (start, end) {
         ensure!(
@@ -158,7 +159,7 @@ impl AutoCleanup {
     }
 }
 
-pub fn validate_idle_minutes(key: &str, minutes: u64) -> Result<()> {
+pub(crate) fn validate_idle_minutes(key: &str, minutes: u64) -> Result<()> {
     ensure!(
         minutes > 0 && minutes <= 525600,
         "{key} must be between 1 and 525600"
@@ -206,7 +207,7 @@ impl Config {
 
     /// `XDG_CONFIG_HOME` belongs to the home `HOME` names: another home, such
     /// as a test's temporary one, keeps its config under its own `.config`.
-    pub fn path_for_home(home: &std::path::Path) -> PathBuf {
+    pub(crate) fn path_for_home(home: &std::path::Path) -> PathBuf {
         let own_home = crate::fsutil::home::home_dir().is_ok_and(|own| own == home);
         let config_home = std::env::var_os("XDG_CONFIG_HOME").filter(|_| own_home);
         config_home
@@ -226,7 +227,7 @@ impl Config {
     }
 
     /// Both files as written, layered without validating their values.
-    pub fn load_unchecked(home: &Path) -> Result<Self> {
+    pub(crate) fn load_unchecked(home: &Path) -> Result<Self> {
         let path = Shared::path_for_home(home);
         let shared = parse::shared(&read_file(&path)?)
             .with_context(|| format!("parse {}", path.display()))?;
@@ -294,12 +295,13 @@ impl Config {
     }
 
     /// `text` as this machine's global file, without a shared config.
-    pub fn parse(text: &str, paths: &Paths) -> Result<Self> {
+    #[cfg(test)]
+    pub(crate) fn parse(text: &str, paths: &Paths) -> Result<Self> {
         Self::parse_over(text, &Shared::default(), paths)
     }
 
     /// `text` as this machine's global file over `shared`.
-    pub fn parse_over(text: &str, shared: &Shared, paths: &Paths) -> Result<Self> {
+    pub(crate) fn parse_over(text: &str, shared: &Shared, paths: &Paths) -> Result<Self> {
         Self::checked(shared, Some(parse::global(text)?), paths)
     }
 

@@ -119,7 +119,7 @@ fn mach_nanoseconds(ticks: u64) -> Result<u64> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub fn read(_pid: u32) -> Result<Option<Reading>> {
+pub(crate) fn read(_pid: u32) -> Result<Option<Reading>> {
     anyhow::bail!("process usage is unsupported on this platform")
 }
 

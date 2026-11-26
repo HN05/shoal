@@ -10,11 +10,11 @@ use crate::validate;
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct Git {
-    pub profiles: BTreeMap<String, Profile>,
+    pub(crate) profiles: BTreeMap<String, Profile>,
 }
 
 impl Git {
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         for (name, profile) in &self.profiles {
             validate::name("git profile", name)?;
             profile

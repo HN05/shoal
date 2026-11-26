@@ -10,7 +10,7 @@ use crate::fsutil::atomic::{Permissions, ReplaceOptions};
 
 pub mod carried;
 pub mod changes;
-pub mod claim;
+pub(crate) mod claim;
 mod ending;
 mod last_session;
 mod permissions;
@@ -22,7 +22,8 @@ mod stopped;
 
 pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_saved};
 use ending::idle;
-pub use ending::{Ending, StopExt, resumed_prompt, saved_at};
+pub(crate) use ending::saved_at;
+pub use ending::{Ending, StopExt, resumed_prompt};
 pub use last_session::LastSessionExt;
 pub use permissions::{ClaimedChange, change_permission};
 use record::write_record;
@@ -36,10 +37,10 @@ pub use saved::{
 };
 use sessions::reported_session;
 pub use sessions::{forget_session, held_sessions, save_session, valid_session};
-pub use shoal_protocol::executions::{
-    Copied, HandoffBrief, LastSession, Record, Stage, Stop, StoppedAgent,
+pub use shoal_protocol::{
+    executions::{Copied, HandoffBrief, LastSession, Record, Stage, Stop, StoppedAgent},
+    saved::{Saved, SavedCommand, SavedSession},
 };
-pub use shoal_protocol::saved::{Saved, SavedCommand, SavedSession};
 pub use stopped::{clear_load_mark, save_stopped_agents, stopped_agents};
 
 const AGENT_SUFFIX: &str = ".recovery.json";

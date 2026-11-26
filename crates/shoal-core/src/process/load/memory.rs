@@ -27,18 +27,18 @@ impl Memory {
 /// Where overload protection acts on memory, in percent: the share of memory
 /// in use, and on Linux the share of time tasks stall waiting for memory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct MemoryLevel {
-    pub used_percent: u8,
-    pub stall_percent: u8,
+pub(crate) struct MemoryLevel {
+    pub(crate) used_percent: u8,
+    pub(crate) stall_percent: u8,
 }
 
 /// The memory levels at which overload protection stops work, warns agents
 /// and lets stopped agents recover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryLevels {
-    pub stop: MemoryLevel,
-    pub warning: MemoryLevel,
-    pub recovery: MemoryLevel,
+    pub(crate) stop: MemoryLevel,
+    pub(crate) warning: MemoryLevel,
+    pub(crate) recovery: MemoryLevel,
 }
 
 /// How one memory reading stands against [`MemoryLevels`].
@@ -383,7 +383,7 @@ fn sysctl<T: Default>(name: &std::ffi::CStr) -> Result<T> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-pub fn ram() -> Result<u64> {
+pub(crate) fn ram() -> Result<u64> {
     anyhow::bail!("memory monitoring is unsupported on this platform")
 }
 

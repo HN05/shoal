@@ -13,7 +13,7 @@ use crate::fsutil::{self, off_runtime};
 /// Git finished and could not put back what it deleted, leaving its marker
 /// for the next removal, which a caller tells from other failures by it.
 #[derive(Debug)]
-pub struct Unrestored(pub PathBuf);
+pub struct Unrestored(pub(crate) PathBuf);
 
 impl std::fmt::Display for Unrestored {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

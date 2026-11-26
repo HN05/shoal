@@ -167,7 +167,7 @@ pub async fn fetch_pull_branch(
 
 /// The one of `workspaces` in `repo` that already has the branch `name`
 /// selects, as typed or as a remote's, which a start on it goes into.
-pub async fn owning_workspace(
+pub(crate) async fn owning_workspace(
     workspaces: &[Workspace],
     repo: &Repository,
     name: &str,

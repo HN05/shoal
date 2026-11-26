@@ -12,7 +12,7 @@ pub struct IssueConfig {
     pub required_labels: Option<Vec<String>>,
     #[option(default = IssueAssign::default())]
     pub assign: Option<IssueAssign>,
-    pub area_prefix: Option<String>,
+    pub(crate) area_prefix: Option<String>,
 }
 
 states!(

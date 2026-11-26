@@ -2,7 +2,7 @@
 use crate::config::options::Options;
 
 use serde::{Deserialize, Serialize};
-pub use shoal_protocol::config::repo::{ConflictPolicy, PortDefinition};
+pub(crate) use shoal_protocol::config::repo::{ConflictPolicy, PortDefinition};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]

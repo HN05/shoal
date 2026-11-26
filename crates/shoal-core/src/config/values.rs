@@ -87,7 +87,7 @@ impl Values {
     }
 
     /// Drop the value kept for `value`, which its consumer refused.
-    pub fn forget(&self, value: &Value) {
+    pub(crate) fn forget(&self, value: &Value) {
         if let Value::Cmd {
             cmd,
             on: Some(machine),

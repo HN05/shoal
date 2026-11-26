@@ -102,7 +102,7 @@ pub async fn reference(repo: &Path, remote: &str, reference: &str) -> Result<Com
 }
 
 /// Fetch only a review's branch, retaining the caller's normal Git policy.
-pub async fn review_branch(repo: &Path, branch: &BranchName) -> Result<String> {
+pub(crate) async fn review_branch(repo: &Path, branch: &BranchName) -> Result<String> {
     let tracking = super::remote_ref("origin", branch.as_str());
     super::run(
         repo,

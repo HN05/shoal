@@ -14,22 +14,22 @@ use super::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Condition {
-    pub path: Path,
+    pub(crate) path: Path,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub equals: Option<Value>,
+    pub(crate) equals: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub not_equals: Option<Value>,
+    pub(crate) not_equals: Option<Value>,
     #[serde(default, rename = "in", skip_serializing_if = "Option::is_none")]
-    pub any_of: Option<Vec<Value>>,
+    pub(crate) any_of: Option<Vec<Value>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub starts_with: Option<String>,
+    pub(crate) starts_with: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exists: Option<bool>,
+    pub(crate) exists: Option<bool>,
 }
 
 impl Condition {
     /// Refuse a condition without exactly one operator.
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let operators = [
             self.equals.is_some(),
             self.not_equals.is_some(),
@@ -45,7 +45,7 @@ impl Condition {
         Ok(())
     }
 
-    pub fn holds(&self, input: &Value) -> bool {
+    pub(crate) fn holds(&self, input: &Value) -> bool {
         let values = self.path.values(input);
         let any = |test: &dyn Fn(&Value) -> bool| values.iter().any(|value| test(value));
         if let Some(wanted) = &self.equals {

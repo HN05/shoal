@@ -30,13 +30,13 @@ pub struct Input {
     /// The key of a trigger that sets none.
     pub default_key: Option<String>,
     /// The parts of the document an outside request sent, if any.
-    pub request: Option<Request>,
+    pub(crate) request: Option<Request>,
 }
 
 /// Which parts of a firing's document an outside request sent, and the
 /// delimiter that marks them in its task.
 #[derive(Debug, Clone)]
-pub struct Request {
+pub(crate) struct Request {
     /// The document's top-level keys that hold them.
     roots: &'static [&'static str],
     /// The top-level keys among them that hold a table of names, which a

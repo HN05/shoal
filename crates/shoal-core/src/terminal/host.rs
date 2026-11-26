@@ -355,7 +355,7 @@ pub struct Nested {
 
 /// Variables a demo's worker must not inherit from the agent that starts it:
 /// the agent's execution marker would make the agent's exit stop the demo.
-pub const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
+pub(crate) const NOT_INHERITED_BY_DEMOS: &[&str] = &[env::EXECUTION_ID];
 
 /// The demo worker's argv for the place it runs in.
 pub type DemoWorker<'a> = dyn Fn(&Origin) -> Result<Vec<OsString>> + Send + Sync + 'a;

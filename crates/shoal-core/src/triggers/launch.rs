@@ -20,29 +20,29 @@ use crate::{
 pub struct LaunchKeys {
     /// The registered repository a global trigger starts in; a
     /// repository's trigger starts in its own.
-    pub repository: Option<Template>,
-    pub agent: Option<Template>,
-    pub mode: Option<Template>,
-    pub model: Option<Template>,
-    pub effort: Option<Template>,
-    pub branch: Option<Template>,
-    pub base: Option<Template>,
-    pub issue: Option<Template>,
-    pub pr: Option<Template>,
-    pub name: Option<Template>,
-    pub priority: Option<Template>,
+    pub(crate) repository: Option<Template>,
+    pub(crate) agent: Option<Template>,
+    pub(crate) mode: Option<Template>,
+    pub(crate) model: Option<Template>,
+    pub(crate) effort: Option<Template>,
+    pub(crate) branch: Option<Template>,
+    pub(crate) base: Option<Template>,
+    pub(crate) issue: Option<Template>,
+    pub(crate) pr: Option<Template>,
+    pub(crate) name: Option<Template>,
+    pub(crate) priority: Option<Template>,
     /// `--permission KEY=VALUE`, by key.
-    pub permission: BTreeMap<String, Template>,
+    pub(crate) permission: BTreeMap<String, Template>,
     /// The existing workspace, by ID, whose agent takes the task, as
     /// `--in` names it.
-    pub in_space: Option<Template>,
-    pub task: Option<Template>,
+    pub(crate) in_space: Option<Template>,
+    pub(crate) task: Option<Template>,
 }
 
 impl LaunchKeys {
     /// Refuse a value without lookups that its flag would refuse, and a
     /// combination no firing can launch, before any firing.
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         ensure!(
             self.issue.is_none() || self.pr.is_none(),
             "a launch starts on an issue or a PR, not both"

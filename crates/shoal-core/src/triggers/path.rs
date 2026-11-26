@@ -10,7 +10,7 @@ use serde_json::Value;
 
 /// A path as config writes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Path {
+pub(crate) struct Path {
     text: String,
     steps: Vec<Step>,
 }
@@ -26,7 +26,7 @@ enum Step {
 impl Path {
     /// Whether it reaches every element of an array, so it may name several
     /// values.
-    pub fn fans_out(&self) -> bool {
+    pub(crate) fn fans_out(&self) -> bool {
         self.steps.contains(&Step::Each)
     }
 
@@ -46,7 +46,7 @@ impl Path {
 
     /// Every value it reaches in `document`; none where a step finds
     /// nothing, and `null` counts as nothing.
-    pub fn values<'a>(&self, document: &'a Value) -> Vec<&'a Value> {
+    pub(crate) fn values<'a>(&self, document: &'a Value) -> Vec<&'a Value> {
         let mut reached = vec![document];
         for step in &self.steps {
             reached = reached
@@ -59,7 +59,7 @@ impl Path {
     }
 
     /// The one value a path without `[]` reaches in `document`.
-    pub fn value<'a>(&self, document: &'a Value) -> Option<&'a Value> {
+    pub(crate) fn value<'a>(&self, document: &'a Value) -> Option<&'a Value> {
         self.values(document).into_iter().next()
     }
 }

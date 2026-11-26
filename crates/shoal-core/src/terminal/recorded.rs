@@ -393,7 +393,7 @@ pub async fn shown_here(place: &Origin) -> &Origin {
 /// What shows `place` to `viewer`, a user on another machine: the place
 /// itself where their app for its host shows it and it still shows the
 /// session nested in it, otherwise that session.
-pub async fn shown_elsewhere<'a>(place: &'a Origin, viewer: &Elsewhere<'_>) -> &'a Origin {
+pub(crate) async fn shown_elsewhere<'a>(place: &'a Origin, viewer: &Elsewhere<'_>) -> &'a Origin {
     let itself = shown_itself_elsewhere(viewer) && shows_nested(place).await;
     shown_place(place, itself)
 }

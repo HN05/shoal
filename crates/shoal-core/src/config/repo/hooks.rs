@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 #[options(resolved = Hooks)]
 pub struct HooksConfig {
     pub pre_setup: Option<String>,
-    pub post_setup: Option<String>,
-    pub pre_remove: Option<String>,
-    pub post_remove: Option<String>,
-    pub post_done: Option<String>,
-    pub post_ready: Option<String>,
-    pub post_agent_exit: Option<String>,
-    pub post_resource_acquire: Option<String>,
-    pub pre_resource_release: Option<String>,
+    pub(crate) post_setup: Option<String>,
+    pub(crate) pre_remove: Option<String>,
+    pub(crate) post_remove: Option<String>,
+    pub(crate) post_done: Option<String>,
+    pub(crate) post_ready: Option<String>,
+    pub(crate) post_agent_exit: Option<String>,
+    pub(crate) post_resource_acquire: Option<String>,
+    pub(crate) pre_resource_release: Option<String>,
 }

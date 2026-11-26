@@ -31,7 +31,7 @@ pub struct Effective {
     pub resume_commands: crate::config::named_commands::Commands,
     /// The proxy each AI tool's tracked agents reach their upstream through.
     #[serde(skip)]
-    pub proxies: BTreeMap<String, crate::config::proxies::Proxy>,
+    pub(crate) proxies: BTreeMap<String, crate::config::proxies::Proxy>,
     /// The secrets agents receive: every one but those a webhook trigger
     /// of the repository or the global config signs requests with.
     #[serde(skip)]
@@ -57,7 +57,7 @@ impl std::ops::DerefMut for Effective {
 #[derive(Debug, Clone, Default)]
 pub struct GlobalLayer {
     pub config: RepoConfig,
-    pub files: modes::Files,
+    pub(crate) files: modes::Files,
 }
 
 impl GlobalLayer {
@@ -88,7 +88,7 @@ impl Stack {
     /// own, under `repository`'s layers, with each key a `same_as`
     /// reference names holding its target's value; fails for a reference
     /// that cannot be followed.
-    pub fn over(global: [GlobalLayer; 2], repository: &ConfigLayers) -> Result<Self> {
+    pub(crate) fn over(global: [GlobalLayer; 2], repository: &ConfigLayers) -> Result<Self> {
         let [shared, global] = global;
         let mut configs = [
             RepoConfig::built_in(),
@@ -136,7 +136,7 @@ impl Stack {
 
     /// The settings in effect; fails when the layers combine into an invalid
     /// setting, such as a repository `ports.start` above the global `ports.end`.
-    pub fn resolve(self) -> Result<Settings> {
+    pub(crate) fn resolve(self) -> Result<Settings> {
         let configs = self.layers.map(|(config, _)| config);
         let (mut base, repository) = levels(&configs);
         // Each layer is valid alone; the repository's layered names must agree
@@ -244,7 +244,7 @@ impl RepoConfig {
 }
 
 impl Effective {
-    pub fn new(
+    pub(crate) fn new(
         settings: Settings,
         tools: crate::ai::Tools,
         proxies: BTreeMap<String, crate::config::proxies::Proxy>,
@@ -382,7 +382,7 @@ impl Effective {
             .map_or(crate::ai::IntegrationKind::None, |tool| tool.integration)
     }
 
-    pub fn proxy(&self, agent: &Agent) -> Option<&crate::config::proxies::Proxy> {
+    pub(crate) fn proxy(&self, agent: &Agent) -> Option<&crate::config::proxies::Proxy> {
         self.proxies.get(agent.name())
     }
 }

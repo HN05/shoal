@@ -7,14 +7,14 @@ pub use shoal_protocol::config::edit::Change;
 
 /// Apply `changes` in order, so settings that are only valid together are
 /// validated once, after the last one.
-pub fn apply(text: &str, changes: &[Change]) -> Result<String> {
+pub(crate) fn apply(text: &str, changes: &[Change]) -> Result<String> {
     changes.iter().try_fold(text.to_owned(), |text, change| {
         edit(&text, &change.key, change.value.as_deref())
             .with_context(|| format!("edit {}", change.key))
     })
 }
 
-pub fn edit(text: &str, key: &str, value: Option<&str>) -> Result<String> {
+pub(crate) fn edit(text: &str, key: &str, value: Option<&str>) -> Result<String> {
     let keys = Key::parse(key).context("expected a TOML dotted key")?;
     let (last, parents) = keys.split_last().context("config key cannot be empty")?;
     let mut document: DocumentMut = text.parse().context("parse existing config")?;

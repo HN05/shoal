@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[options(resolved = Cleanup)]
 pub struct CleanupConfig {
     #[option(default = 10)]
-    pub grace_minutes: Option<u64>,
+    pub(crate) grace_minutes: Option<u64>,
     #[option(section)]
     pub auto: AutoCleanupConfig,
     #[option(section)]
@@ -22,7 +22,7 @@ pub struct CleanupConfig {
 }
 
 impl CleanupConfig {
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
         if let Some(minutes) = self.grace_minutes {
             anyhow::ensure!(
                 minutes <= 525600,
@@ -68,9 +68,9 @@ pub struct AutoCleanupConfig {
 #[options(resolved = MergedCleanup)]
 pub struct MergedCleanupConfig {
     #[option(default = false)]
-    pub enabled: Option<bool>,
+    pub(crate) enabled: Option<bool>,
     #[option(default = 240)]
-    pub idle_minutes: Option<u64>,
+    pub(crate) idle_minutes: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]
@@ -78,9 +78,9 @@ pub struct MergedCleanupConfig {
 #[options(resolved = Restore)]
 pub struct RestoreConfig {
     #[option(default = 30)]
-    pub retention_days: Option<u64>,
+    pub(crate) retention_days: Option<u64>,
     #[option(default = 50)]
-    pub archive_max_mb: Option<u64>,
+    pub(crate) archive_max_mb: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, Serialize, Options)]

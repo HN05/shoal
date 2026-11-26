@@ -110,7 +110,7 @@ pub unsafe fn stop_git_at_temporary_directories() {
 /// tool shims, such as `git` and `python3`, run: a shim looks the developer
 /// directory up on every run, which nearly doubles what a Git command
 /// costs, and tests run Git many times each.
-pub fn developer_tools() -> Option<&'static Path> {
+pub(crate) fn developer_tools() -> Option<&'static Path> {
     static TOOLS: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
     let find = || {
         let output = Command::new("xcode-select").arg("-p").output().ok()?;
@@ -540,7 +540,8 @@ pub fn runs_until_stopped(program: &Path) -> String {
 /// This test binary running until stopped in `dir`, started without a shell,
 /// so a survey never finds the shell, whose environment macOS hides, in its
 /// place.
-pub fn run_until_stopped_in(dir: &Path) -> tokio::process::Command {
+#[cfg(test)]
+pub(crate) fn run_until_stopped_in(dir: &Path) -> tokio::process::Command {
     let program = std::env::current_exe().unwrap();
     let mut command = isolated_command(program.to_str().unwrap(), dir);
     command.args(RUN_UNTIL_STOPPED);

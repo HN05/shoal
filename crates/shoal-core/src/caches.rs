@@ -3,6 +3,7 @@
 //! `.caches/shared`,
 //! and `[env]` names it with `{cache.NAME}`. Only caches whose tools lock or
 //! address entries by content are safe to share between live workspaces.
+#[cfg(test)]
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::BTreeMap,
@@ -32,7 +33,8 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
+    #[cfg(test)]
+    pub(crate) fn new(workspaces_dir: &Path, repository_id: &RepositoryId) -> Self {
         Self {
             dir: ShoalDir::new(workspaces_dir, repository_id, Contents::Caches),
         }

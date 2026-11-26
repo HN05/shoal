@@ -329,7 +329,7 @@ pub(super) fn find(name: &str) -> Option<&'static Provider> {
 }
 
 /// Built-in launchers, the lowest layer of `[commands]`.
-pub fn default_commands() -> Commands {
+pub(crate) fn default_commands() -> Commands {
     PROVIDERS
         .iter()
         .map(|provider| {

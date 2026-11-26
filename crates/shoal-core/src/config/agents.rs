@@ -11,42 +11,42 @@ use crate::config::options::Options;
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = AgentTool)]
-pub struct AgentToolConfig {
-    pub command: Option<Vec<String>>,
-    pub resume_command: Option<Vec<String>>,
-    pub enabled: Option<bool>,
-    pub base: Option<String>,
-    pub instructions: Option<Vec<String>>,
-    pub resume: Option<Vec<String>>,
-    pub resume_latest: Option<Vec<String>>,
-    pub fork: Option<Vec<String>>,
-    pub add_dir: Option<Vec<String>>,
-    pub model: Option<String>,
-    pub effort: Option<String>,
-    pub model_args: Option<Vec<String>>,
-    pub effort_args: Option<Vec<String>>,
-    pub review: Option<Vec<String>>,
-    pub review_resume: Option<Vec<String>>,
-    pub gate: Option<Vec<String>>,
-    pub gate_resume: Option<Vec<String>>,
+pub(crate) struct AgentToolConfig {
+    pub(crate) command: Option<Vec<String>>,
+    pub(crate) resume_command: Option<Vec<String>>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) base: Option<String>,
+    pub(crate) instructions: Option<Vec<String>>,
+    pub(crate) resume: Option<Vec<String>>,
+    pub(crate) resume_latest: Option<Vec<String>>,
+    pub(crate) fork: Option<Vec<String>>,
+    pub(crate) add_dir: Option<Vec<String>>,
+    pub(crate) model: Option<String>,
+    pub(crate) effort: Option<String>,
+    pub(crate) model_args: Option<Vec<String>>,
+    pub(crate) effort_args: Option<Vec<String>>,
+    pub(crate) review: Option<Vec<String>>,
+    pub(crate) review_resume: Option<Vec<String>>,
+    pub(crate) gate: Option<Vec<String>>,
+    pub(crate) gate_resume: Option<Vec<String>>,
     #[option(named)]
-    pub env: BTreeMap<String, String>,
-    pub env_remove: Option<Vec<String>>,
-    pub retry: Option<bool>,
-    pub prompt_cache_minutes: Option<u64>,
+    pub(crate) env: BTreeMap<String, String>,
+    pub(crate) env_remove: Option<Vec<String>>,
+    pub(crate) retry: Option<bool>,
+    pub(crate) prompt_cache_minutes: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct MachineAgent {
-    pub skill_dir: Option<PathBuf>,
-    pub proxy: Option<String>,
+pub(crate) struct MachineAgent {
+    pub(crate) skill_dir: Option<PathBuf>,
+    pub(crate) proxy: Option<String>,
 }
 
 /// One layer's agents on their own: each entry's names, commands, argument
 /// templates and variables. Bases and the rest resolve across layers, which
 /// [`crate::ai::validate`] checks once they combine.
-pub fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
+pub(crate) fn validate(agents: &BTreeMap<String, AgentToolConfig>) -> Result<()> {
     for (name, agent) in agents {
         if agent.command.is_some() || agent.base.is_some() {
             crate::ai::validate::agent_name(name).with_context(|| format!("agents.{name}"))?;
@@ -89,7 +89,7 @@ fn ensure_no_cycle(agents: &BTreeMap<String, AgentToolConfig>, name: &str) -> Re
 }
 
 /// The built-in AI tools' launchers, the lowest layer of `[agents]`.
-pub fn built_in() -> BTreeMap<String, AgentToolConfig> {
+pub(crate) fn built_in() -> BTreeMap<String, AgentToolConfig> {
     crate::ai::default_commands()
         .into_iter()
         .map(|(name, command)| {
@@ -103,7 +103,7 @@ pub fn built_in() -> BTreeMap<String, AgentToolConfig> {
 }
 
 /// Each AI tool described by its resolved settings and this machine's.
-pub fn describe(
+pub(crate) fn describe(
     agents: &BTreeMap<String, AgentTool>,
     machine: &BTreeMap<String, MachineAgent>,
 ) -> crate::ai::Agents {

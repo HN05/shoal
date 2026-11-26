@@ -25,16 +25,16 @@ pub struct Carried {
     pub session: Option<AgentSessionId>,
     /// As [`Record::moved`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub moved: bool,
+    pub(crate) moved: bool,
     /// As [`Record::copied`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub copied: Option<Copied>,
+    pub(crate) copied: Option<Copied>,
     /// As [`Record::converted`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub converted: bool,
+    pub(crate) converted: bool,
     /// As [`Record::handoff`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub handoff: Option<HandoffBrief>,
+    pub(crate) handoff: Option<HandoffBrief>,
 }
 
 impl Carried {

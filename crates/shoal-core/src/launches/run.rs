@@ -49,7 +49,7 @@ impl RunStart {
 }
 
 /// Whether `launch` names a run, by its link or with `--ci`, picked or not.
-pub fn names_run(launch: &Launch) -> bool {
+pub(crate) fn names_run(launch: &Launch) -> bool {
     launch.ci.is_some() || matches!(launch.target, Some(StartTarget::Run(_)))
 }
 

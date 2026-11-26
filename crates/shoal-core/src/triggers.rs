@@ -13,9 +13,9 @@ use crate::{config::span::Span, time::UnixTime};
 
 pub mod filter;
 pub mod input;
-pub mod launch;
-pub mod path;
-pub mod template;
+pub(crate) mod launch;
+pub(crate) mod path;
+pub(crate) mod template;
 pub mod timer;
 pub mod webhook;
 
@@ -27,7 +27,7 @@ use timer::{ClockTime, Day, Timer};
 use webhook::Webhook;
 
 /// How long a key keeps a repeat from running when the trigger sets none.
-pub const KEY_WINDOW: Span = Span::from_secs(10 * 60);
+pub(crate) const KEY_WINDOW: Span = Span::from_secs(10 * 60);
 
 /// One `[triggers.NAME]` table, whose keys config writes flat: the
 /// source's beside the launch's.
@@ -123,7 +123,7 @@ states!(
 pub type Triggers = BTreeMap<String, Trigger>;
 
 /// Refuse a trigger name `shoal trigger` could not take.
-pub fn validate(triggers: &Triggers) -> Result<()> {
+pub(crate) fn validate(triggers: &Triggers) -> Result<()> {
     for name in triggers.keys() {
         crate::validate::lowercase_name("trigger", name)
             .with_context(|| format!("invalid trigger name: {name}"))?;

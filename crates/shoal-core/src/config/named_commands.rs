@@ -15,7 +15,7 @@ pub fn defaults() -> Commands {
     crate::ai::default_commands()
 }
 
-pub fn validate(commands: &Commands) -> Result<()> {
+pub(crate) fn validate(commands: &Commands) -> Result<()> {
     for (name, argv) in commands {
         crate::validate::lowercase_name("command", name)?;
         ensure!(
@@ -42,7 +42,7 @@ pub fn uses_diff_base(argv: &[String]) -> bool {
 const WORKSPACE_ONLY: &[&str] = &["{workspace}", "{branch}", "{diff_base}"];
 
 /// The first placeholder in `argv` that has no value outside a workspace.
-pub fn workspace_only_placeholder(argv: &[String]) -> Option<&'static str> {
+pub(crate) fn workspace_only_placeholder(argv: &[String]) -> Option<&'static str> {
     WORKSPACE_ONLY
         .iter()
         .copied()
@@ -51,7 +51,7 @@ pub fn workspace_only_placeholder(argv: &[String]) -> Option<&'static str> {
 
 /// The placeholders every workspace command may use; `{diff_base}` only when
 /// `diff_base` is known.
-pub fn workspace_fields<'a>(
+pub(crate) fn workspace_fields<'a>(
     workspace: &'a Workspace,
     diff_base: Option<&'a CommitId>,
 ) -> Vec<(&'static str, &'a OsStr)> {
@@ -77,7 +77,7 @@ pub fn workspace_fields<'a>(
 /// `name`'s command for `workspace`, with `extra_fields` beside the
 /// workspace's own placeholders, `{diff_base}` among them when `diff_base`
 /// is known.
-pub fn expand_with_fields(
+pub(crate) fn expand_with_fields(
     commands: &Commands,
     name: &str,
     workspace: &Workspace,
@@ -95,7 +95,7 @@ pub fn expand_with_fields(
 
 /// `name`'s command `argv` outside a workspace, with `fields`, refusing one
 /// that uses a placeholder only a workspace has a value for.
-pub fn substitute_outside_workspace(
+pub(crate) fn substitute_outside_workspace(
     name: &str,
     argv: &[String],
     fields: &[(&str, &OsStr)],
@@ -120,7 +120,7 @@ pub fn without_argument(commands: &Commands, name: &str, placeholder: &str) -> C
 }
 
 /// Render each argument once, putting `args` at `{args}` or after the command.
-pub fn substitute(
+pub(crate) fn substitute(
     argv: &[String],
     fields: &[(&str, &OsStr)],
     args: Vec<OsString>,

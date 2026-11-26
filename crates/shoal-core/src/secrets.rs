@@ -11,7 +11,7 @@ use std::{
 use crate::{config::value::Value, env, paths::Paths};
 use shoal_protocol::approvals::SecretSpecification;
 pub use shoal_protocol::secrets::Secret;
-pub use shoal_protocol::secrets::Secrets;
+pub(crate) use shoal_protocol::secrets::Secrets;
 
 /// What a grant for `secret` binds: where its value comes from, a written
 /// one as its digest, and the tools it serves.

@@ -75,7 +75,7 @@ pub struct Options {
     /// Whether the host serves the terminals it runs in.
     pub enabled: bool,
     /// Whether it opens places, such as tabs, beside the caller.
-    pub opens_places: bool,
+    pub(crate) opens_places: bool,
     /// Whether a place it opens from the caller's place splits that place
     /// instead.
     pub(crate) opens_splits: bool,
@@ -146,7 +146,7 @@ impl Configured {
 
     /// The host `default_host` names for a terminal no host serves, unless
     /// config turns it off.
-    pub fn default_host(settings: &Effective) -> Option<Self> {
+    pub(crate) fn default_host(settings: &Effective) -> Option<Self> {
         Self::all(settings)
             .find(|host| host.host.name() == settings.terminal.default_host && host.options.enabled)
     }
@@ -212,7 +212,7 @@ impl Configured {
     /// its group here: a place of this host in a group, such as a Herdr tab
     /// in its workspace. A start queued from a place in no group, such as a
     /// zmx session, goes to the default host.
-    pub fn takes_queued(&self, origin: &Origin) -> bool {
+    pub(crate) fn takes_queued(&self, origin: &Origin) -> bool {
         self.options.enabled
             && origin.host == self.host.name()
             && self.places().is_some_and(|places| places.in_group(origin))
@@ -353,7 +353,7 @@ pub unsafe fn forget_inherited_places() {
 }
 
 /// The host named `name`, where config enables it.
-pub fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
+pub(crate) fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn Host> {
     Configured::all(settings)
         .find(|host| host.options.enabled && host.host.name() == name)
         .map(|host| host.host)

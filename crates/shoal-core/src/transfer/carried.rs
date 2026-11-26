@@ -10,9 +10,9 @@ use super::{CarriedSpace, Carrying, PackagedSpace};
 /// below its parent, and in the worktree of another space's workspace.
 #[derive(Debug, Clone, Copy)]
 pub struct Placed<'a> {
-    pub id: &'a SpaceId,
-    pub parent: Option<&'a SpaceId>,
-    pub worktree: Option<&'a SpaceId>,
+    pub(crate) id: &'a SpaceId,
+    pub(crate) parent: Option<&'a SpaceId>,
+    pub(crate) worktree: Option<&'a SpaceId>,
 }
 
 impl<'a> Placed<'a> {

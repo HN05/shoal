@@ -11,7 +11,7 @@ use anyhow::{Context, Result, bail, ensure};
 pub use shoal_protocol::config::value::Value;
 
 /// The variable or command `value` names is one Shoal can read or run.
-pub fn validate(value: &Value, setting: &str) -> Result<()> {
+pub(crate) fn validate(value: &Value, setting: &str) -> Result<()> {
     match value {
         Value::Written(_) => Ok(()),
         Value::Env { env } => crate::env::validate_configured_name(setting, env),
@@ -45,7 +45,7 @@ pub async fn resolve(value: &Value, variable: impl Fn(&str) -> Option<OsString>)
 /// The value's bytes, reading `variable` for one it names, and running a
 /// command with PATH replaced by `path`. One another machine prints is
 /// refused: its process asks the daemon for it.
-pub async fn output(
+pub(crate) async fn output(
     value: &Value,
     variable: impl Fn(&str) -> Option<OsString>,
     path: Option<&OsStr>,
@@ -97,7 +97,7 @@ pub async fn bounded_output(command: &[String]) -> Result<String> {
 }
 
 /// `setting`, an argument array, names a program and holds no NUL.
-pub fn validate_command(setting: &str, command: &[String]) -> Result<()> {
+pub(crate) fn validate_command(setting: &str, command: &[String]) -> Result<()> {
     ensure!(
         command.first().is_some_and(|program| !program.is_empty()),
         "{setting} must name a program"
@@ -114,7 +114,7 @@ pub fn validate_command(setting: &str, command: &[String]) -> Result<()> {
 /// replaces PATH for it. One trailing line break is the command's
 /// formatting, not the value's. A command that fails, prints nothing or
 /// prints NUL gives no value.
-pub async fn command_output(command: &[String], path: Option<&OsStr>) -> Result<OsString> {
+pub(crate) async fn command_output(command: &[String], path: Option<&OsStr>) -> Result<OsString> {
     use std::os::unix::ffi::OsStringExt;
     let program = &command[0];
     let mut process = tokio::process::Command::new(program);

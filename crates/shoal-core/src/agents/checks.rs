@@ -36,7 +36,7 @@ fn ensure_installed(name: &Agent, settings: &Effective) -> Result<()> {
 
 /// The executables an agent starts; `None` when it has no launcher. A
 /// terminal agent also starts `launcher`, its session host's program.
-pub fn programs<'a>(
+pub(crate) fn programs<'a>(
     name: &Agent,
     commands: &'a Commands,
     launcher: Option<&'static str>,
@@ -124,7 +124,7 @@ fn named_or_default(settings: &Effective, agent: Option<Agent>) -> Option<Agent>
 
 /// The agent `agent` names, else `agent.default`, refused when it cannot
 /// run under `settings`; `None` when neither names one.
-pub fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<Option<Agent>> {
+pub(crate) fn named_agent(settings: &Effective, agent: Option<Agent>) -> Result<Option<Agent>> {
     let Some(agent) = named_or_default(settings, agent) else {
         return Ok(None);
     };

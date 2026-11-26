@@ -12,7 +12,7 @@ use shoal_states::states;
 use super::input::{Input, Request};
 use crate::time::UnixTime;
 
-pub mod signature;
+pub(crate) mod signature;
 
 /// The input document's keys that hold what a request sent.
 const REQUEST_ROOTS: &[&str] = &["payload", "body", "headers", "query"];

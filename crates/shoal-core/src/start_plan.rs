@@ -225,7 +225,7 @@ impl PlacePlan {
 
     /// What the place a host opens for the start in `space` shows: its
     /// templated name in a workspace, else the space's name.
-    pub fn label(&self, space: &crate::model::Space) -> String {
+    pub(crate) fn label(&self, space: &crate::model::Space) -> String {
         match (&self.place_name, space.to_workspace()) {
             (Some(place), Some(workspace)) => {
                 place.render(workspace.branch_or_name(), &workspace.name)

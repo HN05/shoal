@@ -60,7 +60,7 @@ pub static PLAIN: ResultFormat = ResultFormat {
 /// The structured output as the whole result, as Codex writes its last
 /// message, which names its session in the header it writes to standard
 /// error.
-pub static CODEX: ResultFormat = ResultFormat {
+pub(crate) static CODEX: ResultFormat = ResultFormat {
     session: |_, stderr| {
         let line = stderr
             .lines()

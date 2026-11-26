@@ -11,7 +11,7 @@ use crate::{env, paths::Paths, sessions::Origin};
 
 /// Show `place`, which `host` opened focused, in this terminal when the
 /// host does not serve it; a terminal it serves shows its focused place.
-pub async fn show_opened(
+pub(crate) async fn show_opened(
     host: &Configured,
     places: &dyn Places,
     place: &Origin,
@@ -79,7 +79,7 @@ pub fn shoal_command(paths: &Paths, args: &[OsString]) -> Result<Vec<OsString>> 
 
 /// Restore an agent in `stopped`, its earlier place, when that is in `host`
 /// and idle.
-pub async fn rerun_in_host(
+pub(crate) async fn rerun_in_host(
     paths: &Paths,
     host: &dyn Host,
     stopped: Option<&Origin>,

@@ -55,7 +55,7 @@ fn find_nul(bytes: &[u8]) -> Option<usize> {
 
 /// Whether `process` is an agent hook waiting for the next update, which
 /// waits rather than works.
-pub fn waiting_hook(process: &Identity) -> bool {
+pub(crate) fn waiting_hook(process: &Identity) -> bool {
     started_with(process, crate::env::WAITING_HOOK)
 }
 
@@ -379,7 +379,7 @@ pub async fn group_alive(group: u32) -> Result<bool> {
 /// command started. Without that proof, group members are candidates only and
 /// must not be killed. Neither is ever a process that `agents` tell belongs
 /// to another agent than the one `wrapper`, the execution's, runs.
-pub async fn related(
+pub(crate) async fn related(
     child: Option<&Identity>,
     group: Option<u32>,
     execution: Option<&ExecutionId>,

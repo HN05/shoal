@@ -19,7 +19,7 @@ const UNITS: [(char, u64); 5] = [
 ];
 
 impl Span {
-    pub const fn from_secs(seconds: u64) -> Self {
+    pub(crate) const fn from_secs(seconds: u64) -> Self {
         Self(Duration::from_secs(seconds))
     }
 

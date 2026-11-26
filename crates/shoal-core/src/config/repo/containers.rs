@@ -3,7 +3,7 @@ use crate::config::options::Options;
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
-pub use shoal_protocol::containers::ContainerStart;
+pub(crate) use shoal_protocol::containers::ContainerStart;
 
 use super::setup::inside_worktree;
 

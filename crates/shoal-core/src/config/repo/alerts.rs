@@ -12,7 +12,7 @@ pub struct AlertsConfig {
 }
 
 impl AlertsConfig {
-    pub fn validate(&self) -> anyhow::Result<()> {
+    pub(crate) fn validate(&self) -> anyhow::Result<()> {
         if let Some(seconds) = self.settle_seconds {
             anyhow::ensure!(seconds <= 60, "alerts.settle_seconds must be at most 60");
         }

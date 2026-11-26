@@ -91,8 +91,8 @@ fn refuse_removed(root: &Spanned<DeTable<'_>>) -> Result<(), Error> {
 /// the options a repository may override.
 #[derive(Debug, Default)]
 pub(crate) struct GlobalFile {
-    pub machine: machine::Written,
-    pub repository: RepoConfig,
+    pub(crate) machine: machine::Written,
+    pub(crate) repository: RepoConfig,
 }
 
 pub(crate) fn global(text: &str) -> Result<GlobalFile, Error> {
@@ -160,7 +160,7 @@ fn global_file(
     })
 }
 
-pub fn repository(text: &str) -> Result<RepoConfig, Error> {
+pub(crate) fn repository(text: &str) -> Result<RepoConfig, Error> {
     let positioned = |mut error: Error| {
         error.set_input(Some(text));
         error

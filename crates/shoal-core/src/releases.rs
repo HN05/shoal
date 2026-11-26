@@ -20,9 +20,8 @@ mod kept;
 mod lease;
 mod sweep;
 
-pub use inherited::Invoked;
 pub(crate) use inherited::invoked;
-pub use inherited::take as take_inherited;
+pub use inherited::{Invoked, take as take_inherited};
 use lease::Lease;
 
 /// The file each copy's users hold a shared lock on.

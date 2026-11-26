@@ -36,19 +36,19 @@ pub(super) const RULES_DIR: &str = "rules";
 #[options(resolved = Mode)]
 pub struct ModeConfig {
     #[option(default = SpaceKind::Workspace)]
-    pub kind: Option<SpaceKind>,
+    pub(crate) kind: Option<SpaceKind>,
     /// Only a chat may have none.
     #[option(default = true)]
-    pub repository: Option<bool>,
+    pub(crate) repository: Option<bool>,
     #[option(list)]
-    pub rules: Vec<String>,
+    pub(crate) rules: Vec<String>,
     #[option(template, default = String::new())]
-    pub instructions: Option<String>,
-    pub focus: Option<bool>,
+    pub(crate) instructions: Option<String>,
+    pub(crate) focus: Option<bool>,
     #[option(default = 0)]
-    pub idle_wake_minutes: Option<u64>,
+    pub(crate) idle_wake_minutes: Option<u64>,
     #[option(section)]
-    pub permissions: PermissionsConfig,
+    pub(crate) permissions: PermissionsConfig,
     #[option(default = Weight::Heavy)]
     pub weight: Option<Weight>,
     pub label: Option<String>,
@@ -134,7 +134,7 @@ pub fn built_in_modes() -> BTreeMap<String, ModeConfig> {
 
 /// The rules Shoal ships; the `worker` and `chat` rules have no text of
 /// their own.
-pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
+pub(crate) fn built_in_rules() -> BTreeMap<String, RuleConfig> {
     let rule = |text: &str| RuleConfig {
         text: Some(text.to_owned()),
     };
@@ -155,7 +155,7 @@ pub fn built_in_rules() -> BTreeMap<String, RuleConfig> {
 
 /// The mode and rule names one layer writes, which name their files, and
 /// the kind of the default mode, which always starts in a workspace.
-pub fn validate(config: &RepoConfig) -> Result<()> {
+pub(crate) fn validate(config: &RepoConfig) -> Result<()> {
     for (name, mode) in &config.modes {
         crate::validate::name("mode", name)?;
         ensure_configurable(&name.as_str().into())?;
@@ -223,7 +223,7 @@ pub fn shapes(modes: &BTreeMap<String, Mode>) -> ModeShapes {
 /// as `repository` says: a setup space's [`setup_base`] with the setup
 /// instructions, never woken while idle since it waits for the user, else
 /// the mode `modes` defines.
-pub fn resolve<'a>(
+pub(crate) fn resolve<'a>(
     modes: &'a BTreeMap<String, Mode>,
     name: &ModeName,
     kind: SpaceKind,
@@ -244,7 +244,7 @@ pub fn resolve<'a>(
 /// `kind` takes: the worker's for a repository's workspace, the
 /// orchestrator's for a chat without a repository, which sets up the
 /// global config.
-pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<ModeName> {
+pub(crate) fn setup_base(kind: SpaceKind, repository: bool) -> Result<ModeName> {
     match (kind, repository) {
         (SpaceKind::Workspace, _) => Ok(ModeName::DEFAULT),
         (SpaceKind::Chat, false) => Ok(ModeName::ORCHESTRATE),
@@ -259,7 +259,7 @@ pub fn setup_base(kind: SpaceKind, repository: bool) -> Result<ModeName> {
 /// defines, and those Shoal's mode of that name has by default, which
 /// `[permissions]` overrides; a setup mode takes both from its
 /// [`setup_base`].
-pub fn permission_layers(
+pub(crate) fn permission_layers(
     modes: &BTreeMap<String, Mode>,
     mode: SpaceMode,
 ) -> Result<(PermissionsConfig, PermissionsConfig)> {
@@ -289,7 +289,7 @@ fn built_in_permissions(name: &ModeName) -> PermissionsConfig {
 
 /// Refuse a mode that names a rule no layer defines, a workspace without
 /// a repository, or a label another mode has, once they combine.
-pub fn check(modes: &BTreeMap<String, Mode>, rules: &BTreeMap<String, Rule>) -> Result<()> {
+pub(crate) fn check(modes: &BTreeMap<String, Mode>, rules: &BTreeMap<String, Rule>) -> Result<()> {
     let mut labelled = BTreeMap::new();
     for (name, mode) in modes {
         if let Some(label) = &mode.label
@@ -316,7 +316,7 @@ pub type Files = BTreeMap<String, PathBuf>;
 /// `rules/<name>.md` files in `directories`, where each file may be in only
 /// one of them. A file names its mode or rule, which it adds when the layer
 /// has none of that name. A file an inline value overrides is never read.
-pub fn fill(config: &mut RepoConfig, directories: &[PathBuf]) -> Result<Files> {
+pub(crate) fn fill(config: &mut RepoConfig, directories: &[PathBuf]) -> Result<Files> {
     let mut files = Files::new();
     for (name, path) in markdown_files(directories, MODES_DIR)? {
         ensure_configurable(&name.as_str().into()).with_context(|| path.display().to_string())?;

@@ -19,17 +19,17 @@ pub struct Forges(BTreeMap<String, Forge>);
 
 #[derive(Debug, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct Forge {
+pub(crate) struct Forge {
     #[serde(rename = "type")]
-    pub kind: Option<ForgeKind>,
-    pub user_token: Option<Value>,
-    pub agent_token: Option<Value>,
-    pub review_token: Option<Value>,
+    pub(crate) kind: Option<ForgeKind>,
+    pub(crate) user_token: Option<Value>,
+    pub(crate) agent_token: Option<Value>,
+    pub(crate) review_token: Option<Value>,
     /// The account a token belongs to, where the forge signs it in with
     /// the account's email.
-    pub user_email: Option<String>,
-    pub agent_email: Option<String>,
-    pub review_email: Option<String>,
+    pub(crate) user_email: Option<String>,
+    pub(crate) agent_email: Option<String>,
+    pub(crate) review_email: Option<String>,
 }
 
 /// Whose tokens a set of logins holds.
@@ -133,7 +133,7 @@ impl Forges {
             .join("; ")
     }
 
-    pub fn validate(&self) -> Result<()> {
+    pub(crate) fn validate(&self) -> Result<()> {
         let mut seen = std::collections::BTreeSet::new();
         for (host, forge) in &self.0 {
             ensure!(

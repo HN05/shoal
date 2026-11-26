@@ -23,7 +23,7 @@ pub fn submitted_by_shoal(prompt: &str) -> bool {
 /// Submit `text` as a prompt in `place`, as if pasted and sent: bracketed
 /// paste keeps it one prompt, and Enter in the same write submits it rather
 /// than ending the paste.
-pub async fn submit_prompt(place: &Origin, text: &str) -> Result<()> {
+pub(crate) async fn submit_prompt(place: &Origin, text: &str) -> Result<()> {
     send_keys(place, &format!("\x1b[200~{text}\x1b[201~\r")).await
 }
 

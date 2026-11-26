@@ -26,7 +26,7 @@ enum Part {
 
 /// Why a template could not render: the path that reached no value.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Missing(pub Path);
+pub struct Missing(pub(crate) Path);
 
 impl fmt::Display for Missing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -37,12 +37,13 @@ impl fmt::Display for Missing {
 impl std::error::Error for Missing {}
 
 impl Template {
-    pub fn as_str(&self) -> &str {
+    #[cfg(test)]
+    pub(crate) fn as_str(&self) -> &str {
         &self.text
     }
 
     /// Whether it looks anything up, so only a firing knows its value.
-    pub fn is_static(&self) -> bool {
+    pub(crate) fn is_static(&self) -> bool {
         !(self.parts.iter()).any(|part| matches!(part, Part::Lookup(_)))
     }
 

@@ -11,7 +11,7 @@ const SAME_AS: &str = "same_as";
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct References(Vec<Reference>);
+pub(crate) struct References(Vec<Reference>);
 
 /// `key = { same_as = "<target>" }` in the table at `table`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

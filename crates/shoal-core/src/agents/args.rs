@@ -81,7 +81,7 @@ pub fn insert_options(command: &mut Vec<OsString>, options: Vec<OsString>) {
 
 /// What a workspace's agent `name` runs with besides its instructions, prompt
 /// and forwarded arguments: [`space_args`] and [`workspace_dir_args`].
-pub fn workspace_args(
+pub(crate) fn workspace_args(
     settings: &Effective,
     name: &Agent,
     workspace: &Workspace,
@@ -112,7 +112,7 @@ pub(super) fn space_args(
 /// directories, so it may also work in the child workspaces it splits
 /// there and in its temporary directory. `home`, the user's home, resolves
 /// the configured ones; `workspaces_dir` is resolved as agents compare paths.
-pub fn workspace_dir_args(
+pub(crate) fn workspace_dir_args(
     settings: &Effective,
     name: &Agent,
     home: &Path,
@@ -160,7 +160,7 @@ pub fn add_dir_args(settings: &Effective, name: &Agent, directories: &[PathBuf])
 /// directories and the chat's temporary directory as other working
 /// directories; for a setup chat without a repository also the directory
 /// of the global config beside `home`, which it may write.
-pub fn chat_dir_args(
+pub(crate) fn chat_dir_args(
     settings: &Effective,
     name: &Agent,
     home: &Path,

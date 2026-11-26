@@ -3,7 +3,7 @@ pub(crate) mod code_signing;
 pub mod control_group;
 pub mod described;
 pub(crate) mod directories;
-pub mod executable;
+pub(crate) mod executable;
 pub mod execution;
 pub mod identity;
 pub mod load;

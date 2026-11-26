@@ -11,31 +11,31 @@ use crate::config::{options::Options, presets::Preset, repo::RepoConfig};
 #[derive(Debug, Default, Clone, Deserialize, Serialize, Options)]
 #[serde(default, deny_unknown_fields)]
 #[options(resolved = ServerSettings)]
-pub struct ServerConfig {
+pub(crate) struct ServerConfig {
     /// The program that runs the server, which defines it whole; unset
     /// changes the server a preset brings under the same name.
-    pub command: Option<String>,
-    pub args: Option<Vec<String>>,
+    pub(crate) command: Option<String>,
+    pub(crate) args: Option<Vec<String>>,
     #[option(named)]
-    pub env: BTreeMap<String, String>,
+    pub(crate) env: BTreeMap<String, String>,
     #[option(default = true)]
-    pub enabled: Option<bool>,
+    pub(crate) enabled: Option<bool>,
 }
 
 /// A server agents start: a program over stdio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Server {
-    pub command: String,
-    pub args: Vec<String>,
-    pub env: BTreeMap<String, String>,
-    pub enabled: bool,
+    pub(crate) command: String,
+    pub(crate) args: Vec<String>,
+    pub(crate) env: BTreeMap<String, String>,
+    pub(crate) enabled: bool,
 }
 
 /// Every server the presets bring or a table defines, by name, turned off
 /// ones among them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
-pub struct Servers(BTreeMap<String, Server>);
+pub(crate) struct Servers(BTreeMap<String, Server>);
 
 impl Servers {
     pub(crate) fn enabled(&self) -> impl Iterator<Item = (&str, &Server)> {

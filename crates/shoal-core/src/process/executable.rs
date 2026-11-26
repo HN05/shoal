@@ -13,7 +13,7 @@ use crate::fsutil::executables::is_executable;
 /// Once that path names another binary, it is the file this process runs.
 /// A process started from a release copy was started through the path the
 /// process it replaced handed it, while the file there is the one it was then.
-pub fn invoked_executable() -> io::Result<PathBuf> {
+pub(crate) fn invoked_executable() -> io::Result<PathBuf> {
     let current = running_executable()?;
     if let Some(invoked) = crate::releases::invoked() {
         return Ok(if invoked.unchanged() {

@@ -7,12 +7,12 @@ use shoal_states::states;
 
 use crate::config::repo::{Cache, CacheScope};
 
-pub const CARGO_CACHE: &str = "preset.cargo";
-pub const XCODE_FILES_CACHE: &str = "preset.xcode-files";
+pub(crate) const CARGO_CACHE: &str = "preset.cargo";
+pub(crate) const XCODE_FILES_CACHE: &str = "preset.xcode-files";
 pub const XCODE_CACHE: &str = "preset.xcode";
 /// The preset caches that hold only a preset's own files, which emptying
 /// caches keeps since it frees nothing there.
-pub const KEPT_CACHES: &[&str] = &[CARGO_CACHE, XCODE_FILES_CACHE];
+pub(crate) const KEPT_CACHES: &[&str] = &[CARGO_CACHE, XCODE_FILES_CACHE];
 
 states!(
     Preset {
@@ -187,7 +187,10 @@ impl Preset {
 }
 
 /// `caches` with each preset's shared caches.
-pub fn caches(presets: &[Preset], mut caches: BTreeMap<String, Cache>) -> BTreeMap<String, Cache> {
+pub(crate) fn caches(
+    presets: &[Preset],
+    mut caches: BTreeMap<String, Cache>,
+) -> BTreeMap<String, Cache> {
     for name in presets
         .iter()
         .flat_map(|preset| preset.caches().iter().copied())
@@ -203,7 +206,7 @@ pub fn caches(presets: &[Preset], mut caches: BTreeMap<String, Cache>) -> BTreeM
 }
 
 /// `env` with every preset's variables it does not set itself.
-pub fn environment(
+pub(crate) fn environment(
     presets: &[Preset],
     mut env: BTreeMap<String, String>,
 ) -> BTreeMap<String, String> {
@@ -229,7 +232,7 @@ pub fn job_environment(
 }
 
 /// Each preset is named once, and no two keep the same seed output.
-pub fn validate(presets: &[Preset]) -> Result<()> {
+pub(crate) fn validate(presets: &[Preset]) -> Result<()> {
     for (index, preset) in presets.iter().enumerate() {
         for earlier in &presets[..index] {
             ensure!(earlier != preset, "presets names {preset} twice");
