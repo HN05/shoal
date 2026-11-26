@@ -175,10 +175,15 @@ pub(super) async fn reply(
     Err(error)
 }
 
-/// Send each page, then `ok`.
-async fn write_pages(stream: &mut UnixStream, request_id: u64, pages: Vec<Body>) -> Result<()> {
+/// Send each page, in pieces of its JSON where one item alone outgrows a
+/// frame, then `ok`.
+async fn write_pages(
+    stream: &mut (impl AsyncWrite + Unpin),
+    request_id: u64,
+    pages: Vec<Body>,
+) -> Result<()> {
     for page in pages {
-        protocol::write(stream, &Response::new(request_id, page)).await?;
+        write_frames(stream, Response::new(request_id, page)).await?;
     }
     protocol::write(stream, &Response::new(request_id, Body::Ok)).await
 }

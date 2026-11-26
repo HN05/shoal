@@ -22,6 +22,31 @@ async fn an_oversized_reply_arrives_in_pieces_that_join() {
 }
 
 #[tokio::test]
+async fn a_listing_item_too_large_for_a_frame_arrives_in_pieces() {
+    let (client, mut stream) = tokio::net::UnixStream::pair().unwrap();
+    let items = vec!["small".to_owned(), "x".repeat(MAX_FRAME)];
+    let pages = protocol::frame_pages(items.clone())
+        .unwrap()
+        .into_iter()
+        .map(Body::ApiResponse)
+        .collect();
+    let mut client = tokio::io::BufReader::new(client);
+    let read = async {
+        let mut listed = Vec::new();
+        loop {
+            match protocol::read_response(&mut client).await?.body {
+                Body::Ok => return anyhow::Ok(listed),
+                Body::ApiResponse(page) => listed.extend(page),
+                other => anyhow::bail!("unexpected {}", other.variant_name()),
+            }
+        }
+    };
+    let (written, listed) = tokio::join!(write_pages(&mut stream, 3, pages), read);
+    written.unwrap();
+    assert_eq!(listed.unwrap(), items);
+}
+
+#[tokio::test]
 async fn an_oversized_answer_to_a_wait_arrives_in_pieces_too() {
     let (_state, manager) = crate::daemon::test_support::manager().await;
     let (client, stream) = tokio::net::UnixStream::pair().unwrap();
