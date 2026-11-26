@@ -878,6 +878,41 @@ fn an_input_s_bound_reads_the_value_the_answer_gives_its_data() {
     answer("2026-12-01", "2026-12-05").unwrap();
     // It may not fall before the start the answer gives.
     assert!(answer("2026-12-20", "2026-12-15").is_err());
+    // An answer gives that start where the surface holds no data.
+    let mut empty = range.clone();
+    let body = empty.0["createSurface"].as_object_mut().unwrap();
+    body.remove("dataModel");
+    let answer = |start: &str, end: &str| {
+        empty.resolve(
+            "book",
+            values(&[("start", json!(start)), ("end", json!(end))]),
+        )
+    };
+    assert!(answer("2026-12-20", "2026-12-15").is_err());
+    answer("2026-12-01", "2026-12-05").unwrap();
+}
+
+#[test]
+fn every_binding_of_an_answer_reads_the_values_it_enters() {
+    let person = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["name", "save"]},
+            {"id": "name", "component": "TextField", "label": "Name",
+             "value": {"@path": "/person/name"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save",
+                 "context": {"name": {"@path": "/person/name"}, "person": {"@path": "/person"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"person": {"name": "Grace", "age": 36}}),
+    );
+    let resolved = person
+        .resolve("save", values(&[("name", json!("Ada"))]))
+        .unwrap();
+    assert_eq!(
+        Value::Object(resolved),
+        json!({"name": "Ada", "person": {"name": "Ada", "age": 36}})
+    );
 }
 
 #[test]

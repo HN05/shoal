@@ -130,11 +130,11 @@ impl Surface {
 
     /// The context of the action `id` with `values` entered for its
     /// inputs, as the event the answer dispatches carries it: literal
-    /// entries as written, and bound ones with the value given, else the
-    /// data model's. A value is refused unless the action takes it and
-    /// its input accepts it, with the bounds the other values give it,
+    /// entries as written, and bound ones read from the data model with
+    /// the values entered. A value is refused unless the action takes it
+    /// and its input accepts it, with the bounds the other values give it,
     /// such as an end date's earliest, which a start date binds.
-    pub fn resolve(&self, id: &str, mut values: Map<String, Value>) -> Result<Map<String, Value>> {
+    pub fn resolve(&self, id: &str, values: Map<String, Value>) -> Result<Map<String, Value>> {
         ensure!(
             super::checks::plain(id, false),
             "an action's id holds no control characters"
@@ -156,23 +156,17 @@ impl Surface {
                 ),
             }
         }
-        let entered = self.entered(&action, &values);
+        let mut entered = self.entered(&action, &values);
         // Entered data can reshape a list; keep the action as offered then.
         let action = (entered.action(id))
             .filter(|entered| values.keys().all(|key| entered.takes(key)))
             .unwrap_or(action);
-        let mut resolved = Map::new();
-        for (key, entry) in self.context(&action.event) {
-            let value = match (binding(entry), values.remove(key)) {
-                (Some(_), Some(given)) => action.input(key).kind.accept(key, given)?,
-                (Some(path), None) => {
-                    (self.data(&scoped(&action.scope, path)).cloned()).unwrap_or(Value::Null)
-                }
-                (None, _) => self.evaluated(entry, &action.scope),
-            };
-            resolved.insert(key.clone(), value);
+        for (key, given) in values {
+            let input = action.input(&key);
+            let accepted = input.kind.accept(&key, given)?;
+            entered.enter(&input.path, accepted);
         }
-        Ok(resolved)
+        Ok(entered.dispatched(&action))
     }
 
     /// The surface with `values` entered into the data of `action`'s
@@ -180,17 +174,58 @@ impl Surface {
     /// that data read what the answer gives.
     fn entered(&self, action: &SurfaceAction, values: &Map<String, Value>) -> Surface {
         let mut entered = self.clone();
-        let Some(model) =
-            (entered.0.get_mut("createSurface")).and_then(|body| body.get_mut("dataModel"))
-        else {
-            return entered;
-        };
         for (key, given) in values {
             let input = action.input(key);
             let value = (input.kind.accept(key, given.clone())).unwrap_or_else(|_| given.clone());
-            set_data(model, &input.path, value);
+            entered.enter(&input.path, value);
         }
         entered
+    }
+
+    /// The context `action`'s event carries: each bound entry read from
+    /// the data model, each literal one as [`Self::evaluated`] gives it.
+    fn dispatched(&self, action: &SurfaceAction) -> Map<String, Value> {
+        (self.context(&action.event).into_iter())
+            .map(|(key, entry)| {
+                let value = match binding(entry) {
+                    Some(path) => {
+                        (self.data(&scoped(&action.scope, path)).cloned()).unwrap_or(Value::Null)
+                    }
+                    None => self.evaluated(entry, &action.scope),
+                };
+                (key.clone(), value)
+            })
+            .collect()
+    }
+
+    /// Write `value` into the data model at the JSON pointer `path`, as a
+    /// renderer's input does: in place, or creating the model and the
+    /// objects above it where they are missing.
+    fn enter(&mut self, path: &str, value: Value) {
+        let Some(body) = self
+            .0
+            .get_mut("createSurface")
+            .and_then(Value::as_object_mut)
+        else {
+            return;
+        };
+        let mut at = (body.entry("dataModel")).or_insert_with(|| Value::Object(Map::new()));
+        for field in path.split('/').skip(1) {
+            let field = field.replace("~1", "/").replace("~0", "~");
+            at = match at {
+                Value::Array(items) => {
+                    match field.parse::<usize>().ok().and_then(|n| items.get_mut(n)) {
+                        Some(item) => item,
+                        None => return,
+                    }
+                }
+                Value::Object(fields) => fields
+                    .entry(field)
+                    .or_insert_with(|| Value::Object(Map::new())),
+                _ => return,
+            };
+        }
+        *at = value;
     }
 
     /// The action of `placed`, a button that dispatches an agent event.
@@ -359,22 +394,6 @@ impl SurfaceAction {
     fn keys(&self) -> String {
         let keys: Vec<&str> = self.inputs.iter().map(|input| input.key.as_str()).collect();
         keys.join(", ")
-    }
-}
-
-/// Write `value` at the JSON pointer `path` of `model`, as a renderer's
-/// input does: in place, or as a new field of the object above it.
-fn set_data(model: &mut Value, path: &str, value: Value) {
-    if let Some(at) = model.pointer_mut(path) {
-        *at = value;
-        return;
-    }
-    let Some((parent, field)) = path.rsplit_once('/') else {
-        return;
-    };
-    let field = field.replace("~1", "/").replace("~0", "~");
-    if let Some(Value::Object(fields)) = model.pointer_mut(parent) {
-        fields.insert(field, value);
     }
 }
 
