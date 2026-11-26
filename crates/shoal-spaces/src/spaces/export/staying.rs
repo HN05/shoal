@@ -142,8 +142,8 @@ fn relink(tx: &Transaction<'_>, space: &SpaceId, parent: &SpaceId) -> Result<()>
     Ok(())
 }
 
-/// Each with the space it is below. Waits until no removal `held` reserves
-/// a space it leaves or joins, `above` among them, and none of them is being
+/// Each with the space it is below. Refuses while a removal `held` reserves
+/// a space it leaves or joins, `above` among them, or one of them is being
 /// removed: a removal that listed the spaces below one of those would
 /// otherwise miss it.
 fn staying(

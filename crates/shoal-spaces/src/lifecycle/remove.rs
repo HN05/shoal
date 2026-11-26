@@ -232,8 +232,8 @@ impl Spaces {
             .result())
     }
 
-    /// Waits for the grace period, which disk space and the user's request
-    /// do not wait for. `Ok(false)` while it runs.
+    /// Removes only once the grace period ends, except for disk space and
+    /// the user's request. `Ok(false)` while it runs.
     pub async fn remove_unused(
         &self,
         daemon: &dyn Daemon,
@@ -264,7 +264,7 @@ impl Spaces {
         .await
     }
 
-    /// Waits for the grace period. `Ok(false)` while it runs.
+    /// Removes only once the grace period ends. `Ok(false)` while it runs.
     pub async fn remove_completed(
         &self,
         daemon: &dyn Daemon,
@@ -280,7 +280,7 @@ impl Spaces {
         self.remove_after_grace(daemon, space, removal).await
     }
 
-    /// Waits for the grace period. `Ok(false)` while it runs.
+    /// Removes only once the grace period ends. `Ok(false)` while it runs.
     pub async fn remove_under_completed(
         &self,
         daemon: &dyn Daemon,
