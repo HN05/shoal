@@ -1,8 +1,5 @@
-//! Space cleanup: automatic removal of idle spaces, clean and fully pushed
-//! where they have a worktree, of merged ones, and of worktrees whose
-//! directory was deleted outside Shoal; the user can remove the idle
-//! candidates on request. A space without a worktree meets every condition
-//! on one, and goes once its agent stopped and nothing keeps it.
+//! Automatic and requested cleanup of idle and merged spaces, and of
+//! worktrees deleted outside Shoal. See `docs/design/cleanup.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -53,7 +50,6 @@ pub enum Rule {
 }
 
 impl Rule {
-    /// Whether the worktree's state still satisfies the rule.
     pub fn allows(self, check: &crate::removal::RemovalCheck) -> bool {
         match self {
             Rule::Idle => check.safe(),
@@ -79,11 +75,10 @@ impl Rule {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Snapshot {
     pub rule: Rule,
-    /// What the space records, with its worktree's HEAD, cheap enough to
+    /// What the space records, with its worktree's HEAD: cheap enough to
     /// compare on every pass.
     pub signals: u64,
-    /// The metadata of every file in its worktree, which takes a full walk,
-    /// or of none.
+    /// The metadata of every file in the worktree, which takes a full walk.
     pub tree: u64,
 }
 
@@ -101,8 +96,8 @@ pub struct Timers {
 }
 
 impl Timers {
-    /// Whether the timer has run for `delay` with unchanged `signals`; a
-    /// change, or no timer, needs a full snapshot to start from.
+    /// A change of `signals`, or no timer, needs a full snapshot to start
+    /// from.
     pub fn expired(&self, id: &SpaceId, signals: u64, now: Instant, delay: Duration) -> Expiry {
         match self.idle.get(id) {
             Some(idle) if idle.snapshot.signals != signals => Expiry::Restart,
@@ -129,8 +124,8 @@ pub enum Expiry {
     Expired(Snapshot),
 }
 
-/// What a cleanup candidate records: its activity counter and when its
-/// agent last stopped, with its worktree's HEAD where it has one.
+/// Hashes the activity counter, when the agent last stopped, and the
+/// worktree's HEAD where there is one.
 pub fn signals(activity: u64, stopped_at: Option<UnixTime>, head: Option<&str>) -> u64 {
     let mut hash = DefaultHasher::new();
     activity.hash(&mut hash);
@@ -139,32 +134,29 @@ pub fn signals(activity: u64, stopped_at: Option<UnixTime>, head: Option<&str>) 
     hash.finish()
 }
 
-/// What one walk of a worktree's files sees.
 #[derive(Clone, Copy, Debug)]
 pub struct Tree {
     /// The metadata of every file. Change times only move forward and cannot
     /// be set, unlike modification times, so two equal fingerprints mean no
     /// file changed between them.
     pub fingerprint: u64,
-    /// The newest change or modification time of any file.
     pub changed: UnixTime,
 }
 
 impl Tree {
-    /// What a space without a worktree has: no files.
     pub const EMPTY: Self = Self {
         fingerprint: 0,
         changed: UnixTime::EPOCH,
     };
 }
 
-/// The later of a file's change and modification times.
 pub fn change_time(metadata: &fs::Metadata) -> UnixTime {
     UnixTime::from_seconds(metadata.ctime().max(metadata.mtime()))
 }
 
-/// Metadata only, including ignored files; never follow symlinks out of the tree.
-/// Git administrative storage is shared and inspected separately through HEAD.
+/// Reads metadata only, ignored files included, and never follows symlinks
+/// out of the tree. Git's shared administrative storage is inspected
+/// separately, through HEAD.
 pub fn walk(root: &Path) -> Result<Tree> {
     fn visit(path: &Path, hash: &mut DefaultHasher, changed: &mut UnixTime) -> Result<()> {
         let metadata = fs::symlink_metadata(path)?;
@@ -196,9 +188,8 @@ pub fn walk(root: &Path) -> Result<Tree> {
     })
 }
 
-/// Observe the branch of each ready worktree. A failure is the pass's in
-/// the workspace it concerns, so the log has it once while it repeats,
-/// except in a directory whose file access stalled, which is reported as
+/// A failure belongs to the workspace it concerns, so the log has it once
+/// while it repeats. A directory whose file access stalled is reported as
 /// such and skipped.
 pub async fn observe_branches(daemon: &dyn Daemon) -> Result<()> {
     let mut failed = SpaceFailures::default();
@@ -225,7 +216,7 @@ pub async fn observe_branches(daemon: &dyn Daemon) -> Result<()> {
 }
 
 impl Spaces {
-    /// Observe external checkouts without changing the branch Shoal owns.
+    /// Leaves the branch Shoal owns as it is.
     pub async fn observe_workspace_branch(
         &self,
         daemon: &dyn Daemon,
@@ -246,10 +237,9 @@ impl Spaces {
     }
 }
 
-/// Whether `path` is a directory, read off the runtime's threads and within
-/// a check's time limit, since stalled file access can hold the read. The daemon's
-/// own read says nothing about the processes it starts there, so it records
-/// no stall.
+/// Reads off the runtime's threads and within a check's time limit, since
+/// stalled file access can hold the read. The daemon's own read says nothing
+/// about the processes it starts there, so it records no stall.
 async fn is_dir(path: &std::path::Path) -> bool {
     matches!(
         tokio::time::timeout(file_access::LIMIT, off_runtime::is_dir(path)).await,
@@ -257,9 +247,9 @@ async fn is_dir(path: &std::path::Path) -> bool {
     )
 }
 
-/// Each space's idle delay comes from its own layered config, a chat's from
-/// its repository's; a disabled worktree gets only deleted-directory
-/// cleanup. A failure in one space does not skip the others.
+/// A chat reads its idle delay from its repository's config. A disabled
+/// worktree gets only deleted-directory cleanup. A failure in one space does
+/// not skip the others.
 pub async fn sweep_idle(
     daemon: &dyn Daemon,
     timers: &mut Timers,
@@ -278,8 +268,8 @@ pub async fn sweep_idle(
     failed.into_result()
 }
 
-/// Remove `space` once idle cleanup has seen it unchanged for its idle
-/// delay and its grace period ended, or forget its deleted worktree.
+/// Removes the space once its idle delay and grace period passed with it
+/// unchanged, or forgets its deleted worktree.
 async fn sweep_space(
     daemon: &dyn Daemon,
     timers: &mut Timers,
@@ -309,9 +299,8 @@ async fn sweep_space(
         timers.idle.remove(&space.id);
         return observed.map(drop);
     };
-    // Each pass compares only the signals; a worktree's Git state is
-    // inspected and its files walked when the timer starts and again when
-    // it expires.
+    // Each pass compares only the signals. Git's state is inspected and the
+    // files walked when the timer starts and again when it expires.
     let now = Instant::now();
     let started = match timers.expired(&space.id, signals, now, delay) {
         Expiry::Running => return Ok(()),
@@ -341,9 +330,8 @@ async fn sweep_space(
     .await
 }
 
-/// Whether the worktree of `workspace` was deleted: only one that existed
-/// (identity recorded) can have been, and a failed creation keeps its
-/// error until removed explicitly.
+/// Only a worktree that existed, with its identity recorded, can have been
+/// deleted. A failed creation keeps its error until removed explicitly.
 async fn deleted(workspace: &crate::model::Worktree) -> Result<bool> {
     Ok(matches!(
         workspace.state,
@@ -352,8 +340,8 @@ async fn deleted(workspace: &crate::model::Worktree) -> Result<bool> {
         && !off_runtime::try_exists(&workspace.path).await?)
 }
 
-/// The idle delay of `space`, or `None` when idle cleanup is disabled for
-/// it or its worktree is not ready.
+/// `None` when idle cleanup is disabled for the space or its worktree is not
+/// ready.
 async fn idle_delay(daemon: &dyn Daemon, space: &Space) -> Result<Option<Duration>> {
     if space.worktree().and_then(not_ready).is_some() {
         return Ok(None);
@@ -362,9 +350,8 @@ async fn idle_delay(daemon: &dyn Daemon, space: &Space) -> Result<Option<Duratio
     Ok(settings.cleanup.auto.delay())
 }
 
-/// The idle delay and timer signals of `space` when nothing recorded and no
-/// process keeps it; `None` when something does or its idle cleanup is
-/// disabled.
+/// `None` when something recorded or a process keeps the space, or its idle
+/// cleanup is disabled.
 async fn observe(
     daemon: &dyn Daemon,
     space: &Space,
@@ -380,8 +367,7 @@ async fn observe(
     Ok(signals.map(|signals| (delay, signals)))
 }
 
-/// The full snapshot of an idle cleanup candidate, with the processes in
-/// its worktree read from `users`.
+/// Reads the processes in its worktree from `users`.
 pub async fn candidate(
     daemon: &dyn Daemon,
     space: &Space,
@@ -396,13 +382,13 @@ pub async fn candidate(
     .await
 }
 
-/// Operations on the client type [`ManualCleanup`] that only the `shoal` command uses.
+/// Operations on the client type [`ManualCleanup`] that only the `shoal`
+/// command uses.
 trait ManualCleanupExt {
     /// A dry run lists why it keeps each space, and a request naming spaces
     /// says why it kept those.
     fn keep(&mut self, space: SpaceName, reason: CleanupReason, named: bool);
 
-    /// Record that removing the space `space` failed with `error`.
     fn retain(&mut self, space: SpaceName, error: &anyhow::Error);
 }
 
@@ -423,11 +409,9 @@ impl ManualCleanupExt for ManualCleanup {
 
 /// Operations on the client type [`Pick`] that only the `shoal` command uses.
 trait PickExt {
-    /// Whether it covers the repository `name`, `id`.
     fn covers(&self, name: &str, id: &str) -> bool;
 
-    /// Whether it covers the space `id`; names repeat, so it names spaces
-    /// by ID alone.
+    /// Matches by ID alone, since names repeat.
     fn covers_space(&self, id: &SpaceId) -> bool;
 
     /// Fails for a name none of `items`, as `(name, id)` pairs, has.
@@ -468,9 +452,9 @@ impl PickExt for Pick {
     }
 }
 
-/// Remove the selected spaces idle or merged cleanup would remove, now: the
-/// user's request replaces their idle periods and applies where they are
-/// disabled. Then empty the selected shared caches nothing is using.
+/// The user's request replaces the spaces' idle periods and applies where
+/// idle cleanup is disabled. Then empties the selected shared caches
+/// nothing uses.
 pub async fn on_request(
     daemon: &dyn Daemon,
     dry_run: bool,
@@ -490,15 +474,13 @@ pub async fn on_request(
     Ok(report)
 }
 
-/// The spaces and repositories a cleanup request can reach.
 struct Targets {
     spaces: Vec<Space>,
     repositories: Vec<crate::model::Repository>,
 }
 
 impl Targets {
-    /// Those of the selected repository, or all, once every name the
-    /// selection gives is among them.
+    /// Refuses until every name the selection gives is among them.
     async fn of(daemon: &dyn Daemon, selection: &Selection) -> Result<Self> {
         let repository = match &selection.repository {
             Some(selector) => Some(
@@ -571,7 +553,6 @@ async fn empty_caches_on_request(
     Ok(report)
 }
 
-/// Remove the selected spaces idle or merged cleanup would remove, now.
 async fn remove_on_request(
     daemon: &dyn Daemon,
     report: &mut ManualCleanup,
@@ -631,9 +612,7 @@ async fn remove_on_request(
     Ok(())
 }
 
-/// The snapshot of an idle or merged cleanup candidate, or why idle cleanup
-/// keeps the space. A merged worktree needs a freshly fetched default
-/// branch.
+/// A merged worktree needs a freshly fetched default branch.
 async fn requested_candidacy(
     daemon: &dyn Daemon,
     space: &Space,
@@ -659,7 +638,7 @@ async fn requested_candidacy(
 }
 
 /// A deleted worktree is forgotten unless it was moved or still has commands
-/// Shoal cannot verify; the branch is retained either way.
+/// Shoal cannot verify. The branch is kept either way.
 async fn remove_deleted(daemon: &dyn Daemon, workspace: &Workspace) {
     match daemon.spaces().missing_worktree(workspace).await {
         Ok(Some(_)) => return,

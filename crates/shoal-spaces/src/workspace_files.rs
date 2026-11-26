@@ -1,8 +1,5 @@
-//! Files attached to workspaces and chats, such as those sent with a message
-//! to a workspace's agents. Each repository keeps Shoal's copies beside its
-//! workspaces, in a directory its agents are given as a working directory,
-//! and the store records each copy with how it came, so `shoal files` lists
-//! them.
+//! Files attached to spaces: Shoal's copies, kept beside a repository's
+//! workspaces, and the store's record of each.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -37,25 +34,23 @@ pub use shoal_protocol::files::{
     check_path, check_sent, missing_selection,
 };
 
-/// The space, a workspace or chat, whose attached files a request names:
-/// one that exists, or a removed workspace or removed chat whose files are
-/// kept.
+/// The space whose attached files a request names: one that exists, or a
+/// removed space whose files are kept.
 #[derive(Debug, Clone)]
 pub struct Space {
     pub id: SpaceId,
     pub name: String,
-    /// The repository whose directory keeps its files; none for a chat
-    /// without a repository, whose files `root_dir` keeps.
+    /// None for a chat without a repository, whose files `root_dir` keeps.
     pub repository_id: Option<RepositoryId>,
-    /// The `root_dir` a chat without a repository keeps its files in, the
-    /// one it started in; none for a space of a repository.
+    /// The `root_dir` a chat without a repository started in, which keeps
+    /// its files. None for a space of a repository.
     pub root_dir: Option<PathBuf>,
     /// The space's parent when it attached the files.
     pub parent_id: Option<SpaceId>,
 }
 
 /// Which home keeps attached files: a repository's directory, or a
-/// `root_dir` that keeps those of chats without a repository.
+/// `root_dir` for the chats without a repository.
 #[derive(Debug, Clone)]
 pub enum HomeKey {
     Repository(Repository),
@@ -63,7 +58,6 @@ pub enum HomeKey {
 }
 
 impl HomeKey {
-    /// Its repository's ID; none for a `root_dir`.
     pub fn repository_id(&self) -> Option<RepositoryId> {
         match self {
             Self::Repository(repo) => Some(repo.id.clone()),
@@ -71,7 +65,7 @@ impl HomeKey {
         }
     }
 
-    /// Its `root_dir` as records name it; none for a repository.
+    /// As records name it.
     pub fn root_dir(&self) -> Option<String> {
         match self {
             Self::Repository(_) => None,
@@ -79,7 +73,6 @@ impl HomeKey {
         }
     }
 
-    /// What a failure names it by.
     pub fn describe(&self) -> String {
         match self {
             Self::Repository(repo) => repo.path.display().to_string(),
@@ -88,15 +81,12 @@ impl HomeKey {
     }
 }
 
-/// Where attached files are kept: in a repository's directory, or for the
-/// chats without a repository, in `root_dir`.
 pub enum FilesHome {
     Repository(Repository),
     Outside(Layout),
 }
 
 impl FilesHome {
-    /// Where its files are.
     pub fn layout(&self) -> Layout {
         match self {
             Self::Repository(repo) => Layout::of(repo),
@@ -138,16 +128,13 @@ impl From<Chat> for Space {
     }
 }
 
-/// The text copies of added files are kept under, which tells them from a
-/// message that is only its files.
+/// Tells copies of added files from a message that is only its files.
 const ADDED: &str = "shoal files add";
 
-/// The text copies of a handoff's session files are kept under.
 const HANDOFF: &str = "shoal convert agent";
 
-/// Copies of `files`, attached to `message` for the workspace or chat
-/// `space_id`, made off the async runtime. Callers hold the gate of the
-/// repository's attached files.
+/// Copies off the async runtime. Callers hold the gate of the repository's
+/// attached files.
 pub async fn keep(
     layout: Layout,
     space_id: &SpaceId,
@@ -158,9 +145,8 @@ pub async fn keep(
     tokio::task::spawn_blocking(move || layout.keep(&id, &message, &files)).await?
 }
 
-/// Copies of `files` that the workspace or chat `space_id` hands the user
-/// with `message`, among its results, made off the async runtime. Callers hold the gate of the
-/// repository's attached files.
+/// Copies the files the space hands the user among its results, off the
+/// async runtime. Callers hold the gate of the repository's attached files.
 async fn copy_for_user(
     layout: Layout,
     space_id: &SpaceId,
@@ -171,9 +157,9 @@ async fn copy_for_user(
     tokio::task::spawn_blocking(move || layout.keep_results(&id, &message, &files)).await?
 }
 
-/// Delete the copies of files that were refused, such as ones for a
-/// workspace removed while they were made. Failure only logs, as the
-/// refusal is what the sender hears.
+/// Deletes the copies of refused files, such as those for a workspace
+/// removed while they were made. A failure only logs: the refusal is what
+/// the sender hears.
 pub async fn discard(kept: Kept) {
     let discarded = tokio::task::spawn_blocking(move || kept.discard()).await;
     if let Err(error) = discarded
@@ -185,9 +171,7 @@ pub async fn discard(kept: Kept) {
 }
 
 impl Spaces {
-    /// Copy `attachments` into the files of `space` and queue `message` with
-    /// the copies through `queue`, deleting the copies made for a message it
-    /// refuses.
+    /// Deletes the copies made for a message `queue` refuses.
     pub async fn queue_attached<Queue, Queued, T>(
         &self,
         daemon: &dyn Daemon,
@@ -209,8 +193,7 @@ impl Spaces {
         queued
     }
 
-    /// Who a request from `caller` attaches files as: the agent it comes
-    /// from, whatever its space, else the user.
+    /// The agent a request comes from, whatever its space, else the user.
     pub async fn attacher(&self, daemon: &dyn Daemon, caller: Option<&Caller>) -> Attacher {
         let agent = match caller {
             Some(caller) => daemon.caller_agent(caller).await,
@@ -231,30 +214,25 @@ impl Spaces {
         }
     }
 
-    /// The files attached to the workspace or chat `selector` names, or
-    /// kept for the removed space of that ID, oldest first.
+    /// Includes the files kept for a removed space of that ID. Oldest first.
     pub async fn attached_files(&self, selector: &SpaceSelector) -> Result<Vec<AttachedFile>> {
         let space = self.file_space(selector).await?;
         self.store.run(move |db| records::list(db, &space.id)).await
     }
 
-    /// The records of the copies at `paths`, which this machine keeps, as
-    /// an alert sends them.
+    /// For an alert to send. This machine keeps the copies.
     pub async fn sent_files(&self, paths: Vec<PathBuf>) -> Result<Vec<SentFile>> {
         let records = self.store.read(move |db| records::at(db, &paths)).await?;
         Ok(records.iter().map(SentFile::from).collect())
     }
 
-    /// The records of `files`, which this machine keeps, by their space and
-    /// ID, with their copies' paths, in their order; a file whose record is
-    /// gone drops out.
+    /// Keeps their order. A file whose record is gone drops out.
     pub async fn kept_sent_files(&self, files: Vec<SentFile>) -> Result<Vec<SentFile>> {
         let records = self.store.read(move |db| records::sent(db, &files)).await?;
         Ok(records.iter().map(SentFile::from).collect())
     }
 
-    /// The workspace or chat `selector` names, or else the removed space of
-    /// that ID whose files are kept.
+    /// Falls back to the removed space of that ID whose files are kept.
     pub async fn file_space(&self, selector: &SpaceSelector) -> Result<Space> {
         let error = match self.space(selector).await {
             Ok(space) => return Ok(space.into()),
@@ -270,8 +248,6 @@ impl Spaces {
         gone.ok_or(error)
     }
 
-    /// Copies of the files `results` that `space` hands back with its
-    /// completion, recorded as its results attached by `attacher`.
     pub async fn keep_results(
         &self,
         daemon: &dyn Daemon,
@@ -299,11 +275,9 @@ impl Spaces {
             .collect())
     }
 
-    /// Copies of `files` that `space` sends with `message`, recorded as
-    /// coming from `source` and attached by `attacher`, which outlive its
-    /// removal, until the message is sent or refused: a refused message's
-    /// copies and records go, while those an identical earlier message made
-    /// stay with it.
+    /// The copies outlive the space's removal until the message is sent or
+    /// refused. A refused message's copies and records go, while those an
+    /// identical earlier message made stay with it.
     pub async fn attach_files(
         &self,
         daemon: &dyn Daemon,
@@ -329,10 +303,9 @@ impl Spaces {
         })
     }
 
-    /// Attach copies of the files attached to the space `from` to the space
-    /// `to`, each with its title and as whoever attached it, and return each
-    /// one's record ID with its copy's record. The originals stay with
-    /// `from`, so what refers to them keeps them for as long as it does.
+    /// Keeps each file's title and who attached it, and returns each one's
+    /// record ID with its copy's record. The originals stay with `from`, so
+    /// what refers to them keeps them for as long as it does.
     pub async fn copy_attached_files(
         &self,
         daemon: &dyn Daemon,
@@ -342,7 +315,6 @@ impl Spaces {
         let (from, to) = (SpaceSelector::id(from), SpaceSelector::id(to));
         let mut copied = Vec::new();
         for file in self.attached_files(&from).await? {
-            // Every record of this machine's store names its copy here.
             let Some(path) = file.copy.path() else {
                 continue;
             };
@@ -356,10 +328,8 @@ impl Spaces {
         Ok(copied)
     }
 
-    /// Delete the files attached to the workspace or chat `selector` names,
-    /// only the copies of files with one of `names` and the records `ids`
-    /// when there are any, and return their records. A name or record it does
-    /// not have deletes nothing.
+    /// With `names` or `ids`, deletes only those. A name or record the space
+    /// does not have deletes nothing.
     pub async fn remove_attached_files(
         &self,
         daemon: &dyn Daemon,
@@ -386,14 +356,13 @@ impl Spaces {
         self.delete_files(&home, files).await
     }
 
-    /// Delete the attached files of every workspace without a running agent
-    /// or command, or one whose end is unresolved, and of every removed
-    /// workspace and removed chat, and return their records.
-    /// No execution starts while a repository's files are chosen and deleted.
+    /// Takes the files of every workspace without a running agent or
+    /// command, or whose end is unresolved, and of every removed space. No
+    /// execution starts while a repository's files are chosen and deleted.
     pub async fn remove_idle_files(&self, daemon: &dyn Daemon) -> Result<Vec<AttachedFile>> {
         let mut deleted = Vec::new();
         for key in self.files_homes(daemon).await? {
-            // Execution admission comes first, as nothing holding the files
+            // Take execution admission first: nothing that holds the files
             // gate waits for it.
             let _admission = daemon.lock_connections().await;
             let (home, _files) = self.lock_files_home(daemon, &key).await?;
@@ -403,8 +372,6 @@ impl Spaces {
         Ok(deleted)
     }
 
-    /// The homes of attached files: every repository's directory, and each
-    /// `root_dir` that keeps files of chats without a repository.
     pub async fn files_homes(&self, daemon: &dyn Daemon) -> Result<Vec<HomeKey>> {
         let repositories = daemon.repositories().await?.into_iter();
         let roots = self.store.run(|db| records::roots(db)).await?;
@@ -413,8 +380,8 @@ impl Spaces {
             .collect())
     }
 
-    /// Delete the copies `files` kept in `home` and then their records.
-    /// Callers hold the gate of its attached files.
+    /// Deletes the copies first, then their records. Callers hold the gate
+    /// of the home's attached files.
     async fn delete_files(
         &self,
         home: &FilesHome,
@@ -435,10 +402,8 @@ impl Spaces {
         Ok(files)
     }
 
-    /// Attach copies of `files` to the workspace or running chat `selector`
-    /// names, without a message, as `attacher`, and return their records.
-    /// Adding the same files again keeps the copies they have, with any new
-    /// title.
+    /// Attaches without a message. Adding the same files again keeps their
+    /// copies, with any new title.
     pub async fn add_attached_files(
         &self,
         daemon: &dyn Daemon,
@@ -454,10 +419,9 @@ impl Spaces {
             .await
     }
 
-    /// Attach copies of the files of an agent's session to `space` for a
-    /// handoff, each file with the [`SessionCopy`] it copies, whatever their
-    /// size, and return their records. Files unchanged since an earlier
-    /// handoff copied them keep the copies they have.
+    /// Copies the files of an agent's session for a handoff, whatever their
+    /// size. Files unchanged since an earlier handoff copied them keep their
+    /// copies.
     pub async fn attach_session_files(
         &self,
         daemon: &dyn Daemon,
@@ -472,9 +436,7 @@ impl Spaces {
         (self.record_or_discard(&space.id, source, &Attacher::User, kept)).await
     }
 
-    /// Record the copies `kept` as attached to the workspace or chat
-    /// `space_id` from `source` by `attacher` and return their records, or
-    /// delete the copies made for them when that fails.
+    /// Deletes the copies when recording them fails.
     async fn record_or_discard(
         &self,
         space_id: &SpaceId,
@@ -489,10 +451,8 @@ impl Spaces {
         recorded
     }
 
-    /// Record the copies `kept` as attached to the workspace or chat
-    /// `space_id` from `source` by `attacher`, and return their records,
-    /// unless the titles they take would leave unread alerts that hold them
-    /// more than their agents receive at once.
+    /// Refuses when the titles the copies take would leave unread alerts
+    /// holding more than their agents receive at once.
     async fn record_kept(
         &self,
         space_id: &SpaceId,
@@ -512,13 +472,11 @@ impl Spaces {
             .await
     }
 
-    /// Where the chats without a repository keep their attached files in
-    /// `root_dir`, marked as this daemon's.
+    /// Marked as this daemon's.
     pub fn outside_files_layout(&self, root_dir: &std::path::Path) -> Layout {
         Layout::outside_repositories(root_dir, &self.root_dir_owner())
     }
 
-    /// The home that keeps the files of `space`, as [`Self::home_of`] says.
     pub async fn space_home(&self, daemon: &dyn Daemon, space: &Space) -> Result<HomeKey> {
         (self.home_of(
             daemon,
@@ -528,9 +486,8 @@ impl Spaces {
         .await
     }
 
-    /// The home that keeps the files of a space of the repository
-    /// `repository`: its directory, or for a chat without one the
-    /// `root_dir` it started in, or else the configured one.
+    /// The repository's directory, or for a chat without one the `root_dir`
+    /// it started in, or else the configured one.
     pub async fn home_of(
         &self,
         daemon: &dyn Daemon,
@@ -548,9 +505,9 @@ impl Spaces {
         })
     }
 
-    /// Hold the gate of the attached files `key` keeps, with where they are
-    /// once held: a move of a repository's directory, which holds the gate,
-    /// may have finished meanwhile.
+    /// Returns where the files are once the gate is held: a move of a
+    /// repository's directory, which holds the gate, may have finished
+    /// meanwhile.
     pub async fn lock_files_home(
         &self,
         daemon: &dyn Daemon,
@@ -571,9 +528,8 @@ impl Spaces {
         Ok((home, guard))
     }
 
-    /// Hold the gate of the files attached to the workspace or chat `space`,
-    /// with where they are kept, once the workspace is still there and not
-    /// being removed, or the chat still runs.
+    /// Refuses unless the workspace is still there and not being removed, or
+    /// the chat still runs.
     pub async fn lock_files(
         &self,
         daemon: &dyn Daemon,
@@ -587,8 +543,6 @@ impl Spaces {
         Ok((home.layout(), guard))
     }
 
-    /// Refuse attaching files to the space `space_id` once the
-    /// workspace is being removed or is gone, or the chat was removed.
     async fn ensure_attachable(&self, space_id: &SpaceId) -> Result<()> {
         match self.workspace_by_id(space_id).await {
             Ok(workspace) => ensure!(
@@ -602,7 +556,7 @@ impl Spaces {
     }
 }
 
-/// The copies made for a message until it is sent, which go with their
+/// The copies made for a message until it is sent. They go with their
 /// records if it is refused, while the space's files stay locked.
 struct UnsentCopies {
     store: crate::store::Store,
@@ -612,9 +566,8 @@ struct UnsentCopies {
 }
 
 impl Unsent for UnsentCopies {
-    /// Delete the copies and their records once the message they were made
-    /// for was refused, unless the copies were reused. Failure only logs,
-    /// as the message's refusal is what its sender hears.
+    /// Keeps reused copies. A failure only logs: the message's refusal is
+    /// what its sender hears.
     fn forget(self: Box<Self>) -> BoxFuture<'static, ()> {
         Box::pin(async move {
             if self.kept.reused() {

@@ -1,6 +1,5 @@
-//! Restoring a removed space from its removal record, through one path for
-//! either kind: only opening its place differs, a workspace's worktree in
-//! the module below, a chat's place in another.
+//! Restoring a removed space from its removal record. Only opening its place
+//! differs by kind.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::execution::recovery::LastSessionExt;
@@ -22,11 +21,10 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::CloseCause;
 
 impl Spaces {
-    /// Open the removed space `selector` names again, as
-    /// [`Self::reopen_space`] does, unless the hub lists it on another
-    /// machine: one whose machine is offline it takes over from the hub's
-    /// package of it, for a scoped `caller` as its `admin` permission
-    /// allows, and any other it refuses; refused while a move of it runs.
+    /// Refuses a space the hub lists on another machine, except one whose
+    /// machine is offline: that one it takes over from the hub's package, for
+    /// a scoped `caller` as its `admin` permission allows. Refused while a
+    /// move of the space runs.
     pub async fn restore_space(
         &self,
         daemon: &dyn Daemon,
@@ -39,8 +37,7 @@ impl Spaces {
         restored
     }
 
-    /// Open the removed space `selector` names again as
-    /// [`Self::restore_space`] does, while no move of it can start.
+    /// Holds off any move of the space meanwhile.
     async fn restore_unmoving(
         &self,
         daemon: &dyn Daemon,
@@ -59,11 +56,10 @@ impl Spaces {
         self.reopen_space(daemon, selector, caller).await
     }
 
-    /// Refuse the restore of the space `selector` names while a move of it
-    /// holds the space's move lock, as a move of its record to another
-    /// machine does until the hub settles an arrival that machine could not
-    /// report; the lock, held for the restore, keeps a move from starting
-    /// meanwhile.
+    /// Refuses while a move holds the space's move lock, as a move of its
+    /// record to another machine does until the hub settles an arrival that
+    /// machine could not report. The returned lock, held for the restore,
+    /// keeps a move from starting meanwhile.
     fn ensure_not_moving(&self, selector: &SpaceSelector) -> Result<Option<MoveLock>> {
         let Some(id) = selector.given_id() else {
             return Ok(None);
@@ -78,13 +74,12 @@ impl Spaces {
         }
     }
 
-    /// Open the removed space `selector` names again in its place, below
-    /// its recorded parent while that takes it, with its links, which
-    /// `caller` relinks only where it may link, and what its record keeps of
-    /// its agents, and the threads its removal closed, here and on the
-    /// other machines; the caller links
-    /// its PRs, puts the session files in place
-    /// and sets a workspace up. The record goes once the space is back.
+    /// Opens the space below its recorded parent while that takes it, with
+    /// its links, which `caller` relinks only where it may link. Restores
+    /// what the record keeps of its agents, and the threads its removal
+    /// closed, here and on other machines. The caller links its PRs, puts
+    /// the session files in place and sets a workspace up. The record goes
+    /// once the space is back.
     pub async fn reopen_space(
         &self,
         daemon: &dyn Daemon,
@@ -130,9 +125,8 @@ impl Spaces {
         self.restored(place, restored).await
     }
 
-    /// Open the space `removed` records again in its place, below `parent`:
-    /// a workspace's worktree on its branch at the removed HEAD with its
-    /// unsaved files, or a chat recorded, stopped, where it ran.
+    /// A workspace's worktree goes back on its branch at the removed HEAD
+    /// with its unsaved files; a chat is recorded, stopped, where it ran.
     async fn reopen_place(
         &self,
         daemon: &dyn Daemon,
@@ -151,8 +145,6 @@ impl Spaces {
         }
     }
 
-    /// The space `restored` opened again in `place`, with what its restore
-    /// kept for the caller.
     async fn restored(&self, place: Place, restored: Restored) -> Result<RestoredSpace> {
         let Restored {
             removed,
@@ -179,8 +171,8 @@ impl Spaces {
         })
     }
 
-    /// The removed spaces `caller` may restore: every one for the user, for a
-    /// scoped caller those [`Self::scoped_restore_refusal`] lets it.
+    /// Every one for the user; for a scoped caller, those
+    /// [`Self::scoped_restore_refusal`] lets it.
     pub async fn restorable_spaces(
         &self,
         daemon: &dyn Daemon,
@@ -203,15 +195,13 @@ impl Spaces {
         Ok(restorable)
     }
 
-    /// The removed space `selector` names, by ID.
+    /// By ID.
     pub async fn removed_space(&self, selector: &SpaceSelector) -> Result<RemovedSpace> {
         (self.removed_spaces().await?.into_iter())
             .find(|removed| selector.given_id() == Some(&removed.space_id))
             .with_context(|| format!("no restorable space {selector}; shoal restore lists them"))
     }
 
-    /// Refuse the scoped `caller` the restore of the removed space
-    /// `selector` names unless [`Self::scoped_restore_refusal`] lets it.
     pub async fn ensure_restorable_by(
         &self,
         daemon: &dyn Daemon,
@@ -228,9 +218,9 @@ impl Spaces {
         }
     }
 
-    /// Why the scoped `caller` may not restore `removed`, which its restore
-    /// puts below its recorded parent: that space is gone or outside the
-    /// caller's scope, or there is none, so the restore is the user's.
+    /// The restore puts the space below its recorded parent. It is refused
+    /// when that space is gone or outside the caller's scope, or there is
+    /// none, which makes the restore the user's.
     async fn scoped_restore_refusal(
         &self,
         daemon: &dyn Daemon,
@@ -274,10 +264,9 @@ impl Spaces {
         Ok(Some(refusal))
     }
 
-    /// Why the scoped `caller` may not restore the chat `removed`, as it
-    /// could not start that chat: in the worktree of a workspace outside
-    /// its scope, or with permissions its own space does not hold. A
-    /// workspace that is gone is the restore's own refusal.
+    /// Refuses a chat the caller could not start: one in the worktree of a
+    /// workspace outside its scope, or with permissions its own space does
+    /// not hold. A workspace that is gone is the restore's own refusal.
     async fn scoped_chat_refusal(
         &self,
         daemon: &dyn Daemon,
@@ -313,12 +302,10 @@ impl Spaces {
         }))
     }
 
-    /// Save for the agents of the space `id` that restores `removed` what
-    /// its record keeps of them: their stopped agents and last sessions, an
-    /// agent whose session another space here holds to start from a fork of
-    /// it, as a copy's does, and the session files an import carried, which
-    /// it returns for the caller to put in place. Each fork and each failure
-    /// adds a warning to `warnings`.
+    /// Saves their stopped agents and last sessions. An agent whose session
+    /// another space here holds starts from a fork of it, as a copy's does.
+    /// Returns the session files an import carried, for the caller to put
+    /// in place. Each fork and each failure adds a warning.
     pub async fn restore_agents(
         &self,
         daemon: &dyn Daemon,
@@ -352,10 +339,8 @@ impl Spaces {
         session_files
     }
 
-    /// The stopped agents and last sessions of `removed`, which the space
-    /// `id` restores, each whose session another space here holds marked to
-    /// start from a fork of it, with a warning in `warnings` naming that
-    /// space.
+    /// Marks each agent whose session another space here holds to start
+    /// from a fork of it, with a warning naming that space.
     async fn forking_held_sessions(
         &self,
         daemon: &dyn Daemon,
@@ -387,8 +372,7 @@ impl Spaces {
         (agents, last_sessions)
     }
 
-    /// The agent sessions the spaces here other than `id` hold, running or
-    /// stopped, each with the name of a space that holds it.
+    /// Running or stopped, each with the name of a space that holds it.
     async fn sessions_held_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -404,11 +388,10 @@ impl Spaces {
         Ok(held)
     }
 
-    /// The space the restore of `removed` opens it below: its recorded
-    /// parent while that exists and takes it, as a start places a child,
-    /// or runs on another joined machine;
-    /// otherwise none, with a warning in `warnings` naming the parent, or
-    /// for a scoped `caller`, which restores only below it, a refusal.
+    /// The recorded parent while it exists and takes the space, as a start
+    /// places a child, or runs on another joined machine. Otherwise none,
+    /// with a warning naming the parent, or a refusal for a scoped `caller`,
+    /// which restores only below itself.
     pub async fn restored_parent(
         &self,
         daemon: &dyn Daemon,
@@ -458,37 +441,32 @@ impl Spaces {
     }
 }
 
-/// Where a restore opened a space again: a workspace's new worktree, or the
-/// place a chat ran in, where it is recorded again.
+/// A workspace's new worktree, or the place a chat ran in, where it is
+/// recorded again.
 enum Place {
     Worktree(Box<OpenedWorkspace>),
     Workdir,
 }
 
-/// What the restore of a removed space keeps for its caller: its record,
-/// the session files kept with it and the warnings.
 struct Restored {
     removed: RemovedSpace,
     session_files: Vec<CarriedSessionFile>,
     warnings: Vec<String>,
 }
 
-/// How a restored agent whose session another space holds starts: from a
-/// fork of it, as a copy's does.
+/// A restored agent whose session another space holds starts from a fork of
+/// it, as a copy's does.
 const HELD_ELSEWHERE: Copied = Copied {
     earlier_files: false,
     held_elsewhere: true,
 };
 
-/// The warning that `agent` continues from a fork of its session, which
-/// the space `holder` holds too.
 fn forked(agent: &crate::agent::Agent, holder: &SpaceName) -> String {
     format!("the {agent} session continues from a fork, since {holder} holds it too")
 }
 
 pub mod chats;
-/// Queue again the review the package that `removed` records came in
-/// carried, adding a warning to `warnings` when it cannot run here.
+/// Adds a warning when the review cannot run here.
 async fn queue_carried_review(
     daemon: &dyn Daemon,
     removed: &RemovedSpace,
