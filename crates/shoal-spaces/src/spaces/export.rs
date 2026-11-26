@@ -1,10 +1,6 @@
-//! Packages of spaces for `shoal move`: the daemon stops a space's agents
-//! for a move that ends it once its destination has the package, copies
-//! one that keeps running, or writes a removed one's record, each with the
-//! spaces below it that the package carries, and writes what continues
-//! them on another machine; and the hub's packages of an intermittent
-//! machine's spaces, which keep running. Each runs one path for a space of
-//! either kind; what a workspace's worktree adds is its worktree step.
+//! Packages of spaces for `shoal move`: of a space that moves, a removed
+//! one, or a copy that keeps running, each with the spaces below it that
+//! the package carries. See `docs/design/moves.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::transfer::ManifestExt;
@@ -32,10 +28,10 @@ mod retiring;
 mod staying;
 mod worktree;
 
-/// A space prepared for its package, moving, removed or copied, with the
-/// spaces it carries: the repositories they belong to, the package without
-/// its session files, the settings describing their agents, the session
-/// files an import kept for them, and what the package leaves out.
+/// A space prepared for its package, with the spaces it carries: their
+/// repositories, the package without its session files, the settings that
+/// describe their agents, the session files an import kept for them, and
+/// what the package leaves out.
 struct Prepared {
     repos: Vec<Repository>,
     manifest: Manifest,
@@ -45,9 +41,8 @@ struct Prepared {
 }
 
 impl Prepared {
-    /// The package of the space `record` records and the spaces `carried`
-    /// records, whose agents `settings` describes, one for each in that
-    /// order, with the session files an import kept for them.
+    /// `settings` describes the agents of `record` and of each of `carried`,
+    /// one for each in that order.
     async fn of(
         daemon: &dyn Daemon,
         record: RemovedSpace,
@@ -70,10 +65,9 @@ impl Prepared {
 }
 
 impl Spaces {
-    /// Write the removal record of the space with the ID `selector` gives,
-    /// which stays, with the records of the spaces its removal took that
-    /// `carrying` carries, for another Shoal to the new file `file`, once
-    /// the daemon can write there.
+    /// The removal record stays here. Also writes the records of the spaces
+    /// its removal took that `carrying` carries. `file` must be new, and the
+    /// daemon must be able to write there.
     pub async fn export_removed_space(
         &self,
         daemon: &dyn Daemon,
@@ -86,10 +80,8 @@ impl Spaces {
         self.write_prepared(daemon, prepared, file).await
     }
 
-    /// Write the removal record of the space with the ID `selector` gives,
-    /// with the records of the spaces its removal took that `carrying`
-    /// carries, to the package its move to a joined machine delivers from
-    /// here, in place of one an earlier move of it left.
+    /// Writes to the package its move to a joined machine delivers from
+    /// here, replacing one an earlier move of it left.
     pub async fn export_removed_moving(
         &self,
         daemon: &dyn Daemon,
@@ -101,14 +93,13 @@ impl Spaces {
         self.write_prepared(daemon, prepared, file).await
     }
 
-    /// The file the package of the space `id` waits in among those
-    /// delivered from here, which holds none.
+    /// Among the packages delivered from here. Holds none yet.
     fn new_staged_package(&self, id: &SpaceId) -> Result<std::path::PathBuf> {
         let staging = self.paths.move_packages();
         std::fs::create_dir_all(&staging)
             .with_context(|| format!("create {}", staging.display()))?;
         let file = self.staged_package(id);
-        // Its caller holds the space's move lock, so a move that stopped
+        // The caller holds the space's move lock, so a move that stopped
         // left this one.
         if let Err(error) = std::fs::remove_file(&file)
             && error.kind() != std::io::ErrorKind::NotFound
@@ -118,9 +109,7 @@ impl Spaces {
         Ok(file)
     }
 
-    /// Prepare the package of the removal record of the space `selector`
-    /// names by ID, which stays, with the records of the spaces its removal
-    /// took that `carrying` carries.
+    /// The removal record stays here.
     async fn prepare_kept_record(
         &self,
         daemon: &dyn Daemon,
@@ -140,9 +129,8 @@ impl Spaces {
             .await
     }
 
-    /// The removal records of the spaces the removal of the space
-    /// `selector` names by ID took that `carrying` carries, which its
-    /// record's package carries.
+    /// The removal records of the spaces its removal took that `carrying`
+    /// carries, which its record's package carries.
     pub async fn taken_records(
         &self,
         selector: &SpaceSelector,
@@ -151,8 +139,6 @@ impl Spaces {
         Ok(self.record_with_taken(selector, carrying).await?.1)
     }
 
-    /// The removal record of the space `selector` names by ID, with those of
-    /// the spaces its removal took that `carrying` carries.
     async fn record_with_taken(
         &self,
         selector: &SpaceSelector,
@@ -167,9 +153,7 @@ impl Spaces {
         Ok((removed, carried))
     }
 
-    /// Prepare the package of the space `removed` records with the spaces
-    /// `carried` records, as their removal kept them, whose agents
-    /// `settings` describes, one for each.
+    /// As their removal kept them. `settings` describes the agents of each.
     async fn prepare_removed(
         &self,
         daemon: &dyn Daemon,
@@ -183,12 +167,11 @@ impl Spaces {
         Prepared::of(daemon, removed, carried, settings).await
     }
 
-    /// Leave the spaces below `space` that a selection does not carry here,
-    /// as [`Self::leave_behind`] does, or for a move to a joined machine
-    /// below the spaces they are below, detached until the removal here
-    /// ends, when [`Self::attach_behind`] links them again; carrying every
-    /// space below it leaves none, and one that joins it meanwhile retains
-    /// it.
+    /// Leaves them as [`Self::leave_behind`] does. A move to a joined machine
+    /// instead keeps them below the spaces they are below, detached until
+    /// the removal here ends, when [`Self::attach_behind`] links them again.
+    /// Carrying every space below leaves none, and one that joins meanwhile
+    /// retains the space.
     async fn leave_uncarried(
         &self,
         daemon: &dyn Daemon,
@@ -205,12 +188,11 @@ impl Spaces {
         }
     }
 
-    /// Remove `space` for its package through the removal path, deleting
-    /// the `unsaved` work the caller confirmed and taking only the spaces
-    /// `carried` with it among the spaces below that it confirms: a space
-    /// that joins it meanwhile retains it. For a move another machine
-    /// imported, `moved` holds each workspace's checkpoint in its package,
-    /// from which none may differ once its removal hooks ran.
+    /// Deletes the `unsaved` work the caller confirmed and takes only the
+    /// spaces `carried` among those below that it confirms: a space that
+    /// joins meanwhile retains it. For a move another machine imported,
+    /// `moved` holds each workspace's checkpoint in its package, from which
+    /// none may differ once its removal hooks ran.
     async fn remove_packaged(
         &self,
         daemon: &dyn Daemon,
@@ -227,7 +209,7 @@ impl Spaces {
         (self.remove_selected_taking(daemon, &selector, unsaved, inspection, &taking, moved)).await
     }
 
-    /// The repositories the spaces `records` belong to, each once.
+    /// Each once.
     async fn repositories_of(
         &self,
         daemon: &dyn Daemon,
@@ -249,7 +231,6 @@ impl Spaces {
         Ok(repos)
     }
 
-    /// The session files an import kept for the spaces `records` records.
     async fn kept_sessions_of(
         &self,
         daemon: &dyn Daemon,
@@ -262,7 +243,7 @@ impl Spaces {
         kept
     }
 
-    /// Write the package of `prepared` to the new file `file`.
+    /// `file` must be new.
     async fn write_prepared(
         &self,
         daemon: &dyn Daemon,
@@ -283,10 +264,9 @@ impl Spaces {
         Ok(ExportedSpace { manifest, warnings })
     }
 
-    /// Write `manifest`'s package, spaces of `repos` or of none, whose
-    /// agents `settings` describes, one for each space it packages, with
-    /// their session files to the new file `file`, those of a session in
-    /// `kept` from there, and the warnings for what it left out.
+    /// `settings` describes the agents of each space the package holds.
+    /// Writes their session files, those of a session in `kept` from there,
+    /// and the warnings for what it left out. `file` must be new.
     async fn write_package(
         &self,
         daemon: &dyn Daemon,
@@ -306,10 +286,8 @@ impl Spaces {
         Ok((manifest, warnings))
     }
 
-    /// The files of the sessions the agents of the package `manifest`, of
-    /// `repos` or of none, reported, as `settings` describes the agents of
-    /// each space it packages, wherever they ran, with a warning for each
-    /// session left out, which then starts over on the importing machine.
+    /// Wherever the agents ran. A session left out gets a warning, and
+    /// starts over on the importing machine.
     async fn session_sources(
         &self,
         daemon: &dyn Daemon,
@@ -348,8 +326,7 @@ impl Spaces {
         (sources, warnings)
     }
 
-    /// The environments the agents of `repos` ran in, where their session
-    /// files are, with a warning when one cannot be read.
+    /// Where their session files are. Warns when one cannot be read.
     async fn package_environments(
         &self,
         daemon: &dyn Daemon,
@@ -370,9 +347,8 @@ impl Spaces {
     }
 }
 
-/// The warning for a package of the space `record` records whose agent
-/// saved no session to continue, which starts as a new one where it is
-/// imported.
+/// For a space whose agent saved no session to continue, which starts as a
+/// new one where it is imported.
 fn no_session(record: &RemovedSpace) -> Option<String> {
     record.saved_no_session().then(|| {
         format!(

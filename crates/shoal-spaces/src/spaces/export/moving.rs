@@ -1,9 +1,6 @@
-//! Moves that end spaces here only once their destination has them: the
-//! daemon records the move, stops the agents of a space and of the spaces
-//! it carries, saving their sessions, and writes their package while they
-//! stay, then ends them through the export's removal once the destination
-//! has the package, unless they changed meanwhile, or forgets a move that
-//! failed. The record lets a daemon restarted during a move finish it.
+//! Moves that end spaces here only once their destination has them. The
+//! record lets a daemon restarted during a move finish it. See
+//! `docs/design/moves.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{collections::HashSet, path::PathBuf, time::Duration};
@@ -29,13 +26,12 @@ use crate::time::UnixTime;
 
 /// How long a move holds its package for the joined machine that started
 /// it, after packing and after each read, before Shoal finishes it as one
-/// whose reader went, and a copy's package waits for its reader.
+/// whose reader went. A copy's package waits as long for its reader.
 pub const HELD_FOR_READER: Duration = Duration::from_secs(30 * 60);
 
-/// What a move packs a space for: its `destination`, the spaces below it
-/// that go with it as `carrying` says, and the `unsaved` work the caller
-/// saw that its end may delete; `again` packs again under the move's
-/// record, as only the move's finisher does.
+/// `carrying` says which spaces below go with it, and `unsaved` is the work
+/// the caller saw that its end may delete. `again` packs again under the
+/// move's record, as only the move's finisher does.
 pub struct MovePacking {
     pub unsaved: UnsavedWork,
     pub destination: MoveDestination,
@@ -44,13 +40,12 @@ pub struct MovePacking {
 }
 
 impl Spaces {
-    /// Record the move of the space `selector` names as `packing` says,
-    /// then stop the agents of it and the spaces that go with it, saving
-    /// their sessions, and write them for another Shoal to the new file of
-    /// the space's package there, leaving them here: each workspace at a
-    /// new checkpoint, which the record keeps for [`Self::end_moved_space`].
-    /// Another move of the space that is recorded refuses it before
-    /// anything else can, so its caller never takes that move for its own.
+    /// Records the move, then stops the agents of the space and the spaces
+    /// that go with it, saving their sessions, and writes the package while
+    /// they stay here: each workspace at a new checkpoint, which the record
+    /// keeps for [`Self::end_moved_space`]. Another recorded move of the
+    /// space refuses it before anything else can, so its caller never takes
+    /// that move for its own.
     pub async fn export_moving_space(
         &self,
         daemon: &dyn Daemon,
@@ -71,10 +66,10 @@ impl Spaces {
             .await?;
         let exported = self.write_prepared(daemon, prepared, file).await?;
         record.checkpoints = exported.manifest.checkpoints();
-        // A file holds the package once written; another machine, or the
+        // A file holds the package once written. Another machine, or the
         // command that copies it to its standard output, has it once it
-        // took it, and the machine a held package waits for has nothing of
-        // it until it read the whole package.
+        // took it. The machine a held package waits for has nothing of it
+        // until it read the whole package.
         record.phase = match destination {
             MoveDestination::File { .. } | MoveDestination::Directory { .. } => {
                 MovePhase::Delivered
@@ -91,14 +86,11 @@ impl Spaces {
         Ok(exported)
     }
 
-    /// End the space `selector` names, which its recorded move delivered,
-    /// with the spaces below it that the move carries, through the
-    /// export's removal, taking only the work the move's caller saw, while
-    /// each workspace among them still has what its checkpoint in the
-    /// package keeps, which the destination now has: before the removal and
-    /// again once its removal hooks ran. Their issues' forge assignees stay
-    /// for the spaces there, and the spaces below that a selection does not
-    /// carry stay here. The move ends either way.
+    /// Takes only the work the move's caller saw, and only while each
+    /// workspace still has what its checkpoint in the package keeps, checked
+    /// before the removal and again once its removal hooks ran. The issues'
+    /// forge assignees stay for the spaces there, and the spaces below that
+    /// a selection does not carry stay here. The move ends either way.
     pub async fn end_moved_space(
         &self,
         daemon: &dyn Daemon,
@@ -113,10 +105,9 @@ impl Spaces {
         ended
     }
 
-    /// Forget the recorded move of the space `selector` names, which
-    /// failed, returning the executions whose stopped work its spaces saved
-    /// once it stopped their agents, which the caller restores here when the
-    /// destination has nothing of them; none when nothing recorded it.
+    /// Returns the executions whose stopped work its spaces saved once it
+    /// stopped their agents, which the caller restores here when the
+    /// destination has nothing of them. Empty when nothing recorded it.
     pub async fn abandon_move(
         &self,
         daemon: &dyn Daemon,
@@ -131,8 +122,7 @@ impl Spaces {
         Ok(stopped)
     }
 
-    /// The ID of the space `selector` names, which a move may have ended:
-    /// by its ID once it is gone.
+    /// Selects by ID once the space is gone.
     async fn moving_space_id(&self, selector: &SpaceSelector) -> Result<SpaceId> {
         match self.space(selector).await {
             Ok(space) => Ok(space.id),
@@ -140,9 +130,8 @@ impl Spaces {
         }
     }
 
-    /// The executions whose stopped work each space `record` moves saved
-    /// once its move stopped their agents, beyond what they saved before; a
-    /// space that is gone saved none here.
+    /// Only what they saved beyond what they saved before. A space that is
+    /// gone saved none here.
     async fn stopped_since(&self, daemon: &dyn Daemon, record: &MoveRecord) -> StoppedExecutions {
         let mut stopped = StoppedExecutions::new();
         for (space, before) in &record.saved_before {
@@ -156,12 +145,10 @@ impl Spaces {
         stopped
     }
 
-    /// The moves in progress.
     pub async fn recorded_moves(&self) -> Result<Vec<MoveRecord>> {
         self.store.read(records::all).await
     }
 
-    /// Record that the move of `record`'s space reached its phase.
     pub async fn advance_move(&self, record: &MoveRecord) -> Result<()> {
         let advanced = record.clone();
         (self.store)
@@ -169,8 +156,7 @@ impl Spaces {
             .await
     }
 
-    /// The spaces whose move holds its package for the joined machine that
-    /// started it, which that machine may still read and end.
+    /// That machine may still read the package and end the space.
     pub async fn held_for_reader(&self) -> Result<HashSet<SpaceId>> {
         let now = UnixTime::now();
         self.store
@@ -178,8 +164,7 @@ impl Spaces {
             .await
     }
 
-    /// Have the move of the space `space`, which holds its package for the
-    /// joined machine that started it, wait for that machine from now on.
+    /// From now on the move waits for that machine.
     pub async fn hold_for_reader(&self, space: &SpaceId) -> Result<()> {
         let (space, until) = (space.clone(), UnixTime::now() + HELD_FOR_READER);
         (self.store)
@@ -187,9 +172,8 @@ impl Spaces {
             .await
     }
 
-    /// Record that the joined machine the move of the space `space` holds
-    /// its package for read the whole package, which it may now have, and
-    /// wait for it to end the space from now on.
+    /// That machine may now have the package, so the move waits for it to
+    /// end the space from now on.
     pub async fn held_package_read(&self, space: &SpaceId) -> Result<()> {
         let (space, until) = (space.clone(), UnixTime::now() + HELD_FOR_READER);
         (self.store)
@@ -197,9 +181,8 @@ impl Spaces {
             .await
     }
 
-    /// The recorded move of `space` that `packing`, its finisher's, packs
-    /// again, one recorded in its first phase; none when no move of it is
-    /// recorded, and any other move of a space with one is refused.
+    /// Only a move recorded in its first phase. None when no move of the
+    /// space is recorded; any other recorded move is refused.
     async fn resumed_move(
         &self,
         space: &Space,
@@ -214,9 +197,7 @@ impl Spaces {
         }
     }
 
-    /// Record the move of `space` and the spaces below it as `packing`
-    /// says, with the stopped work they saved so far, before any agent
-    /// stops.
+    /// Records the stopped work they saved so far, before any agent stops.
     async fn record_space_move(
         &self,
         daemon: &dyn Daemon,
@@ -255,19 +236,16 @@ impl Spaces {
         Ok(record)
     }
 
-    /// The recorded move of the space `id`.
     pub async fn recorded_move(&self, id: &SpaceId) -> Result<MoveRecord> {
         (self.move_record(id).await?)
             .with_context(|| format!("no move of space {id} is in progress"))
     }
 
-    /// The recorded move of the space `id`, while one is recorded.
     pub async fn move_record(&self, id: &SpaceId) -> Result<Option<MoveRecord>> {
         let space = id.clone();
         self.store.read(move |db| records::read(db, &space)).await
     }
 
-    /// End `space` with the spaces its delivered move `record` carries.
     async fn end_delivered(
         &self,
         daemon: &dyn Daemon,
@@ -296,8 +274,7 @@ impl Spaces {
         removed
     }
 
-    /// Forget the move `record` records, with the package it delivers to
-    /// another machine from here.
+    /// Also deletes the package it delivers to another machine from here.
     async fn forget_move(&self, record: &MoveRecord) {
         let space = record.space.clone();
         if let Err(error) = (self.store)
@@ -312,9 +289,7 @@ impl Spaces {
         }
     }
 
-    /// The file the package of the space `id` goes to on its move to
-    /// `destination`, creating the directory of packages delivered from
-    /// here to another machine.
+    /// Creates the directory of packages delivered from here.
     fn move_package(&self, id: &SpaceId, destination: &MoveDestination) -> Result<PathBuf> {
         let staging = self.paths.move_packages();
         if destination.stages_package() {
@@ -324,10 +299,8 @@ impl Spaces {
         Ok(destination.package(id, &staging))
     }
 
-    /// Stop the agents of `space` and of the spaces below it that
-    /// `carrying` carries and prepare their package, with every agent
-    /// stopped there, as their removal would record them now: each
-    /// workspace at a new checkpoint.
+    /// Records every agent as stopped there, as the removal would record
+    /// them now: each workspace at a new checkpoint.
     async fn prepare_moving(
         &self,
         daemon: &dyn Daemon,
@@ -354,7 +327,6 @@ impl Spaces {
     }
 }
 
-/// The refusal of a move of `space` while another move of it is recorded.
 fn move_in_progress(space: &Space) -> Refusal {
     Refusal::new(
         Reason::MoveInProgress,

@@ -1,8 +1,8 @@
-//! The spaces an export leaves here when it carries only some of the
-//! spaces below its space: they move up one level, below the space above
-//! it, and the requests the leaving spaces decided for them pass on. A
-//! move to a joined machine leaves them below the spaces they were below,
-//! which run on that machine then, under the same IDs.
+//! The spaces an export leaves here when it carries only some of the spaces
+//! below its space. They move up one level, and the requests the leaving
+//! spaces decided for them pass on. A move to a joined machine instead
+//! leaves them below the spaces they were below, which then run on that
+//! machine under the same IDs.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -16,10 +16,9 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 
 impl Spaces {
-    /// Move the spaces directly below `space` and the spaces `carried` that
-    /// do not go with them up to the space above `space`, or to the top
-    /// level where that cannot take one, then pass the pending requests the
-    /// leaving spaces decide for those that stay on above them.
+    /// Moves them to the space above `space`, or to the top level where that
+    /// cannot take one, then passes the pending requests the leaving spaces
+    /// decide for those that stay to the space above them.
     pub(super) async fn leave_behind(
         &self,
         daemon: &dyn Daemon,
@@ -36,11 +35,9 @@ impl Spaces {
         daemon.coordination().pass_on_from(daemon, &leaving).await
     }
 
-    /// Detach the spaces directly below `space` and the spaces `carried`
-    /// that do not go with them, which keep the space they are below once
-    /// it runs on the joined machine it moves to, so that its removal here
-    /// leaves them, recording each with that space until
-    /// [`Self::attach_behind`] links it again.
+    /// They keep the space they are below once it runs on the joined machine
+    /// it moves to, so its removal here leaves them. Each records that space
+    /// until [`Self::attach_behind`] links it again.
     pub async fn detach_behind(&self, space: &Space, carried: &[Space]) -> Result<()> {
         let leaving = leaving(space, carried);
         let held = [self.space_removals.clone(), self.completed_owners.clone()];
@@ -49,10 +46,9 @@ impl Spaces {
             .await
     }
 
-    /// Link each space a move left here below the space it was below again,
-    /// which runs on another joined machine now, or still here where its
-    /// removal failed: those below `space` and the spaces `carried`, once
-    /// their removal ended.
+    /// Links each below the space it was below, which runs on another joined
+    /// machine now, or still here where its removal failed. Runs once the
+    /// removal ended.
     pub(super) async fn attach_behind(&self, space: &Space, carried: &[Space]) {
         let leaving = leaving(space, carried);
         let attached = (self.store).write(move |tx| attach(tx, &leaving));
@@ -61,14 +57,12 @@ impl Spaces {
         }
     }
 
-    /// Link again each space a move left here whose parent no move takes
-    /// any longer, as when the daemon stopped during its removal.
+    /// As when the daemon stopped during the removal.
     pub async fn attach_settled_behind(&self) -> Result<()> {
         (self.store).write(attach_settled).await
     }
 }
 
-/// The IDs of `space` and the spaces `carried` that go with it.
 fn leaving(space: &Space, carried: &[Space]) -> Vec<SpaceId> {
     std::iter::once(space)
         .chain(carried)
@@ -76,9 +70,8 @@ fn leaving(space: &Space, carried: &[Space]) -> Vec<SpaceId> {
         .collect()
 }
 
-/// Move each space directly below one of `leaving` that is not among them
-/// below `above`, or to the top level where `above` cannot take it, as
-/// [`staying`] finds them.
+/// Moves them below `above`, or to the top level where `above` cannot take
+/// one. [`staying`] finds them.
 fn move_up(
     tx: &Transaction<'_>,
     leaving: &[SpaceId],
@@ -102,8 +95,7 @@ fn move_up(
     Ok(())
 }
 
-/// Detach each space directly below one of `leaving` that is not among
-/// them, as [`staying`] finds them, recording the space it was below.
+/// Records the space each was below. [`staying`] finds them.
 fn detach(tx: &Transaction<'_>, leaving: &[SpaceId], held: &[Removing; 2]) -> Result<()> {
     for (space, parent) in staying(tx, leaving, None, held)? {
         crate::tree::set_parent(tx, &space.id, None)?;
@@ -116,7 +108,6 @@ fn detach(tx: &Transaction<'_>, leaving: &[SpaceId], held: &[Removing; 2]) -> Re
     Ok(())
 }
 
-/// Link each space detached from one of `leaving` below it again.
 fn attach(tx: &Transaction<'_>, leaving: &[SpaceId]) -> Result<()> {
     for parent in leaving {
         let detached: Vec<SpaceId> = tx
@@ -130,8 +121,7 @@ fn attach(tx: &Transaction<'_>, leaving: &[SpaceId]) -> Result<()> {
     Ok(())
 }
 
-/// Link each detached space whose parent has no recorded move below it
-/// again.
+/// Only those whose parent has no recorded move.
 fn attach_settled(tx: &Transaction<'_>) -> Result<()> {
     let detached: Vec<(SpaceId, SpaceId)> = tx
         .prepare(
@@ -146,18 +136,16 @@ fn attach_settled(tx: &Transaction<'_>) -> Result<()> {
     Ok(())
 }
 
-/// Link the detached `space` below `parent` again.
 fn relink(tx: &Transaction<'_>, space: &SpaceId, parent: &SpaceId) -> Result<()> {
     crate::tree::set_parent(tx, space, Some(parent))?;
     tx.execute("DELETE FROM moved_parents WHERE space_id=?1", [space])?;
     Ok(())
 }
 
-/// Each space directly below one of `leaving` that is not among them, with
-/// the one it is below, once no removal `held` reserves a space it leaves
-/// or joins, `above` among them, and none of them is being removed: a
-/// removal that listed the spaces below one of those would otherwise miss
-/// it.
+/// Each with the space it is below. Waits until no removal `held` reserves
+/// a space it leaves or joins, `above` among them, and none of them is being
+/// removed: a removal that listed the spaces below one of those would
+/// otherwise miss it.
 fn staying(
     tx: &Transaction<'_>,
     leaving: &[SpaceId],
@@ -183,7 +171,6 @@ fn staying(
     Ok(staying)
 }
 
-/// Whether the space `id` is a workspace being removed.
 fn being_removed(tx: &Transaction<'_>, id: &SpaceId) -> Result<bool> {
     store::exists(
         tx,
