@@ -217,8 +217,9 @@ its removal's checkpoint. A space that is not removed is refused, naming the
 [`shoal resume`](daemon.md#recovery) that brings its agent back.
 
 A restored space keeps its ID and takes a new number. It goes below the space
-it was below while that space exists. Otherwise it opens at the top level, with
-a warning naming that space. It restores alone: the spaces removed with it keep
+it was below while that space exists and takes it as a child, as a start
+places one. Otherwise it opens at the top level, with a warning naming that
+space. It restores alone: the spaces removed with it keep
 their records.
 
 The restore resumes the space's saved agents and last sessions as
@@ -280,7 +281,7 @@ that saved nothing of its agent starts a new one, with a warning.
 
 A scoped process restores a removed space, of either kind, when its recorded
 parent exists and the process's scope reaches that parent. The space always
-goes below that parent. A chat also needs a place where the process could
+goes below that parent, and the restore fails when the parent cannot take it. A chat also needs a place where the process could
 start one: a worktree its scope reaches, with permissions its own space holds.
 Any other removed space is the user's to restore, and the refusal says why. A
 scoped process's restore list and picker offer only the spaces it may restore.
