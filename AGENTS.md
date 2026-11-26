@@ -30,6 +30,9 @@ tell decisions apart from proposals.
   the implementation file.
 - Give each closed set of values, such as lifecycle states, resource scopes and
   approval targets, a type that rejects unknown values.
+- Have an operation that stops, discards or deletes something first build a
+  plan in a check without side effects, and act only through a method that
+  takes that plan, such as `shoal move`'s `Planned`.
 - Invoke external tools with argument arrays.
 - Run a tool whose failure you only report through `shoal_subprocess`
   (`Run::checked`, `checked_output`), which bounds its diagnostics. Keep
