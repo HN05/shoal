@@ -1,8 +1,5 @@
-//! The tree of spaces. Every space has at most one parent, a workspace or a
-//! chat in its repository, or a chat without a repository, whose agent
-//! works on it or coordinates its agent;
-//! `space_parents` records it. Every reader takes one walk up or one walk
-//! down that link, whatever each space's kind.
+//! The tree of spaces, which `space_parents` records. See
+//! `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -26,9 +23,7 @@ use shoal_store::tree::space_ref;
 pub use shoal_store::tree::{Receiver, TrackedAgents, coordinator_of, first_absent_above, subtree};
 
 impl Spaces {
-    /// Create a workspace on a new branch named `name` in the repository of
-    /// the space `parent`, a workspace or a chat, leaving out what `options`
-    /// say, and record `parent` as its parent.
+    /// Leaves out what `options` say.
     pub async fn create_child(
         &self,
         daemon: &dyn Daemon,
@@ -61,10 +56,9 @@ impl Spaces {
         .await
     }
 
-    /// The space `selector` names, a workspace or a chat, as the parent of
-    /// a child workspace, with the repository the child goes in: the
-    /// parent's own, or for a chat without one that of the workspace `copy`
-    /// copies; a child on a branch of such a chat names none.
+    /// Returns the repository the child goes in: the parent's own, or for a
+    /// chat without one that of the workspace `copy` copies. A child on a
+    /// branch of such a chat names none.
     pub async fn child_parent(
         &self,
         daemon: &dyn Daemon,
@@ -87,7 +81,6 @@ impl Spaces {
         Ok((parent, repository))
     }
 
-    /// Whether `id` is `ancestor` or a space below it.
     pub async fn within_subtree(&self, ancestor: &SpaceId, id: &SpaceId) -> Result<bool> {
         let (ancestor, id) = (ancestor.to_owned(), id.to_owned());
         self.store
@@ -95,15 +88,15 @@ impl Spaces {
             .await
     }
 
-    /// `id` and every space below it, `id` first.
+    /// `id` first.
     #[cfg(any(test, feature = "test-support"))]
     pub async fn subtree(&self, id: &SpaceId) -> Result<Vec<SpaceId>> {
         let id = id.to_owned();
         self.store.run(move |db| subtree(db, &id)).await
     }
 
-    /// Every space a removal of `id` takes before it, nearest first: those
-    /// below it and the chats in each workspace's worktree among them.
+    /// Nearest first: the spaces below it and the chats in each workspace's
+    /// worktree among them.
     pub async fn spaces_taken_with(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
@@ -121,8 +114,8 @@ impl Spaces {
             .await
     }
 
-    /// The spaces a removal of `id` takes first, each before those below
-    /// it: the chats in its worktree, then the spaces directly below it.
+    /// Each comes before those below it: the chats in its worktree, then the
+    /// spaces directly below it.
     pub async fn taken_first(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
@@ -141,7 +134,7 @@ impl Spaces {
             .await
     }
 
-    /// The spaces above `id`, nearest first.
+    /// Nearest first.
     pub async fn ancestors(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store
@@ -149,13 +142,13 @@ impl Spaces {
             .await
     }
 
-    /// The spaces directly below the space `id`, by name.
+    /// By name.
     pub async fn children(&self, id: &SpaceId) -> Result<Vec<SpaceRef>> {
         let id = id.to_owned();
         self.store.run(move |db| children(db, &id)).await
     }
 
-    /// Whether a space is below the space `id`, here or on another machine.
+    /// Counts spaces on other machines too.
     pub async fn has_spaces_below(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         if !self.children(id).await?.is_empty() {
             return Ok(true);
@@ -163,8 +156,7 @@ impl Spaces {
         Ok(!daemon.descendants_elsewhere(id).await?.is_empty())
     }
 
-    /// The spaces below `id` whose activity its agent receives: children
-    /// without an agent of their own, and theirs in turn.
+    /// Children without an agent of their own, and theirs in turn.
     #[cfg(any(test, feature = "test-support"))]
     pub async fn delegated_spaces(
         &self,
@@ -176,19 +168,16 @@ impl Spaces {
         self.store.run(move |db| delegated(db, &id, &agents)).await
     }
 
-    /// The workspaces whose agent the daemon tracks now.
     pub async fn tracked_agents(&self, daemon: &dyn Daemon) -> TrackedAgents {
         TrackedAgents::of(&daemon.running_agent_workspaces().await)
     }
 }
 
-/// Check that `parent` may take the new or top-level space `space` of
-/// `repository_id`, none for a chat without one, as its child: a ready
-/// workspace or a chat of the same repository, or a chat without a
-/// repository, neither below `space` nor in the worktree of a workspace
-/// there, since removal takes both first. Removal reserves the parent first and
-/// rechecks its children afterwards, so a child either precedes that recheck
-/// or is refused here.
+/// The parent must be a ready workspace or a chat of the same repository, or
+/// a chat without a repository. It may be neither below `space` nor in the
+/// worktree of a workspace there, since removal takes both first. Removal
+/// reserves the parent first and rechecks its children afterwards, so a
+/// child either precedes that recheck or is refused here.
 pub fn ensure_parent(
     db: &Connection,
     repository_id: Option<&RepositoryId>,
@@ -208,8 +197,7 @@ pub fn ensure_parent(
     Ok(())
 }
 
-/// The name of the space `parent`, once it takes a child of
-/// `repository_id` now: a workspace must be ready.
+/// Refuses a workspace that is not ready.
 pub fn ready_parent(
     db: &Connection,
     repository_id: Option<&RepositoryId>,
@@ -225,9 +213,7 @@ pub fn ready_parent(
     Ok(name)
 }
 
-/// The name of the space `parent` and, for a workspace, its state, once it
-/// takes a child of `repository_id`: it is a space of that repository, or a
-/// chat without a repository, which takes children in any.
+/// A chat without a repository takes children in any repository.
 pub fn parent_in_repository(
     db: &Connection,
     repository_id: Option<&RepositoryId>,
@@ -252,7 +238,7 @@ pub fn parent_in_repository(
     Ok((name, state))
 }
 
-/// Record `parent` as the parent of the space `space`, or make it top-level.
+/// Makes the space top-level when `parent` is `None`.
 pub fn set_parent(db: &Connection, space: &SpaceId, parent: Option<&SpaceId>) -> Result<()> {
     match parent {
         Some(parent) => db.execute(
@@ -265,10 +251,9 @@ pub fn set_parent(db: &Connection, space: &SpaceId, parent: Option<&SpaceId>) ->
     Ok(())
 }
 
-/// Record `parent` above the new space `space` of `repository_id`, once
-/// [`ensure_parent`] finds that it takes it: a parent this machine has not
-/// runs on another joined machine, as a restore found, whose own machine
-/// decides what it takes.
+/// Call once [`ensure_parent`] finds that the parent takes the space. A
+/// parent this machine does not have runs on another joined machine, as a
+/// restore found, and that machine decides what it takes.
 pub fn place_below(
     db: &Connection,
     repository_id: Option<&RepositoryId>,
@@ -282,7 +267,6 @@ pub fn place_below(
     set_parent(db, space, Some(parent))
 }
 
-/// Fill in the workspace's parent and its children.
 pub fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.parent = parent(db, &workspace.id)?;
     workspace.children = children(db, &workspace.id)?;

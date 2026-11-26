@@ -1,5 +1,4 @@
-//! Where the temporary directories of spaces are, and deleting them once
-//! their spaces are gone.
+//! The spaces' temporary directories, deleted once their spaces are gone.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -16,9 +15,8 @@ use crate::{
 use shoal_core::tmp_dirs::Layout;
 
 impl Spaces {
-    /// The layout that keeps the temporary directories of the spaces of
-    /// `repository`, or for a chat without one of the `root_dir` it started
-    /// in; none for such a chat that recorded none.
+    /// For a chat without a repository, the layout of the `root_dir` it
+    /// started in; none for such a chat that recorded none.
     pub fn tmp_layout(
         &self,
         repository: Option<&Repository>,
@@ -30,7 +28,6 @@ impl Spaces {
         }
     }
 
-    /// The layout that keeps the temporary directory of `space`.
     pub async fn space_tmp_layout(
         &self,
         daemon: &dyn Daemon,
@@ -47,7 +44,7 @@ impl Spaces {
         Ok(self.tmp_layout(repository.as_ref(), space.workdir.root_dir()))
     }
 
-    /// Delete the temporary directory of `space` once its record is gone.
+    /// Call once the space's record is gone.
     pub async fn delete_tmp_dir(&self, daemon: &dyn Daemon, space: &Space) -> Result<()> {
         let Some(layout) = self.space_tmp_layout(daemon, space).await? else {
             return Ok(());
@@ -57,10 +54,10 @@ impl Spaces {
             .into_result()
     }
 
-    /// Delete every temporary directory that belongs to no workspace or chat
-    /// of its repository, or to no chat without one, such as one a process
-    /// created while its workspace was removed. A directory that cannot be
-    /// deleted keeps neither the others nor the other repositories'.
+    /// Deletes every temporary directory that belongs to no space, such as
+    /// one a process created while its workspace was removed. A directory
+    /// that cannot be deleted keeps neither the others nor the other
+    /// repositories' from going.
     pub async fn sweep_tmp_dirs(&self, daemon: &dyn Daemon) -> Result<()> {
         let mut failed = Vec::new();
         for repo in daemon.repositories().await? {
@@ -79,8 +76,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the temporary directories in `layout` of no workspace or chat
-    /// of `repository_id`, or of no chat without a repository.
     async fn sweep_layout_tmp_dirs(
         &self,
         layout: Option<Layout>,
@@ -89,8 +84,8 @@ impl Spaces {
         let Some(layout) = layout else {
             return Ok(());
         };
-        // Listed before the records are read, since a directory is only
-        // created once its record exists.
+        // List before reading the records: a directory is only created once
+        // its record exists.
         let listed = list(layout.clone()).await?;
         if listed.is_empty() {
             return Ok(());
@@ -110,8 +105,7 @@ impl Spaces {
         removed.into_result()
     }
 
-    /// The IDs of the repository's workspaces and chats, or of the chats
-    /// without a repository.
+    /// The chats without a repository when `repository_id` is `None`.
     async fn recorded_ids(
         &self,
         repository_id: Option<&RepositoryId>,
@@ -123,17 +117,14 @@ impl Spaces {
     }
 }
 
-/// The spaces with a temporary directory in `layout`, which names each by
-/// its space's ID.
+/// The layout names each directory by its space's ID.
 async fn list(layout: Layout) -> Result<Vec<SpaceId>> {
     let names = tokio::task::spawn_blocking(move || layout.list()).await??;
     Ok(names.into_iter().map(SpaceId::from).collect())
 }
 
-/// What deleting temporary directories did.
 #[derive(Debug, Default)]
 pub struct Removed {
-    /// The spaces whose temporary directories it deleted.
     pub deleted: Vec<SpaceId>,
     /// Why each of the others could not be deleted.
     pub failed: Vec<String>,
@@ -147,8 +138,7 @@ impl Removed {
     }
 }
 
-/// Delete the temporary directories of `ids` in `layout`, each whether or
-/// not the others could be.
+/// Deletes each whether or not the others could be.
 pub async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<Removed> {
     let removed = tokio::task::spawn_blocking(move || {
         let mut removed = Removed::default();
@@ -163,8 +153,7 @@ pub async fn remove(layout: Layout, ids: Vec<SpaceId>) -> Result<Removed> {
     Ok(removed.await?)
 }
 
-/// The IDs of the repository's workspaces and chats, or of the chats
-/// without a repository.
+/// The chats without a repository when `repository_id` is `None`.
 fn recorded_ids(
     db: &mut Connection,
     repository_id: Option<&RepositoryId>,

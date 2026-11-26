@@ -1,8 +1,7 @@
-//! The session a start on another joined machine forks, which only this
-//! machine keeps: its files go one after another over a duplex stream of
-//! the hub's links, and that machine's daemon has `shoal internal
-//! place-sessions` put them where its agents look for them, under the
-//! settings of the repository the start goes in, before the start comes.
+//! Carrying the session a start on another joined machine forks, when only
+//! this machine has it. The files go one after another over a duplex stream
+//! of the hub's links, and that machine's daemon has `shoal internal
+//! place-sessions` put them in place before the start comes.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::fsutil::off_runtime;
@@ -27,15 +26,11 @@ use crate::{
     workers::{Worker, detached_command, internal_command},
 };
 
-/// The name of the carried files, one after another, in the temporary
-/// directory that holds them.
 const CARRIED: &str = "session";
 
 impl Spaces {
-    /// Carry the files of `session`, which an agent of the space `forked`
-    /// reported, to `machine` for `caller`'s start there in the repository
-    /// whose origin's URL is `origin`, or in none, refusing a session whose
-    /// files this machine does not have.
+    /// `origin` is the URL of the repository the start goes in, if any.
+    /// Refuses a session whose files this machine does not have.
     pub async fn carry_session(
         &self,
         daemon: &dyn Daemon,
@@ -69,9 +64,7 @@ impl Spaces {
         })
     }
 
-    /// The files of `session`, which an agent of the space `forked`
-    /// reported, each with where it is here; refused when this machine has
-    /// none of them.
+    /// Refuses when this machine has none of them.
     async fn session_sources_of(
         &self,
         daemon: &dyn Daemon,
@@ -105,11 +98,9 @@ impl Spaces {
         Ok(sources(found, &reported.agent, session))
     }
 
-    /// Put the session files `files` that another joined machine writes on
-    /// `stream`, once this daemon answered `request_id`, where this
-    /// machine's agents look for them under the settings of `repository`,
-    /// else of the global config, and answer again once they are, holding
-    /// `guard` until then.
+    /// Answers `request_id` first, then answers again once the files are in
+    /// place under the settings of `repository`, else of the global config.
+    /// Holds `guard` until then.
     pub async fn receive_session(
         &self,
         daemon: &dyn Daemon,
@@ -129,8 +120,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Read `files` from `stream` until the caller ends its side and put
-    /// them in place under the settings of `repository`.
+    /// Reads until the caller ends its side.
     async fn take_session(
         &self,
         stream: &mut UnixStream,
@@ -148,9 +138,7 @@ impl Spaces {
         self.place_sessions(repository, &carried).await
     }
 
-    /// Have `shoal internal place-sessions` put `carried` where this
-    /// machine's agents look for them under the settings of `repository`,
-    /// as the user, in this daemon's environment.
+    /// Runs as the user, in this daemon's environment.
     async fn place_sessions(
         &self,
         repository: Option<&Repository>,
@@ -183,8 +171,7 @@ impl Spaces {
     }
 }
 
-/// The files of `session` of `agent` that `found` lists, each with where it
-/// is here; each one's size is its length once it is copied.
+/// Each one's size is its length once it is copied.
 fn sources(
     found: transcripts::Found,
     agent: &shoal_protocol::agent::Agent,
@@ -205,9 +192,8 @@ fn sources(
         .collect()
 }
 
-/// Write the files `sources` lists to the new file `joined`, one after
-/// another, returning each one's place in the session's directory and its
-/// length there.
+/// `joined` must be a new file. Returns each file's place in the session's
+/// directory and its length there.
 pub fn join_files(
     sources: &[(SessionFile, PathBuf)],
     joined: &Path,
@@ -224,9 +210,7 @@ pub fn join_files(
     Ok(files)
 }
 
-/// The files `joined` holds one after another, as `files` lists them, each
-/// written to a file of its own in `directory`, refusing a length that does
-/// not match.
+/// Refuses a length that does not match.
 pub fn split_files(
     joined: &Path,
     files: Vec<SessionFile>,

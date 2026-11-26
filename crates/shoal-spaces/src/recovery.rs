@@ -1,4 +1,5 @@
-//! Explicit recovery: inspect first, mutate only requested and verified records.
+//! Explicit recovery: inspect first, and change only the records the
+//! request names once they are verified.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -16,11 +17,11 @@ use shoal_protocol::space_names::SpaceSelector;
 
 pub use shoal_protocol::recovery::{DirectoryState, ExecutionReport, ReconcileOptions, Report};
 
-/// Operations on the client type [`Report`] that only the `shoal` command uses.
+/// Operations on the client type [`Report`] that only the `shoal` command
+/// uses.
 trait ReportExt {
     fn new(workspace: Workspace) -> Self;
 
-    /// A report for a workspace whose reconciliation itself failed.
     fn failed(workspace: Workspace, error: &anyhow::Error) -> Self;
 }
 
@@ -44,8 +45,8 @@ impl ReportExt for Report {
 }
 
 impl Spaces {
-    /// Reconcile one workspace, or all of them. A failure for one workspace
-    /// becomes an issue in its report rather than aborting the rest.
+    /// A failure for one workspace becomes an issue in its report rather
+    /// than aborting the rest.
     pub async fn reconcile_workspaces(
         &self,
         daemon: &dyn Daemon,
@@ -80,26 +81,27 @@ impl Spaces {
         Self::validate_reconcile_options(options)?;
         let queued = self.workspace(selector).await?;
         // A repair's stop hands over the agent of a chat that became the
-        // workspace, so the hand-overs come before the Git gate, as a
-        // conversion takes them.
+        // workspace, so take the hand-overs before the Git gate, as a
+        // conversion does.
         let handovers = &self.conversion_handovers;
         handovers
             .hold(self.reconcile_queued(daemon, queued, options))
             .await
     }
 
-    /// [`Self::reconcile`] of the workspace `queued` once the hand-overs are
-    /// held.
+    /// Call once the hand-overs are held.
     async fn reconcile_queued(
         &self,
         daemon: &dyn Daemon,
         queued: Workspace,
         options: ReconcileOptions,
     ) -> Result<Report> {
-        // Serializes with branch creation and main updates; state reservation below
-        // prevents new executions, removal, stop, and resource claims during repair.
+        // Serializes with branch creation and main updates. The state
+        // reservation below keeps out new executions, removal, stop and
+        // resource claims during the repair.
         let _guard = self.gates.lock_git(queued.repository()).await;
-        // Read again: a repair that held the gate meanwhile may have changed it.
+        // Read again: a repair that held the gate meanwhile may have changed
+        // it.
         let workspace = self.workspace_by_id(&queued.id).await?;
         let mut report = Report::new(workspace.clone());
         let reserved_from = self
@@ -314,7 +316,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Inspect one recorded execution, optionally stopping and clearing it.
+    /// Optionally stops and clears it.
     #[allow(
         clippy::too_many_arguments,
         reason = "the execution, its workspace and the reconciliation's state, beside the daemon"
@@ -374,9 +376,8 @@ impl Spaces {
         })
     }
 
-    /// Delete an execution record judged clearable, unless processes still use
-    /// the workspace directory: even an explicit acknowledgement cannot ignore
-    /// visible cwd users.
+    /// Refuses while processes still use the workspace directory: even an
+    /// explicit acknowledgement cannot ignore visible cwd users.
     async fn clear_stopped_execution(
         &self,
         daemon: &dyn Daemon,
@@ -401,9 +402,8 @@ enum Clearance {
     DirectoryInUse(Vec<String>),
 }
 
-/// Stop the recorded survivors of a disconnected execution and inspect again,
-/// rescanning the executions `ids` into `scan`, where the executions whose
-/// wrappers are `agents` own their agents.
+/// Rescans the executions `ids` into `scan`. The executions whose wrappers
+/// are `agents` own their agents.
 async fn stop_survivors(
     execution: &crate::model::Execution,
     workspace: &std::path::Path,
@@ -421,14 +421,14 @@ async fn stop_survivors(
             execution.id
         ));
     }
-    // A surviving process can fork while stopping. Rescan rather than
-    // assuming that signaling the original list completed the job.
+    // A surviving process can fork while stopping, so rescan rather than
+    // assume that signalling the original list finished the job.
     *scan = process::scan(ids.clone()).await?;
     Processes::inspect(execution, workspace, scan, agents).await
 }
 
-/// Whether `options` ask for repair and the evidence proves the execution
-/// ended, so repair may clear it.
+/// Repair may clear an execution only when `options` ask for it and the
+/// evidence proves it ended.
 fn clearable(connected: bool, processes: &Processes, options: ReconcileOptions) -> bool {
     options.repair
         && !connected
@@ -439,7 +439,7 @@ fn clearable(connected: bool, processes: &Processes, options: ReconcileOptions) 
         && (processes.visibility_complete() || options.acknowledge_stopped)
 }
 
-/// Explain what keeps an execution from being a provably stale record.
+/// Explains what keeps an execution from being a provably stale record.
 fn execution_notes(connected: bool, processes: &Processes) -> Vec<String> {
     let mut notes = Vec::new();
     if connected {

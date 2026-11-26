@@ -1,9 +1,5 @@
-//! Moves the daemon runs as operations: started on the machine whose
-//! spaces they take, by a worker that checks the spaces, packs them,
-//! delivers the packages and ends the spaces here once their destination
-//! has them, so a move goes on when the caller goes. A recorded move whose
-//! worker went, as when the machine restarted during it, finishes in a
-//! worker of its own, which tells the user how it ended.
+//! Moves the daemon runs as operations, so a move goes on when its caller
+//! goes. See `docs/design/moves.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -15,11 +11,9 @@ use crate::protocol::operations::{Ended, OperationSpec, Outcome};
 use crate::transfer::{DeferredMove, MoveDestination, MoveLock, MoveOrder, MoveReport};
 use shoal_protocol::{hub::Member, model::Located, space_names::SpaceSelector};
 
-/// How often the daemon looks for recorded moves whose worker went.
 const INTERRUPTED_MOVES_INTERVAL: Duration = Duration::from_secs(60);
 
-/// Finish the recorded moves whose worker went, at startup and then as
-/// often as [`INTERRUPTED_MOVES_INTERVAL`] says.
+/// Runs at startup and then every [`INTERRUPTED_MOVES_INTERVAL`].
 pub async fn finish_interrupted(daemon: Arc<dyn Daemon>) {
     loop {
         {
@@ -33,12 +27,11 @@ pub async fn finish_interrupted(daemon: Arc<dyn Daemon>) {
 }
 
 impl Spaces {
-    /// Start `order` in a worker that acts with `caller`'s scope, in `env`
-    /// when given, once every space it takes is here, live or removed. A
-    /// space another machine has refuses it, naming that space, which the
-    /// hub forwards it for, as does a joined machine to move to that is
-    /// this one or offline. A move to a joined machine that
-    /// would stop `caller`'s agent waits for its turn to end instead.
+    /// The worker acts with `caller`'s scope. Every space the move takes must
+    /// be here, live or removed: a space another machine has refuses it,
+    /// naming that space, which the hub forwards it for. So does a joined
+    /// destination that is this machine or offline. A move to a joined
+    /// machine that would stop `caller`'s agent waits for its turn to end.
     pub async fn start_move(
         &self,
         daemon: &dyn Daemon,
@@ -69,11 +62,10 @@ impl Spaces {
         Ok(MoveStart::Started(started))
     }
 
-    /// Refuse a space `id`, live or removed, that is not here to move to
-    /// `destination`: a file takes one another joined machine runs or
-    /// keeps the record of, whose package this machine's worker reads from
-    /// there; a move to another machine, or one holding its package for
-    /// this machine's, goes to the machine that has the space or its record.
+    /// A move to a file takes a space another joined machine runs or keeps
+    /// the record of: this machine's worker reads its package from there. A
+    /// move to another machine, or one holding its package for this
+    /// machine's, goes to the machine that has the space or its record.
     async fn ensure_movable(
         &self,
         daemon: &dyn Daemon,
@@ -105,9 +97,7 @@ impl Spaces {
         }
     }
 
-    /// The other joined machine that runs the space `selector` names, or
-    /// keeps its removal record; none when the hub lists neither or cannot
-    /// be asked.
+    /// None when the hub lists neither or cannot be asked.
     async fn other_machine_with(
         &self,
         daemon: &dyn Daemon,
@@ -120,13 +110,12 @@ impl Spaces {
         daemon.record_keeper(selector).await.ok().flatten()
     }
 
-    /// Start a worker that finishes each recorded move whose worker went:
-    /// one that holds no lock on it and that no operation runs, nor one
-    /// holding its package that the machine which started it may still
-    /// read; link the spaces a finished move left here below the space
-    /// they are below again, where its daemon stopped before it did; settle
-    /// the moves that waited for an agent's turn whose operation no longer
-    /// runs; and delete the copies' packages no machine came to read.
+    /// Finishes each move whose worker went: one with no lock on it that no
+    /// operation runs, and no package that the machine which started it may
+    /// still read. Links the spaces a finished move left here below their
+    /// parent again where the daemon stopped first. Settles the moves that
+    /// waited for an agent's turn whose operation no longer runs, and
+    /// deletes the copies' packages no machine came to read.
     pub async fn finish_interrupted_moves(&self, daemon: &dyn Daemon) -> Result<()> {
         self.attach_settled_behind().await?;
         self.forget_moves_cut_off(daemon).await?;
@@ -151,7 +140,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Tell the user how a move whose worker went finished, as `ended` says.
     pub async fn tell_finished_move(&self, daemon: &dyn Daemon, ended: &Ended) {
         let messages = match ended {
             Ended::Succeeded(outcome) => match outcome.as_ref() {
@@ -171,12 +159,11 @@ impl Spaces {
         }
     }
 
-    /// Let a scoped `caller` move the spaces `order` takes, refusing one its
-    /// scope does not reach: to a joined machine as
-    /// [`Self::authorize_joined_move`] says, else as its `admin` permission
-    /// allows. A move another machine sent only holds the packages for
-    /// that machine, which writes them where its caller named, since a
-    /// file, or a host `ssh` reaches, here lies outside the hub's trust.
+    /// Refuses a space the caller's scope does not reach. A move to a joined
+    /// machine follows [`Self::authorize_joined_move`], any other the
+    /// `admin` permission. A move another machine sent only holds the
+    /// packages for that machine, which writes them where its caller named:
+    /// a file, or a host `ssh` reaches, here lies outside the hub's trust.
     pub async fn authorize_move(
         &self,
         daemon: &dyn Daemon,
@@ -213,16 +200,13 @@ impl Spaces {
     }
 }
 
-/// How a move started.
 pub enum MoveStart {
-    /// In the operation of this ID.
     Started(String),
-    /// Once the turn of the agent it would stop ends.
+    /// Once the turn of the agent the move would stop ends.
     AfterTurn(DeferredMove),
 }
 
-/// What the user hears of the moves `report` finished after their worker
-/// went: each space that ended here, and each that could not move.
+/// Each space that ended here, and each that could not move.
 fn finished_moves(report: &MoveReport) -> Vec<String> {
     let moved = (report.moved.iter()).map(|moved| {
         format!(

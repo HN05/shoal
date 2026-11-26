@@ -1,6 +1,5 @@
-//! The processes of a space that Shoal does not track, as
-//! [`spaces`](crate::process::identity::spaces) finds them, and the one path
-//! that stops them, for `shoal stop` and removal alike.
+//! Stopping the processes of a space that Shoal does not track, for `shoal
+//! stop` and removal alike.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::space_ids::SpaceId;
@@ -24,7 +23,8 @@ use crate::{
 pub use shoal_protocol::processes::{Selection, Stopped};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Operations on the client type [`Selection`] that only the `shoal` command uses.
+/// Operations on the client type [`Selection`] that only the `shoal`
+/// command uses.
 trait SelectionExt {
     fn takes(self, process: &Untracked) -> bool;
 }
@@ -45,29 +45,25 @@ pub enum WorktreeTies {
     None,
     /// The programs built in it, wherever they run.
     Programs,
-    /// The processes working in it and the programs built in it.
     All,
 }
 
 impl WorktreeTies {
-    /// All ties when `verified`, none otherwise.
     pub fn when(verified: bool) -> Self {
         if verified { Self::All } else { Self::None }
     }
 }
 
 /// Stopping a parent detaches the processes it started, which may start
-/// others meanwhile; each round stops what the one before it left.
+/// others meanwhile. Each round stops what the one before it left.
 const ROUNDS: usize = 3;
 
 impl Spaces {
-    /// Stop every untracked process of the space being removed, such as
-    /// servers its hooks or apps started, scripts a recording left behind,
-    /// or an agent Shoal did not start under a wrapper, since none outlives
-    /// removal. Its worktree, where it has one, ties processes to it as
-    /// `ties` says once the directory is verified to be its worktree still,
-    /// of the repository whose shared Git directory is `common_dir` when
-    /// the removal read it.
+    /// Stops servers hooks or apps started, scripts a recording left, and
+    /// agents Shoal did not start under a wrapper: none outlives removal.
+    /// The worktree ties processes as `ties` says once the directory is
+    /// verified as its worktree still, of the repository whose shared Git
+    /// directory was `common_dir` when the removal read it.
     pub async fn stop_removed_processes(
         &self,
         daemon: &dyn Daemon,
@@ -87,9 +83,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Stop the untracked processes that `selection` takes of the workspace
-    /// or chat `selector` names, as [`Self::stop_untracked`] does, sparing
-    /// the requesting process `requester` and the processes that started it.
+    /// Spares the requesting process `requester` and the processes that
+    /// started it.
     pub async fn stop_space_processes(
         &self,
         daemon: &dyn Daemon,
@@ -114,11 +109,10 @@ impl Spaces {
         })
     }
 
-    /// [`Self::stop_untracked`] for `workspace` under a reserved lifecycle,
-    /// so no execution registers between reading the tracked processes and
-    /// signalling: its processes would count as untracked. The worktree ties
-    /// processes to the workspace once it is verified to be its. Nothing
-    /// runs in one whose preparation waits.
+    /// Runs under a reserved lifecycle, so no execution registers between
+    /// reading the tracked processes and signalling: its processes would
+    /// count as untracked. Nothing runs in a workspace whose preparation
+    /// waits.
     pub async fn stop_workspace_untracked(
         &self,
         daemon: &dyn Daemon,
@@ -130,9 +124,8 @@ impl Spaces {
         (self.stop_workspace_untracked_after(daemon, workspace, selection, requester, first)).await
     }
 
-    /// [`Self::stop_workspace_untracked`], once `first` has run under the
-    /// reserved lifecycle, before anything is signaled; a `first` that fails
-    /// signals nothing.
+    /// Runs `first` under the reserved lifecycle before anything is
+    /// signalled. A `first` that fails signals nothing.
     pub async fn stop_workspace_untracked_after(
         &self,
         daemon: &dyn Daemon,
@@ -157,8 +150,7 @@ impl Spaces {
         stopped
     }
 
-    /// [`Self::stop_untracked`] for `workspace`, whose lifecycle the caller
-    /// reserved.
+    /// The caller reserved the workspace's lifecycle.
     async fn stop_reserved_untracked(
         &self,
         daemon: &dyn Daemon,
@@ -175,9 +167,9 @@ impl Spaces {
         self.stop_untracked(space, selection, requester).await
     }
 
-    /// What ties processes to `space`: its identity, its temporary directory
-    /// while that is the one Shoal created, and its worktree, where it has
-    /// one, as `ties` says, which the caller verified is the space's.
+    /// Its identity, its temporary directory while that is the one Shoal
+    /// created, and its worktree as `ties` says. The caller verified the
+    /// worktree is the space's.
     pub async fn space_ties(
         &self,
         daemon: &dyn Daemon,
@@ -198,8 +190,8 @@ impl Spaces {
         })
     }
 
-    /// The processes Shoal tracks: every execution's wrapper and command,
-    /// a chat's agent's among them, and the daemon, which runs hooks.
+    /// Every execution's wrapper and command, a chat's agent's among them,
+    /// and the daemon, which runs hooks.
     async fn tracked_processes(&self) -> Result<Vec<Identity>> {
         let executions = self.store.run(|db| store::all_executions(db)).await?;
         let mut tracked: Vec<Identity> = executions
@@ -211,8 +203,8 @@ impl Spaces {
         Ok(tracked)
     }
 
-    /// The untracked processes of each of `spaces`, by space ID, other than
-    /// `requester` and the processes that started it.
+    /// By space ID, leaving out `requester` and the processes that started
+    /// it.
     pub async fn untracked_processes(
         &self,
         spaces: Vec<Space>,
@@ -223,11 +215,10 @@ impl Spaces {
         spaces::survey(spaces, tracked).await
     }
 
-    /// Stop the untracked processes of `space` that `selection` takes, other
-    /// than `requester` and the processes that started it, returning them
-    /// as they ran. Each is checked against its identity before every
-    /// signal, gets SIGTERM, then SIGKILL after the grace period; the error
-    /// names those that survived.
+    /// Leaves out `requester` and the processes that started it, and returns
+    /// the stopped processes as they ran. Each is checked against its
+    /// identity before every signal, and gets SIGTERM, then SIGKILL after the
+    /// grace period. The error names those that survived.
     pub async fn stop_untracked(
         &self,
         space: Space,
@@ -272,7 +263,6 @@ impl Spaces {
     }
 }
 
-/// Stop `targets`, naming each that survived.
 async fn stop(targets: &[Identity]) -> Result<()> {
     let Err(error) = identity::stop_verified(targets).await else {
         return Ok(());
@@ -289,7 +279,6 @@ async fn stop(targets: &[Identity]) -> Result<()> {
     Err(error)
 }
 
-/// The processes of `targets` that `described` found running, as it shows them.
 fn as_stopped(
     targets: &[Identity],
     mut described: std::collections::HashMap<u32, described::Description>,
@@ -318,8 +307,7 @@ fn pids<'a>(processes: impl IntoIterator<Item = &'a Identity>) -> String {
         .join(", ")
 }
 
-/// The identity of the requesting process `pid`, which a stop spares with
-/// the processes that started it; none when it cannot be read.
+/// None when it cannot be read.
 fn requester_identity(pid: Option<u32>) -> Option<Identity> {
     pid.and_then(|pid| identity::capture(pid).ok().flatten())
 }

@@ -1,8 +1,5 @@
-//! Each space's progress: the status line its agent sets, the steps of its
-//! plan, as its plan tool reports them or `shoal progress --steps` sets
-//! them, and what blocks the space or its steps. The record outlives the
-//! agent until the space goes; each change is a `progress_changed` event,
-//! and each blocker added or removed an event of its own.
+//! Each space's progress: its status line, plan steps and blockers. See
+//! `docs/design/progress.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
@@ -29,7 +26,6 @@ pub mod section;
 pub use clearing::Cleared;
 pub use publish::{Publications, run};
 
-/// What a space keeps of its agent's reports.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plan {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,7 +36,6 @@ pub struct Plan {
     pub blockers: Vec<blockers::Stored>,
 }
 
-/// A change to a space's plan, with the blockers it names looked up.
 enum Change {
     Plan(ProgressChange),
     AddBlocker {
@@ -54,9 +49,8 @@ enum Change {
 }
 
 impl Plan {
-    /// The plan after `change`, which keeps its first [`MAX_STEPS`] steps
-    /// and the blockers of the steps it keeps, and the blocker events it
-    /// journals.
+    /// Keeps the first [`MAX_STEPS`] steps and the blockers of the steps it
+    /// keeps. Also returns the blocker events to journal.
     fn applied(self, change: Change) -> Result<(Self, Vec<(EventKind, BlockerEvent)>)> {
         Ok(match change {
             Change::Plan(change) => (self.changed(change), Vec::new()),
@@ -73,9 +67,8 @@ impl Plan {
         })
     }
 
-    /// The plan after `change`, which keeps its first [`MAX_STEPS`] steps.
-    /// Blocker changes need their blockers looked up, so only
-    /// [`Self::applied`] takes them.
+    /// Keeps the first [`MAX_STEPS`] steps. Blocker changes need their
+    /// blockers looked up, so only [`Self::applied`] takes them.
     pub fn changed(mut self, change: ProgressChange) -> Self {
         match change {
             ProgressChange::Status(status) => self.status = status,
@@ -94,8 +87,8 @@ impl Plan {
         self
     }
 
-    /// Add `step`; a key the plan already has starts a new plan, without the
-    /// old plan's step blockers.
+    /// A key the plan already has starts a new plan, without the old plan's
+    /// step blockers.
     fn create(&mut self, step: PlanStep) {
         let known = |known: &PlanStep| step.key.is_some() && known.key == step.key;
         if self.steps.iter().any(known) {
@@ -106,8 +99,7 @@ impl Plan {
         self.steps.push(step);
     }
 
-    /// Change the step `key` names: rename it, move it to `state`, or
-    /// remove it. A key the plan lacks changes nothing.
+    /// A key the plan lacks changes nothing.
     fn change(&mut self, key: &str, name: Option<String>, state: Option<StepState>, removed: bool) {
         let Some(at) = (self.steps.iter()).position(|step| step.key.as_deref() == Some(key)) else {
             return;
@@ -129,7 +121,6 @@ impl Plan {
         self.status.is_none() && self.steps.is_empty() && self.blockers.is_empty()
     }
 
-    /// The plan as clients see it, changed last at `updated_at`.
     pub fn progress(&self, updated_at: UnixTime) -> Progress {
         let state =
             |wanted: fn(StepState) -> bool| (self.steps.iter()).position(|step| wanted(step.state));
@@ -147,8 +138,7 @@ impl Plan {
     }
 }
 
-/// The progress of the space `id`; none before its agent reported any or
-/// once it cleared all of it.
+/// None before the agent reported any, and once it cleared all of it.
 pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Progress>> {
     Ok(stored(db, id)?
         .filter(|(plan, _)| !plan.is_empty())
@@ -164,8 +154,7 @@ fn stored(db: &Connection, id: &SpaceId) -> Result<Option<(Plan, UnixTime)>> {
         .transpose()
 }
 
-/// Record that the PRs of the space `id` show `plan`, unless it changed
-/// after they were written.
+/// Records nothing when the plan changed after the PRs were written.
 fn mark_published(db: &Connection, id: &SpaceId, plan: &Plan) -> Result<()> {
     db.execute(
         "UPDATE space_progress SET published_at=updated_at WHERE space_id=?1 AND record=?2",
@@ -174,8 +163,8 @@ fn mark_published(db: &Connection, id: &SpaceId, plan: &Plan) -> Result<()> {
     Ok(())
 }
 
-/// Apply `change` to the progress of the space `id` at `now` in the
-/// caller's transaction, journaling it; `None` when it changes nothing.
+/// Runs in the caller's transaction and journals the change. `None` when it
+/// changes nothing.
 fn save(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -187,9 +176,8 @@ fn save(
     write(tx, id, &before, after, &events, now)
 }
 
-/// Replace the plan `before` of the space `id` with `after` at `now` in the
-/// caller's transaction, journaling it with the blocker `events`; `None`
-/// when it changes nothing.
+/// Runs in the caller's transaction and journals the change with the
+/// blocker `events`. `None` when it changes nothing.
 fn write(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -215,9 +203,8 @@ fn write(
     Ok(Some(progress))
 }
 
-/// Set the status line of the space `id` to `status` at `now` in the
-/// caller's transaction, as a completion's summary does; whether it
-/// changed.
+/// Runs in the caller's transaction, as a completion's summary does.
+/// Returns whether the line changed.
 pub fn record_status(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -231,13 +218,12 @@ pub fn record_status(
     Ok(save(tx, id, change, now)?.is_some())
 }
 
-/// Whether `progress` blocks its space.
 fn blocked(progress: Option<&Progress>) -> bool {
     progress.is_some_and(Progress::blocked)
 }
 
-/// Remove every blocker of the space `id` at `now` in the caller's
-/// transaction, as its completion does, journaling each; whether any went.
+/// Runs in the caller's transaction, as completion does, and journals each
+/// removal. Returns whether any blocker went.
 pub fn remove_blockers(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<bool> {
     let Some((before, _)) = stored(tx, id)? else {
         return Ok(false);
@@ -249,7 +235,6 @@ pub fn remove_blockers(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Res
     Ok(write(tx, id, &before, after, &events, now)?.is_some())
 }
 
-/// Refuse a change with a status line or step that is not a valid line.
 fn validate(change: &ProgressChange) -> Result<()> {
     match change {
         ProgressChange::Status(status) => status.as_deref().map_or(Ok(()), |status| {
@@ -286,8 +271,6 @@ fn validate_key(key: &str) -> Result<()> {
 }
 
 impl Spaces {
-    /// Apply `change` to the progress of the space `selector` names, and
-    /// return the progress after it.
     pub async fn set_progress(
         &self,
         daemon: &dyn Daemon,
@@ -319,9 +302,8 @@ impl Spaces {
         Ok(progress)
     }
 
-    /// Tell the coordinator of `space`, or the user without one, that the
-    /// space became blocked, naming what blocks it, unless `progress` leaves
-    /// it unblocked: a step blocker while other work remains tells no one.
+    /// Tells the space's coordinator, or the user without one. A step
+    /// blocker while other work remains tells no one.
     async fn notify_blocked(&self, daemon: &dyn Daemon, space: &Space, progress: &Progress) {
         if !progress.blocked() {
             return;
@@ -342,14 +324,12 @@ impl Spaces {
         .await;
     }
 
-    /// Whether the space `id` is blocked.
     pub async fn space_blocked(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         let progress = self.store.read(move |db| current(db, &id)).await?;
         Ok(blocked(progress.as_ref()))
     }
 
-    /// The progress of the space `selector` names.
     pub async fn space_progress(&self, selector: &SpaceSelector) -> Result<Option<Progress>> {
         let id = self.space(selector).await?.id.to_owned();
         self.store.read(move |db| current(db, &id)).await

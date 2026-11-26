@@ -1,9 +1,7 @@
-//! The mark an agent puts on its turn with `shoal send --in-chat`, on the
-//! execution it runs as, a chat's as a workspace's: once the turn ends,
-//! its final message goes as a post in a thread or as an alert (see
-//! [`alerts`]). A turn has one mark,
-//! which a later one replaces. A prompt the user submits in the agent's
-//! conversation answers the turn instead, which drops its mark.
+//! The mark `shoal send --in-chat` puts on an agent's turn: once the turn
+//! ends, its final message goes as a post in a thread or as an alert. A
+//! turn has one mark, which a later one replaces, and a prompt the user
+//! submits answers the turn instead and drops the mark.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, bail, ensure};
@@ -17,8 +15,8 @@ use shoal_protocol::{
 
 use crate::{model::Space, scope::Caller};
 
-/// What a message from the chat says without the agent's own text, as
-/// from an agent whose hook does not pass its turn's final message.
+/// Stands in for the agent's text when its hook does not pass the turn's
+/// final message.
 pub const WROTE_IN_CHAT: &str = "The agent wrote in its chat; attach to its session to read it.";
 
 mod alerts;
@@ -26,16 +24,13 @@ mod unsent;
 
 use alerts::MarkedAlert;
 
-/// What a marked turn's final message becomes, as its record keeps it.
 enum Mark {
     /// A post in the thread of this record ID.
     Post(i64),
-    /// An alert.
     Alert(MarkedAlert),
 }
 
-/// Mark the turn of the agent `execution` runs with `mark`, returning what
-/// the mark it replaced showed.
+/// Returns what the replaced mark showed.
 fn put(tx: &Transaction<'_>, execution: &ExecutionId, mark: &Mark) -> Result<Option<ChatMark>> {
     let replaced = match take(tx, execution)? {
         Some(replaced) => Some(shown(tx, &replaced)?),
@@ -52,7 +47,6 @@ fn put(tx: &Transaction<'_>, execution: &ExecutionId, mark: &Mark) -> Result<Opt
     Ok(replaced)
 }
 
-/// Clear the mark of the turn of the agent `execution` runs, returning it.
 fn take(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<Mark>> {
     let row: Option<(Option<i64>, Option<String>)> = tx
         .query_row(
@@ -70,8 +64,7 @@ fn take(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<Mark>> {
     })
 }
 
-/// Clear the mark of the turn of the agent `execution` runs, returning it
-/// with what it shows the agent.
+/// Also returns what the mark shows the agent.
 fn taken(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<(Mark, ChatMark)>> {
     let Some(mark) = take(tx, execution)? else {
         return Ok(None);
@@ -80,8 +73,7 @@ fn taken(tx: &Transaction<'_>, execution: &ExecutionId) -> Result<Option<(Mark, 
     Ok(Some((mark, shown)))
 }
 
-/// What `mark` shows the agent: the thread its post goes to, or whom its
-/// alert reaches.
+/// The thread the post goes to, or whom the alert reaches.
 fn shown(db: &Connection, mark: &Mark) -> Result<ChatMark> {
     Ok(match mark {
         Mark::Post(id) => ChatMark::Post {
@@ -94,9 +86,8 @@ fn shown(db: &Connection, mark: &Mark) -> Result<ChatMark> {
 }
 
 impl Spaces {
-    /// The execution whose turn the agent of `space` that `caller` runs as
-    /// marks, refusing an execution that runs no agent of the space, or one
-    /// without Shoal's hook that ends its turns.
+    /// Refuses an execution that runs no agent of the space, or one without
+    /// Shoal's hook that ends its turns.
     async fn marked_turn(
         &self,
         daemon: &dyn Daemon,
@@ -113,7 +104,6 @@ impl Spaces {
         Ok(execution)
     }
 
-    /// Mark the turn `turn` with `mark`.
     async fn mark_turn(&self, turn: ExecutionId, mark: Mark) -> Result<ChatMarked> {
         self.store
             .write(move |tx| {
@@ -124,8 +114,6 @@ impl Spaces {
             .await
     }
 
-    /// Mark the current turn of `caller`'s agent in the space `selector`
-    /// names as posting in the thread `number` in its conversation.
     pub async fn mark_chat_post(
         &self,
         daemon: &dyn Daemon,
@@ -142,10 +130,8 @@ impl Spaces {
         self.mark_turn(turn, Mark::Post(thread.id)).await
     }
 
-    /// Send the turn's `final_message` as the agent `execution` runs in the
-    /// space `selector` names marked its turn to, consuming the mark. The
-    /// agent's turn ends either way, so a failure is logged and told to the
-    /// agent, which may send the message again.
+    /// Consumes the mark. The turn ends either way, so a failure is logged
+    /// and told to the agent, which may send the message again.
     pub async fn end_marked_turn(
         &self,
         daemon: &dyn Daemon,
@@ -195,12 +181,10 @@ impl Spaces {
         sent
     }
 
-    /// The user replied `prompt` in the conversation of the agent
-    /// `execution` runs in the space `selector` names: record their
-    /// interaction with it, drop the mark of a turn underway, telling the
-    /// agent of an alert it leaves unsent, record their reply to the posts
-    /// its agents made there, and mark the alerts they sent the user from
-    /// there read.
+    /// Records the user's interaction with the agent, drops the mark of a
+    /// turn under way, telling the agent of an alert it leaves unsent,
+    /// records the reply to the posts its agents made there, and marks read
+    /// the alerts they sent the user from there.
     pub async fn reply_in_chat(
         &self,
         daemon: &dyn Daemon,

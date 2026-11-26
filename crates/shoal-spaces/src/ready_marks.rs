@@ -1,6 +1,4 @@
-//! Ready-for-review marks: an agent's statement that it needs the user before
-//! it can go on. Integrations read them from the event journal; they neither
-//! notify the user nor affect completion or cleanup.
+//! Ready-for-review marks. See `docs/design/progress.md`.
 use crate::Spaces;
 use crate::config::hooks::HookCommand;
 use crate::daemon::Daemon;
@@ -70,16 +68,14 @@ pub fn forget(db: &Connection, id: &SpaceId, urls: &[String]) -> Result<()> {
 }
 
 impl Spaces {
-    /// Mark the selected linked items ready, or the space itself when
-    /// nothing is linked and nothing was selected, and tell the space's
-    /// coordinator. A linked PR of a workspace is marked only while it is
-    /// open with HEAD as its head on the forge, and a chat's while it is open;
-    /// the others are skipped, and an explicitly selected one fails. Marking
-    /// again refreshes the mark and reruns `hooks.post_ready`. With
-    /// `[pr] undraft_on_ready`, marked draft PRs leave draft before the hook runs,
-    /// which removes their progress section with the next publication; a
-    /// failure there keeps the marks and runs the hook. `[review]
-    /// require_for_ready` applies to a workspace's HEAD where it holds `caller`.
+    /// Marks the space itself when nothing is linked and nothing was
+    /// selected, and tells its coordinator. A workspace's linked PR is
+    /// marked only while it is open with HEAD as its head on the forge, a
+    /// chat's while it is open. Others are skipped, and an explicitly
+    /// selected one fails. With `[pr] undraft_on_ready`, marked draft PRs
+    /// leave draft before `hooks.post_ready` runs; a failure there keeps the
+    /// marks and runs the hook. `[review] require_for_ready` applies to a
+    /// workspace's HEAD where it holds `caller`.
     pub async fn mark_ready(
         &self,
         daemon: &dyn Daemon,
@@ -96,7 +92,8 @@ impl Spaces {
         let command = HookKind::PostReady
             .command(&settings)
             .map(|path| origin.join(path));
-        // Like hooks.post_done, the hook excludes lifecycle and permit changes.
+        // Like hooks.post_done, the hook excludes lifecycle and permit
+        // changes.
         let _resources = match command {
             Some(_) => Some(self.gates.resource_guard(&id, GuardMode::Exclusive)?),
             None => None,
@@ -132,10 +129,9 @@ impl Spaces {
         Ok(ready)
     }
 
-    /// The HEAD a workspace's marks are for, once `[review]
-    /// require_for_ready` passes for `caller`. A chat has none: it
-    /// works on no branch of its own, so its linked PRs are marked whatever
-    /// their head, and has no HEAD for a review to cover.
+    /// Checks `[review] require_for_ready` for `caller`. A chat has no HEAD:
+    /// it works on no branch of its own, so its linked PRs are marked
+    /// whatever their head, and no review covers it.
     async fn ready_head(
         &self,
         daemon: &dyn Daemon,
@@ -154,8 +150,8 @@ impl Spaces {
         Ok(Some(head))
     }
 
-    /// Run `hooks.post_ready` in `space` with what `[env]` adds; a failure,
-    /// or an environment that cannot be rendered, notifies and keeps the marks.
+    /// A failure, or an environment that cannot be rendered, notifies and
+    /// keeps the marks.
     async fn run_post_ready(
         &self,
         daemon: &dyn Daemon,
@@ -187,8 +183,6 @@ impl Spaces {
         }
     }
 
-    /// Record marks of `kind`, or of the `explicit` item, leaving out the
-    /// `pulls` skipped.
     async fn record_marks(
         &self,
         id: &SpaceId,
@@ -204,7 +198,8 @@ impl Spaces {
                 require_ready_space(tx, &id)?;
                 let linked = records.assigned_items(tx, &id, kind)?;
                 let items = marked_items(linked, explicit, kind, &pulls)?;
-                // Linked-item marks replace a mark made while nothing was linked.
+                // Linked-item marks replace a mark made while nothing was
+                // linked.
                 if items.iter().any(Option::is_some) {
                     tx.execute(
                         "DELETE FROM space_review WHERE space_id=?1 AND url=''",
@@ -236,9 +231,9 @@ impl Spaces {
             .await
     }
 
-    /// Withdraw the selected marks, or every mark without a selection.
-    /// `draft`, else `[pr] draft_on_unready`, first returns their PRs to draft; a
-    /// failure there keeps the marks, so the withdrawal can be retried.
+    /// Withdraws every mark without a selection. `draft`, else `[pr]
+    /// draft_on_unready`, first returns their PRs to draft. A failure there
+    /// keeps the marks, so the withdrawal can be retried.
     pub async fn clear_ready(
         &self,
         daemon: &dyn Daemon,
@@ -269,8 +264,7 @@ impl Spaces {
         Ok(selected)
     }
 
-    /// The marks a withdrawal selects, of which there must be one: an
-    /// explicit item must be marked.
+    /// Refuses an empty selection and an explicit item that is not marked.
     async fn selected_marks(
         &self,
         id: &SpaceId,
@@ -325,9 +319,7 @@ impl Spaces {
     }
 }
 
-/// The items a mark of `kind`, or of the `explicit` item, covers among the
-/// `linked` ones, leaving out the `pulls` it skips, or the space itself when
-/// nothing is linked.
+/// The space itself when nothing is linked.
 fn marked_items(
     linked: Vec<ItemRef>,
     explicit: Option<ItemRef>,
@@ -361,7 +353,6 @@ fn marked_items(
     Ok(items)
 }
 
-/// The `skipped` PRs with their reasons, on one line.
 fn skipped_list(skipped: &[SkippedPr]) -> String {
     (skipped.iter())
         .map(|skipped| format!("{}: {}", skipped.url, skipped.reason))
@@ -369,7 +360,6 @@ fn skipped_list(skipped: &[SkippedPr]) -> String {
         .join("; ")
 }
 
-/// The PRs among `marks`.
 fn pr_urls(marks: &[ReviewMark]) -> Vec<ItemRef> {
     marks
         .iter()
@@ -378,7 +368,6 @@ fn pr_urls(marks: &[ReviewMark]) -> Vec<ItemRef> {
         .collect()
 }
 
-/// What the coordinating agent hears when the space marks work ready.
 fn ready_notice(marks: &[ReviewMark]) -> String {
     let items = marks
         .iter()
@@ -388,7 +377,7 @@ fn ready_notice(marks: &[ReviewMark]) -> String {
     format!("marked ready for review: {items}")
 }
 
-/// The kind of item `selection` marks or unmarks; CI runs take no marks.
+/// CI runs take no marks.
 fn marked_kind(selection: &Selection) -> Result<Option<ItemKind>> {
     match selection.kind {
         Some(LinkKind::Ci) => bail!("CI runs are not marked ready for review"),
@@ -396,8 +385,7 @@ fn marked_kind(selection: &Selection) -> Result<Option<ItemKind>> {
     }
 }
 
-/// The explicitly selected issue or PR, which `marked_kind` has kept from
-/// being a run.
+/// `marked_kind` has already refused a run.
 fn marked_item(explicit: Option<ItemRef>) -> Option<ItemRef> {
     explicit.filter(|item| item.kind().item().is_some())
 }
