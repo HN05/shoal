@@ -11,10 +11,13 @@ pub(super) fn rewrite_choices(db: &Connection) -> Result<()> {
     answer_resolved_picks(db)
 }
 
-/// Give each post that offered choices the surface that offers them.
+/// Give each post that offered choices, or a recommendation or reason
+/// without them, the surface that shows them.
 fn offer_surfaces(db: &Connection) -> Result<()> {
-    let mut offering = db
-        .prepare("SELECT id,choices,recommendation,reason FROM thread_posts WHERE choices!='[]'")?;
+    let mut offering = db.prepare(
+        "SELECT id,choices,recommendation,reason FROM thread_posts
+            WHERE choices!='[]' OR recommendation IS NOT NULL OR reason IS NOT NULL",
+    )?;
     let offers = offering.query_map([], |row| {
         let choices: String = row.get(1)?;
         Ok((

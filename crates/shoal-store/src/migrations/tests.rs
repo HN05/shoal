@@ -297,6 +297,22 @@ fn choices_become_the_surfaces_the_shorthand_builds() -> Result<()> {
 }
 
 #[test]
+fn a_recommendation_without_choices_becomes_a_surface_too() -> Result<()> {
+    let mut db = at_floor()?;
+    thread_with_picks(&db)?;
+    db.execute(
+        "INSERT INTO thread_posts(id,thread_id,created_at,side,sender,sender_id,text,
+                recommendation,reason)
+            VALUES (5,1,6,'holder','space','chat','Port?','8080','Free here')",
+        [],
+    )?;
+    migrate(&mut db)?;
+    let built = shoal_protocol::surfaces::Surface::choices(&[], Some("8080"), Some("Free here"));
+    assert_eq!(interaction(&db, 5)?.0.as_ref(), Some(built.as_json()));
+    Ok(())
+}
+
+#[test]
 fn picks_become_answers_to_the_other_side_s_choices() -> Result<()> {
     let mut db = at_floor()?;
     thread_with_picks(&db)?;
