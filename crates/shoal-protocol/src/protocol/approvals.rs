@@ -54,10 +54,9 @@ pub enum ApprovalMethod {
         workspace: SpaceSelector,
         push: crate::approvals::PushSpecification,
     },
-    /// Let the caller take `action`, which the permission `key` governs and
-    /// which the caller takes itself, as its space's permission allows: at
-    /// once, once approved, or not at all; an approval grants a scope token
-    /// for the requests the action sends.
+    /// Let the caller take `action` itself, as its space's value for the
+    /// permission `key` allows. An approval grants a scope token for the
+    /// requests the action sends.
     AuthorizeAction {
         key: crate::config::permissions::PermissionKey,
         action: String,
@@ -76,10 +75,9 @@ pub enum ApprovalMethod {
 }
 
 impl ApprovalMethod {
-    /// Where the request runs when its space is another machine's: a
-    /// decision goes there, waiting for it while it is offline, and the
-    /// rest read or change the requests; an action's authorization and a
-    /// push's end are the caller's own.
+    /// A decision goes to the request's machine, waiting for it while it is
+    /// offline. An action's authorization and a push's end stay with the
+    /// caller.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::DecideApproval { .. } => Forwarding::Queued,

@@ -1,5 +1,4 @@
-//! The daemon's status: the file access stalls it reports and the limit it
-//! applies to Shoal's work memory.
+//! The daemon's status.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

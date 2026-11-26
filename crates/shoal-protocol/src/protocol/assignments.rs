@@ -8,14 +8,14 @@ use shoal_ids::execution_ids::ExecutionId;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AssignmentMethod {
-    /// Record the work of a workspace or running chat as done.
     MarkDone {
         space: SpaceSelector,
         #[serde(flatten)]
         done: crate::assignments::Done,
     },
-    /// Withdraw the completion of a workspace or running chat.
-    UndoDone { space: SpaceSelector },
+    UndoDone {
+        space: SpaceSelector,
+    },
     MarkReady {
         space: SpaceSelector,
         selection: crate::forge::items::link::Selection,
@@ -33,10 +33,10 @@ pub enum AssignmentMethod {
         space: SpaceSelector,
         execution: Option<ExecutionId>,
     },
-    /// Make `change` to the permissions each of the stopped `agents` and
-    /// saved `chats` was given, which its restore runs under, and the
-    /// launch waiting for the failed setup of each of the `launches`
-    /// workspaces, which it starts under, once none of them is refused.
+    /// Apply `change` to the permissions that each of the stopped `agents`,
+    /// the saved `chats` and the launches waiting for the failed setup of
+    /// the `launches` workspaces was given. Changes none when one is
+    /// refused.
     ChangeStoppedPermissions {
         agents: Vec<SavedAgent>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

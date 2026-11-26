@@ -6,8 +6,8 @@ use crate::apps::{
     store::{AppScope, EntryKey, KeyPrefix, Revision, Write},
 };
 
-/// Requests of apps built on Shoal: their `[apps.<name>]` settings, and
-/// the entries each keeps in the app store, its own in `scope`.
+/// Requests of apps built on Shoal for their settings and their entries in
+/// the app store.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AppMethod {
@@ -32,10 +32,11 @@ pub enum AppMethod {
     },
     /// Long-lived: write `size` bytes to the entry `write` names, from the
     /// revision it replaces. Answers with [`super::Body::Ok`] once it may
-    /// take them, which the client then sends as [`crate::apps::store::AppData`]
-    /// frames, and then with [`super::Body::AppEntry`], the entry at its new
-    /// revision; refused with `stale_revision` once another change took the
-    /// entry past the revision it names.
+    /// take them, which the client then sends as
+    /// [`crate::apps::store::AppData`] frames. Then answers with
+    /// [`super::Body::AppEntry`], the entry at its new revision. Refused with
+    /// `stale_revision` once another change took the entry past that
+    /// revision.
     WriteAppEntry {
         app: AppName,
         scope: AppScope,

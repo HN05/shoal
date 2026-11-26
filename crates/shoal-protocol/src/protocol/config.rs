@@ -1,5 +1,4 @@
-//! The requests for a repository's config, whose config they read, and the
-//! layers they return.
+//! Requests for a repository's config, and the layers they return.
 use anyhow::Result;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
@@ -75,21 +74,17 @@ impl ConfigTarget {
     }
 }
 
-/// A target's repository config layers as the daemon read them, in the
-/// schema of the config module of Shoal's own code, which the client carries
-/// without reading: launch settings come from the daemon, and the `shoal`
-/// command resolves the layers under the global config it reads itself.
+/// A target's repository config layers as the daemon read them. The
+/// protocol carries them without reading them; `shoal-core` parses them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RepositoryLayers(serde_json::Value);
 
 impl RepositoryLayers {
-    /// `layers` as the daemon sends them.
     pub fn of(layers: &impl Serialize) -> Result<Self> {
         Ok(Self(serde_json::to_value(layers)?))
     }
 
-    /// The layers, read as `L`.
     pub fn read<L: DeserializeOwned>(self) -> Result<L> {
         Ok(serde_json::from_value(self.0)?)
     }

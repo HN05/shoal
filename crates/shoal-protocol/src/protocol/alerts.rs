@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Forwarding, Lifetime, Target};
 
-/// Requests about alerts: one-way notices to the user or a space's agent.
+/// Requests about alerts.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AlertMethod {
@@ -15,23 +15,21 @@ pub enum AlertMethod {
         unread_only: bool,
         limit: u32,
     },
-    /// Mark exactly these alerts read: `ids` of this machine's, each one
-    /// for the caller's space or, as the caller may read them, for the
-    /// user, and `elsewhere` the user's that each other joined machine
-    /// keeps, by its ID, since two machines' alerts may share a number
-    /// until the hub renumbers one.
+    /// Mark exactly these alerts read: `ids` of this machine's, and
+    /// `elsewhere` the user's that each other machine keeps, by its ID.
+    /// Two machines' alerts may share a number until the hub renumbers one.
     MarkAlertsRead {
         ids: Vec<i64>,
         #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
         elsewhere: std::collections::BTreeMap<shoal_ids::member_ids::MemberId, Vec<i64>>,
     },
     /// Deletes every alert to the user this machine knows of, read or not,
-    /// its own and the other joined machines'; answers with how many.
+    /// including the other machines'.
     ClearAlerts,
-    /// Long-lived: the user's unread alerts, this machine's and the other
-    /// joined machines', that `after` has not passed, then new ones as they
-    /// come, oldest first, each as a [`super::Body::Alert`] response and
-    /// marked read on delivery unless `keep_unread`.
+    /// Long-lived: the user's unread alerts on every machine that `after`
+    /// has not passed, then new ones as they come, oldest first, each as a
+    /// [`super::Body::Alert`] response. Each is marked read on delivery
+    /// unless `keep_unread`.
     WatchAlerts {
         keep_unread: bool,
         after: crate::alerts::AlertCursor,
@@ -109,13 +107,9 @@ pub enum AlertTarget {
 }
 
 impl AlertMethod {
-    /// Where the request runs when its space is another machine's: a
-    /// message or a withdrawal goes to the recipient's machine, and a
-    /// message waits for it while it is offline; the caller's own agent's
-    /// turn is this machine's own, and the user's alerts name no space,
-    /// since every machine keeps the other machines' as the hub sends
-    /// them and sends the hub what reads, clears or withdraws another
-    /// machine's itself.
+    /// A message or a withdrawal goes to the recipient's machine, and a
+    /// message waits for it while it is offline. The user's alerts stay
+    /// here, since every machine keeps the other machines' copies.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::SendAlert { .. } => Forwarding::Queued,

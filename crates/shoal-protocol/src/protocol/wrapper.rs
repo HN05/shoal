@@ -13,9 +13,9 @@ pub const RESTORE_WAITS: u32 = 174;
 pub const RESUME_NARROWING: u32 = 241;
 
 /// A wrapper's request to restore its execution connection after the daemon
-/// went away. It is permanent: daemons accept it at every protocol version, so
-/// wrappers from older releases can reattach after an upgrade. Add fields only
-/// with defaults, and keep the execution events and controls such a wrapper
+/// went away. Daemons accept it at every protocol version, so that wrappers
+/// of older releases reattach after an upgrade. Add fields only with
+/// defaults, and keep the execution events and controls such a wrapper
 /// understands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reattach {
@@ -27,10 +27,8 @@ pub struct Reattach {
     /// Transient agent metadata the daemon lost with its memory.
     #[serde(default)]
     pub agent: Option<crate::agent::Agent>,
-    /// The model and effort the agent runs with.
     #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
     pub model: crate::agent::ModelChoice,
-    /// The mode the agent started in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gives the agent, whatever the mode's.
@@ -93,17 +91,18 @@ pub enum ExecutionEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         memory: Option<ScopeMemory>,
     },
-    /// The user woke the agent whose restore the wrapper waits for, in the
-    /// place it waits in: start that restore now, whatever the limits, as
-    /// `shoal queue start` does. Ignored while no restore of it waits.
+    /// The user woke the agent whose restore the wrapper waits for: start
+    /// that restore now, whatever the limits. Ignored while no restore of it
+    /// waits.
     Wake,
     /// The child exited and the wrapper starts another, as a demo's does,
     /// once the daemon answers [`Control::ChildReleased`].
     ChildExited,
     /// The wrapper continues from the installed binary, which an upgrade put
-    /// in place of its own, between a [`Control::Resume`] that allows it and
-    /// its next child's start, and registers again from `origin`, the place it runs in. The
-    /// daemon answers [`Control::Registered`], or a stop.
+    /// in place of its own, and registers again from `origin`, the place it
+    /// runs in. It does so only between a [`Control::Resume`] that allows it
+    /// and its next child's start. The daemon answers
+    /// [`Control::Registered`], or a stop.
     Register {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<Box<crate::sessions::Origin>>,

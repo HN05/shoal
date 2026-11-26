@@ -7,8 +7,7 @@ use crate::{
     threads::ThreadNumber,
 };
 
-/// Requests about agents' changes: recording them from an agent's hooks,
-/// reading them, and saying who made them.
+/// Requests about the changes Shoal records of agents' worktrees.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(

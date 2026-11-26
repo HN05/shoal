@@ -2,7 +2,7 @@ use super::{Forwarding, Lifetime, Target};
 use crate::space_names::SpaceSelector;
 use serde::{Deserialize, Serialize};
 
-/// Requests about the files attached to spaces: workspaces and chats.
+/// Requests about the files attached to spaces.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(
@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
     reason = "variants are named as their requests are spelled on the wire"
 )]
 pub enum FileMethod {
-    /// The files attached to a workspace or chat, oldest first.
+    /// The files attached to a space, oldest first.
     ListFiles { space: SpaceSelector },
-    /// The bytes of the file `id` attached to a workspace or chat, read on
-    /// the machine that keeps its copy: answered with
+    /// The bytes of the file `id` attached to a space, read on the machine
+    /// that keeps its copy: answered with
     /// [`super::Body::FileBytes`] frames as the daemon reads the copy, the
     /// last [`crate::files::FileBytes::End`].
     ReadFile { space: SpaceSelector, id: i64 },
@@ -22,16 +22,16 @@ pub enum FileMethod {
     /// repository's directory when this machine has the repository, else
     /// in `root_dir`.
     FetchedDirectory { space: SpaceSelector },
-    /// Attach copies of files to a workspace or chat without a message.
+    /// Attach copies of files to a space without a message.
     AddFiles {
         space: SpaceSelector,
         /// The files by absolute path, which the daemon copies.
         files: Vec<crate::files::NewFile>,
     },
-    /// Delete the attached files of a workspace or chat, only those with one
-    /// of `names` and the records `ids` when there are any; without one,
-    /// those of every workspace without a running agent or command and of
-    /// every removed space.
+    /// Delete the attached files of a space, only those `names` and `ids`
+    /// select when there are any. Without a space, it deletes those of every
+    /// workspace without a running agent or command and of every removed
+    /// space.
     RemoveFiles {
         space: Option<SpaceSelector>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]

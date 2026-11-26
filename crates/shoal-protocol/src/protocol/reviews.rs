@@ -19,18 +19,15 @@ pub enum ReviewMethod {
         #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
         model: crate::agent::ModelChoice,
     },
-    /// Start the caller's pending review of the workspace, which the
-    /// threads it opens towards that workspace join, or return the one it
-    /// has.
+    /// Start the caller's pending review of the workspace, or return the one
+    /// it has. The threads it opens towards that workspace join it.
     StartReview { workspace: SpaceSelector },
     /// The caller's pending reviews, oldest first, of every machine that
     /// runs a space it sees; forwarded from another machine, those this
     /// machine keeps.
     PendingReviews,
     /// Submit the caller's pending review of the workspace, else its only
-    /// one on any machine, at the workspace's HEAD: its comments reach the
-    /// workspace's agent together, with `summary`, approving its work when
-    /// `approve`.
+    /// one on any machine, at the workspace's HEAD.
     SubmitReview {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         workspace: Option<SpaceSelector>,

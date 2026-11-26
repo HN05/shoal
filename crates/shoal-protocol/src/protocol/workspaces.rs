@@ -41,7 +41,7 @@ pub enum WorkspaceMethod {
         workspace: SpaceSelector,
     },
     /// Create a workspace on a new branch in the repository of the space
-    /// `parent`, a workspace or a chat, as its child.
+    /// `parent`, as its child.
     CreateChild {
         parent: SpaceSelector,
         name: String,
@@ -58,10 +58,9 @@ pub enum WorkspaceMethod {
         #[serde(default, skip_serializing_if = "CreationOptions::is_default")]
         options: CreationOptions,
     },
-    /// Open PR `url`'s `head` in a workspace at a commit: the one in
-    /// `repository` made for or linked to the PR, moved to the head when the
-    /// PR's head moved, else a new one below the space `parent`, or else a
-    /// top-level one of the user's.
+    /// Open PR `url`'s `head` in a workspace at a commit: the one made for
+    /// or linked to the PR, moved to the new head, else a new one below
+    /// `parent`, or else a top-level one.
     OpenPullHead {
         repository: crate::repository::Selector,
         url: crate::forge::items::reference::ItemRef,
@@ -97,9 +96,9 @@ pub enum WorkspaceMethod {
     CopyOrigin {
         source: CopySource,
     },
-    /// The workspace record once its worktree identity is verified, and with
-    /// `on_branch` that it is on its recorded branch, before the CLI changes Git
-    /// state through it.
+    /// The workspace record once its worktree is verified as its own, and
+    /// with `on_branch` that it is on its recorded branch. The CLI asks
+    /// before it changes Git state through it.
     VerifyWorkspace {
         workspace: SpaceSelector,
         on_branch: bool,
@@ -117,8 +116,8 @@ pub enum WorkspaceMethod {
     },
     /// Keep where an agent of the workspace keeps its configuration, the
     /// [`AGENT_CONFIG_VARIABLES`](crate::env::AGENT_CONFIG_VARIABLES) it runs
-    /// with, inherited ones included, before Shoal trusts the workspace
-    /// there, for the repository's removal or move to clean the entries.
+    /// with, before Shoal trusts the workspace there. The repository's
+    /// removal or move cleans the entries.
     KeepAgentEnvironment {
         workspace: SpaceSelector,
         environment: std::collections::BTreeMap<String, String>,
@@ -143,17 +142,14 @@ pub struct CreationOptions {
     /// created for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<crate::space_names::SpaceName>,
-    /// Skip what gates readiness, `setup.command`, `hooks.pre_setup` and
-    /// `setup.copy_ignored`, and the hooks around it, `hooks.post_setup` and
-    /// the removal hooks, until `shoal setup` runs it; the seed clone
-    /// still happens.
+    /// Skip setup and the hooks around it until `shoal setup` runs them.
+    /// The seed clone still happens.
     #[serde(default)]
     pub skip_setup: bool,
     /// Nothing in it is worth keeping: every removal deletes it whatever it
     /// holds, without asking or keeping a checkpoint, and deletes its branch.
     #[serde(default)]
     pub disposable: bool,
-    /// The priority set on it, which ranks its queued work.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<shoal_schedule::priority::Priority>,
 }
@@ -209,9 +205,8 @@ pub struct PullHead {
 }
 
 impl WorkspaceMethod {
-    /// A request about a workspace's state goes to its machine; a creation,
-    /// a listing, and what the caller's execution, terminal or setup reads
-    /// stay with the caller.
+    /// A request about a workspace's state goes to its machine. A creation,
+    /// a listing, and what the caller's execution reads stay with the caller.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ReopenWorkspace { .. }

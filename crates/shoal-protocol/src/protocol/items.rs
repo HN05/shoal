@@ -8,11 +8,10 @@ use crate::forge::download::Download;
 use crate::forge::numbers::CommentId;
 use crate::space_names::SpaceSelector;
 
-/// Requests about the issues and PRs of a workspace's repository and the ones it links.
+/// Requests about the issues, PRs and forge of a space's repository.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemMethod {
-    /// Link an issue or PR by number or URL with a relation.
     LinkItem {
         space: SpaceSelector,
         kind: crate::forge::items::link::LinkKind,
@@ -27,7 +26,6 @@ pub enum ItemMethod {
         space: SpaceSelector,
         links: crate::model::SpaceLinks,
     },
-    /// Unlink the relation's items, optionally only one kind or one item.
     UnlinkItems {
         space: SpaceSelector,
         relation: crate::model::Relation,
@@ -73,8 +71,6 @@ pub enum ItemMethod {
         space: SpaceSelector,
         item: Option<crate::forge::items::reference::ItemInput>,
     },
-    /// Open an issue in the target repository, linking it to the
-    /// workspace when `link` is set.
     OpenIssue {
         #[serde(flatten)]
         target: RepoTarget,
@@ -156,7 +152,6 @@ pub enum ItemMethod {
         #[serde(flatten)]
         target: RepoTarget,
     },
-    /// The reactions the forge of the target repository allows.
     Reactions {
         #[serde(flatten)]
         target: RepoTarget,
@@ -188,8 +183,8 @@ pub enum ItemMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         closed: bool,
     },
-    /// The open issues the forge records as blocking the issue `item`
-    /// names in the context's repository, as blockers, answered in one or more `blockers`
+    /// The open issues the forge records as blocking the issue `item` names
+    /// in the context's repository, answered in one or more `blockers`
     /// frames and then `ok`.
     IssueBlockers {
         #[serde(flatten)]
@@ -226,7 +221,6 @@ pub enum DownloadPiece {
 }
 
 impl DownloadPiece {
-    /// The pieces that carry `download`.
     pub fn split(download: Download) -> Vec<Self> {
         const PIECE_BYTES: usize = super::MAX_FRAME / 4 * 3 / 2;
         let content_type = download.content_type.map(Self::ContentType);
@@ -237,7 +231,6 @@ impl DownloadPiece {
         content_type.into_iter().chain(bytes).collect()
     }
 
-    /// The download `pieces` carry.
     pub fn join(pieces: Vec<Self>) -> Result<Download> {
         let mut download = Download {
             content_type: None,
@@ -267,9 +260,8 @@ pub struct ViewPiece(pub String);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ItemContext {
-    /// The space, a workspace or a chat, acting in its own repository, or a
-    /// chat without one acting in the registered checkout of `repository`,
-    /// by its ID, which counts as its own.
+    /// The space acting in its own repository. A chat without one acts in
+    /// the registered checkout of `repository`, which counts as its own.
     Space {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -281,7 +273,6 @@ pub enum ItemContext {
 }
 
 impl ItemContext {
-    /// The space `space` names, acting in its own repository.
     pub fn space(space: SpaceSelector) -> Self {
         Self::Space {
             space,
@@ -323,9 +314,8 @@ impl ItemMethod {
 }
 
 impl ItemMethod {
-    /// Each reads or changes the space's links or asks the forge of its
-    /// repository, and a wait's answer comes as its space's machine writes
-    /// it; a moved space's links are relinked where it arrives.
+    /// A wait's answer comes as its space's machine writes it, and a moved
+    /// space's links are relinked where it arrives.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::LinkItem { .. }

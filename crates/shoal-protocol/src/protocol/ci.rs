@@ -21,9 +21,7 @@ impl RunsOf {
     }
 }
 
-/// Requests about CI checks and workflow runs of the target repository: that
-/// of a workspace or registered checkout, or another one `--repo` or a run's,
-/// PR's or workflow's URL names.
+/// Requests about CI checks and workflow runs of the target repository.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CiMethod {
@@ -51,7 +49,6 @@ pub enum CiMethod {
         action: crate::forge::ci::CiAction,
         failed: bool,
     },
-    /// One CI workflow run.
     ViewCiRun {
         #[serde(flatten)]
         target: super::RepoTarget,
@@ -63,7 +60,6 @@ pub enum CiMethod {
         target: super::RepoTarget,
         run: crate::forge::items::reference::ItemInput,
     },
-    /// The log of one job of a CI workflow run.
     CiRunJobLog {
         #[serde(flatten)]
         target: super::RepoTarget,

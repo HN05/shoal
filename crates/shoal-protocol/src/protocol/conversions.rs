@@ -9,11 +9,10 @@ use crate::{
     space_names::SpaceSelector,
 };
 
-/// How a converted space's agent goes on: under the tool `agent` names,
-/// which takes the work over in a new session from copies of the space's
-/// sessions so far, told `note` after its mode's instructions, else under
-/// its own from a fork of its session; with `model` asked of it and
-/// `permissions` changing what it was given.
+/// How a converted space's agent goes on. The tool `agent` names takes the
+/// work over in a new session from copies of the space's sessions, told
+/// `note` after its mode's instructions. Without one, the agent goes on from
+/// a fork of its session.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentChange {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -26,9 +25,7 @@ pub struct AgentChange {
     pub note: Option<String>,
 }
 
-/// The answer to [`ConversionMethod::ConvertAgent`]: the space, the tool its
-/// agent leaves, if it had one, the tool that takes over, and whether it
-/// took over at once, rather than once the running agent's turn ends.
+/// The answer to [`ConversionMethod::ConvertAgent`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentSwitch {
     pub space: crate::model::Space,
@@ -50,11 +47,10 @@ impl AgentChange {
 #[serde(rename_all = "snake_case")]
 pub enum ConversionMethod {
     /// Turn the chat `chat` into a workspace on `branch`, an existing branch
-    /// or a new one from `base`, linked to `issue` when given, and start
-    /// preparing it in an operation, with `env` as
-    /// [`super::OperationMethod::StartOperation`] takes it; its agent
-    /// restarts there in `mode`, `worker` by default, as `agent` says, once
-    /// its turn ends. Answers with [`super::Body::WorkspaceStarted`].
+    /// or a new one from `base`, and start preparing it with `env` as
+    /// [`super::OperationMethod::StartOperation`] takes it. Its agent
+    /// restarts there once its turn ends. Answers with
+    /// [`super::Body::WorkspaceStarted`].
     ConvertToWorkspace {
         chat: SpaceSelector,
         branch: String,
@@ -71,9 +67,9 @@ pub enum ConversionMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
-    /// Make the workspace a chat in `mode`, `chat` by default, once its
-    /// agent's turn ends: its worktree goes as `shoal rm` removes it, and
-    /// its agent restarts in the repository's checkout as `agent` says.
+    /// Make the workspace a chat once its agent's turn ends. Its worktree
+    /// goes as `shoal rm` removes it, and its agent restarts in the
+    /// repository's checkout.
     ConvertToChat {
         workspace: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -81,10 +77,9 @@ pub enum ConversionMethod {
         #[serde(default, skip_serializing_if = "AgentChange::is_empty")]
         agent: AgentChange,
     },
-    /// Hand the work of `space` over to the agent tool `agent` names, in
-    /// `mode`, the space's own by default: once the turn of its running
-    /// agent ends, or at once for a stopped or asleep one. Answers with
-    /// [`super::Body::AgentSwitch`].
+    /// Hand the work of `space` over to the agent tool `agent` names, once
+    /// the turn of its running agent ends, or at once for a stopped or
+    /// asleep one. Answers with [`super::Body::AgentSwitch`].
     ConvertAgent {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]

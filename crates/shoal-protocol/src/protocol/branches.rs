@@ -2,8 +2,7 @@ use super::{Forwarding, Target};
 use serde::{Deserialize, Serialize};
 use shoal_refs::BranchName;
 
-/// Requests about the branches on the forge of the target repository: that
-/// of a space or registered checkout, or another one `--repo` names.
+/// Requests about the branches on the forge of the target repository.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BranchMethod {

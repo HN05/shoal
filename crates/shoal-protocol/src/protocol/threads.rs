@@ -9,16 +9,13 @@ use crate::threads::{
 };
 use shoal_ids::space_ids::SpaceId;
 
-/// Requests about threads: opening one, posting, forwarding, resolving,
-/// reading and linking them.
+/// Requests about threads.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadMethod {
-    /// Open a thread from the caller, a space or the user, with the space
-    /// `to` names, else with the caller's coordinator or the user, empty or
-    /// with the opening post its opening gives. Without a kind, it is a
-    /// `review` thread of the caller's pending review of the holder, else a
-    /// question.
+    /// Open a thread with the space `to` names, else with the caller's
+    /// coordinator or the user. Without a kind, it joins the caller's
+    /// pending review of the holder, else it is a question.
     OpenThread {
         #[serde(flatten)]
         opening: ThreadOpening,
@@ -31,25 +28,29 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         from: Option<SpaceSelector>,
     },
-    /// Open a comment of the caller's pending review of the workspace,
-    /// numbered in it on its machine, which keeps the review, for a caller
-    /// of another machine; answered with the thread, or `ok` without such
-    /// a review.
+    /// Open a comment of the caller's pending review of the workspace for a
+    /// caller of another machine. The workspace's machine keeps the review
+    /// and numbers the comment. Answered with the thread, or `ok` without
+    /// such a review.
     OpenComment {
         workspace: SpaceSelector,
         #[serde(flatten)]
         opening: ThreadOpening,
     },
-    /// Close the open threads here that the space `opener` of the
-    /// sending machine opened, its comments of the reviews this machine
-    /// keeps, and those it holds, for `cause`, as that machine closes its
-    /// own; a removal also cancels its pending reviews here. Only another
-    /// machine's daemon sends it, as the user.
-    CloseOpened { opener: SpaceId, cause: CloseCause },
+    /// Close the open threads here that the space `opener` of the sending
+    /// machine opened or holds, with its review comments, as that machine
+    /// closes its own. A removal also cancels its pending reviews here. Only
+    /// another machine's daemon sends it.
+    CloseOpened {
+        opener: SpaceId,
+        cause: CloseCause,
+    },
     /// Reopen the threads here that closing them for `cause` closed, as
     /// `done --undo` and a restore of the space `opener` reopen its own.
-    ReopenOpened { opener: SpaceId, cause: CloseCause },
-    /// Add a post to the thread from the caller's side.
+    ReopenOpened {
+        opener: SpaceId,
+        cause: CloseCause,
+    },
     Post {
         thread: ThreadNumber,
         post: NewPost,
@@ -82,10 +83,9 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
     },
-    /// Give the caller's role in the thread, as its current opener or
-    /// holder, to the space `to` names, else to the caller's coordinator or
-    /// the user, with a note; the caller's space stays linked to it unless
-    /// `unlink`.
+    /// Give the caller's role in the thread to the space `to` names, else
+    /// to the caller's coordinator or the user. The caller's space stays
+    /// linked to it unless `unlink`.
     ForwardThread {
         thread: ThreadNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -119,8 +119,9 @@ pub enum ThreadMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         for_user: bool,
     },
-    /// One thread by number.
-    ShowThread { thread: ThreadNumber },
+    ShowThread {
+        thread: ThreadNumber,
+    },
     /// Deliver the thread's new posts to the space's agent.
     LinkThread {
         space: SpaceSelector,
@@ -139,7 +140,9 @@ pub enum ThreadMethod {
         thread: Option<ThreadNumber>,
     },
     /// The thread the changes of the space's agent are for now.
-    CurrentThread { space: SpaceSelector },
+    CurrentThread {
+        space: SpaceSelector,
+    },
     /// Put the changes `changes` names into the thread, out of any other.
     AddChanges {
         thread: ThreadNumber,
@@ -149,7 +152,6 @@ pub enum ThreadMethod {
         space: Option<SpaceSelector>,
         changes: Vec<crate::changes::ChangeNumber>,
     },
-    /// Take the changes `changes` names out of the thread.
     RemoveChanges {
         thread: ThreadNumber,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -176,9 +178,8 @@ impl ThreadMethod {
 
 impl ThreadMethod {
     /// A post goes to the machine the thread is numbered on, waiting for it
-    /// while it is offline, and a wait's answer comes as that machine
-    /// writes it; what the caller's agent posts in its own conversation is
-    /// its hooks' report.
+    /// while it is offline. What the caller's agent posts in its own
+    /// conversation is its hooks' report, which stays here.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::Post { .. } | Self::CloseOpened { .. } | Self::ReopenOpened { .. } => {

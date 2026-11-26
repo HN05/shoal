@@ -8,13 +8,10 @@ use super::{Forwarding, Lifetime, Target};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueueMethod {
-    /// Queue the worker of the ready `workspace`, the launch the daemon
-    /// resolves `launch` into under the workspace's settings, on the
-    /// workspace's issue unless the launch gives it a task, once `blockers`
-    /// are done and it can run there, linking `pr` as it starts. The daemon
-    /// starts it detached, beside the terminal the launch's `env` names or
-    /// else in the default host, once the queue admits it. Answers with the
-    /// entry.
+    /// Queue the worker of the ready `workspace`, resolving `launch` under
+    /// the workspace's settings. It waits for `blockers` and links `pr` as
+    /// it starts. The daemon starts it detached once the queue admits it.
+    /// Answers with the entry.
     QueueAgent {
         workspace: SpaceSelector,
         launch: Box<super::operations::LaunchRequest>,
@@ -29,10 +26,9 @@ pub enum QueueMethod {
         entry: QueueEntryId,
     },
     /// Open the space of the starting launch `entry` for the agent its
-    /// caller runs there now: a workspace must still be ready and its
-    /// verified worktree, its branch is brought up to date as an admitted
-    /// agent's is, and the PR the plan names is linked, a refusal warning
-    /// the space's starter. Answers with the plan, as [`Self::QueuedPlan`].
+    /// caller runs there now, as admission would for a queued agent. A
+    /// workspace must still be ready, with its verified worktree. Answers
+    /// with the plan, as [`Self::QueuedPlan`].
     OpenStart {
         entry: QueueEntryId,
     },
@@ -124,9 +120,8 @@ impl QueueMethod {
 }
 
 impl QueueMethod {
-    /// A space's priority changes its state;
-    /// an entry, named by an ID only its machine knows, and a start the
-    /// caller makes are the caller's machine's.
+    /// A space's priority goes to its machine. An entry is named by an ID
+    /// only its machine knows, so entry requests stay with the caller.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::SetPriority { .. } => Forwarding::Online,

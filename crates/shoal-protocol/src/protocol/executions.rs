@@ -4,8 +4,7 @@ use super::{Forwarding, Lifetime, Target};
 use crate::space_names::SpaceSelector;
 use crate::{executions::ExecutionKind, processes::Identity};
 
-/// Requests that run tracked commands in a space: a workspace's commands,
-/// or a workspace's or a chat's agent.
+/// Requests that run tracked commands, agents included, in a space.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[allow(
@@ -21,10 +20,8 @@ pub enum ExecutionMethod {
         kind: ExecutionKind,
         #[serde(default)]
         agent: Option<crate::agent::Agent>,
-        /// The model and effort the agent runs with.
         #[serde(default, skip_serializing_if = "crate::agent::ModelChoice::is_empty")]
         model: crate::agent::ModelChoice,
-        /// The mode the agent started in.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         mode: Option<crate::config::modes::ModeName>,
         /// The permissions `--permission` gives the agent, whatever the mode's.
@@ -57,7 +54,6 @@ pub enum ExecutionMethod {
         /// Where the wrapper runs in a terminal host.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<Box<crate::sessions::Origin>>,
-        /// How a merge runs.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         merge: Option<Box<crate::model::MergeOptions>>,
     },

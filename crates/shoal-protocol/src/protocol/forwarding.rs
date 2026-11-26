@@ -1,10 +1,6 @@
 //! Which requests a daemon forwards through the hub when the space they act
-//! on belongs to another joined machine, decided for every request kind
-//! with no default. One that reads or changes Shoal's state goes to the
-//! space's machine, which decides it as its own caller's, and one whose
-//! answer goes on, as a follow's, comes back on a stream, and one whose
-//! connection carries bytes both ways, as a demo's, on a duplex stream; only
-//! one that needs the caller's machine stays there.
+//! on belongs to another machine. Every request kind decides it, with no
+//! default.
 use crate::{
     approvals::ApprovalRequest, hub::directory::Keeps, item_numbers::ItemNumber,
     space_names::SpaceSelector, threads::ThreadNumber,
@@ -47,7 +43,6 @@ pub enum Forwarding {
 /// What a request acts on, which decides the machine that answers it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target<'a> {
-    /// A space, a workspace or a chat.
     Space(&'a SpaceSelector),
     /// A space's attached files, which outlive it: a removed space's are
     /// read where a machine keeps them.
@@ -92,11 +87,8 @@ impl ThreadNumber {
 
 impl Operation {
     /// Leave out what belongs to the caller's machine before the request
-    /// goes to another: an approval's environment, where the owning
-    /// machine pushes in its daemon's own, and a launch's directory and
-    /// terminal, where that machine starts or checks the agent in a place
-    /// of its own, or reads its modes, marking the launch as one another
-    /// machine forwarded.
+    /// goes to another, such as an approval's environment and a launch's
+    /// directory and terminal. A launch is marked as forwarded.
     pub fn leave_caller_machine(&mut self) {
         match self {
             Self::Approval(ApprovalMethod::DecideApproval { env, .. }) => *env = None,
@@ -168,8 +160,6 @@ impl Operation {
         (self.forwarding() != Forwarding::Never || through_daemon) && !attaches
     }
 
-    /// Where the request runs when the space it acts on is another
-    /// machine's, decided for every request by what it needs.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::Daemon(method) => method.forwarding(),

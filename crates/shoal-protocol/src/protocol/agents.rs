@@ -5,7 +5,7 @@ use shoal_ids::execution_ids::ExecutionId;
 
 use super::{Forwarding, Lifetime, Target};
 
-/// Requests between a workspace's agents and the daemon: their state, messages and updates.
+/// Requests between a space's agents and the daemon.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentMethod {
@@ -30,12 +30,12 @@ pub enum AgentMethod {
         space: SpaceSelector,
         change: crate::progress::ProgressChange,
     },
-    /// The space's progress.
-    Progress { space: SpaceSelector },
-    /// Let the space's agent sleep as `sleep` says, so Shoal does not wake
-    /// it for having stayed idle, replacing its timer with `timer` when one
-    /// is given, or end its sleep and cancel its timer with none; a space
-    /// whose mode never wakes it records none.
+    Progress {
+        space: SpaceSelector,
+    },
+    /// Let the space's agent sleep as `sleep` says, replacing its timer
+    /// with `timer` when one is given. Without `sleep`, its sleep ends and
+    /// its timer is cancelled.
     Sleep {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -46,12 +46,12 @@ pub enum AgentMethod {
     /// [`Self::SetAgentState`] working for the turn a wake hook starts with
     /// an update, unless a stop of the caller's agent came first, which
     /// leaves the update for its restore. Answers whether the turn starts.
-    StartWokenTurn { workspace: SpaceSelector },
+    StartWokenTurn {
+        workspace: SpaceSelector,
+    },
     /// [`Self::SetAgentState`] idle for a turn `failure` ended, which may
-    /// schedule a retry of the turn, after `resets_at` when the turn's
-    /// error says its upstream refuses requests until then. An unscoped
-    /// caller, such as the wrapper whose proxy ended the turn, names the
-    /// reporting `execution`; a scoped one reports for its own.
+    /// schedule a retry of the turn. An unscoped caller, such as the wrapper
+    /// whose proxy ended the turn, names the reporting `execution`.
     ReportTurnFailure {
         workspace: SpaceSelector,
         failure: crate::state::TurnFailure,
@@ -68,8 +68,7 @@ pub enum AgentMethod {
         made: Option<std::time::SystemTime>,
     },
     /// A subagent of the caller's agent started or stopped, or its session
-    /// started, as its hooks report it, which the daemon counts among the
-    /// caller's execution's running subagents.
+    /// started, as its hooks report it.
     ReportSubagent {
         space: SpaceSelector,
         change: SubagentChange,
@@ -133,13 +132,13 @@ pub enum AgentMethod {
         workspace: SpaceSelector,
         execution: ExecutionId,
     },
-    /// The caller attached to the sessions of the space.
-    ReportAttach { space: SpaceSelector },
+    ReportAttach {
+        space: SpaceSelector,
+    },
     /// Long-lived: answers once whether the workspace's agent is idle with
-    /// undelivered messages or queued item updates matches `due`; with
-    /// `hooked`, the execution whose agent a hook of its own wakes, only
-    /// while that hook cannot: after an interrupt ended its last turn, or
-    /// once no wait for the workspace's updates has run for a few minutes.
+    /// undelivered messages or queued item updates matches `due`. With
+    /// `hooked`, the execution whose agent a hook of its own wakes, it
+    /// answers only while that hook cannot wake it.
     AwaitAgentWake {
         workspace: SpaceSelector,
         due: bool,
@@ -151,7 +150,9 @@ pub enum AgentMethod {
     ListAgents,
     /// The agents connected in the space, a workspace or a running chat,
     /// with their turns and places.
-    SpaceAgents { space: SpaceSelector },
+    SpaceAgents {
+        space: SpaceSelector,
+    },
     /// An interrupt the caller typed ended the turn of the agent `execution`
     /// runs in the space, as [`Self::SpaceAgents`] lists it, which leaves it
     /// idle.
@@ -159,39 +160,44 @@ pub enum AgentMethod {
         space: SpaceSelector,
         execution: ExecutionId,
     },
-    /// Restart the agent of `space` as `restart` says, answering once the
-    /// daemon restarted it, recorded the restart for later or skipped it.
     RestartAgent {
         space: SpaceSelector,
         restart: crate::model::AgentRestart,
     },
     /// Drop the restart the daemon recorded for the agent of `space`,
     /// answering with the one it dropped, if any.
-    CancelRestart { space: SpaceSelector },
-    /// Resume the agent of `space` as `resume` says, answering once the
-    /// daemon continued its turn, queued or started its restores, or found
-    /// nothing to resume.
+    CancelRestart {
+        space: SpaceSelector,
+    },
     ResumeAgent {
         space: SpaceSelector,
         resume: crate::model::AgentResume,
     },
     /// The session of the space's agent that a fork starts from: the
     /// caller's own agent there, else its only one.
-    AgentSession { space: SpaceSelector },
-    /// The unread alerts and queued item updates of a
-    /// workspace or running chat, without waiting or polling the forge;
-    /// acknowledge them with [`Self::AcknowledgePrUpdates`]. It replaces a
-    /// running watch.
-    AgentUpdates { space: SpaceSelector },
+    AgentSession {
+        space: SpaceSelector,
+    },
+    /// The unread alerts and queued item updates of a space, without
+    /// waiting or polling the forge. It replaces a running watch. Acknowledge
+    /// them with [`Self::AcknowledgePrUpdates`].
+    AgentUpdates {
+        space: SpaceSelector,
+    },
     /// Long-lived: what [`Self::AgentUpdates`] answers, once there is any.
-    WaitAgentUpdates { space: SpaceSelector },
+    WaitAgentUpdates {
+        space: SpaceSelector,
+    },
     /// Whether messages that wake an idle agent or item updates a hook
     /// would deliver wait for the agent of the space, without taking them.
-    UpdatesWaiting { space: SpaceSelector },
+    UpdatesWaiting {
+        space: SpaceSelector,
+    },
     /// The caller's login for Git over HTTPS to `host`: the agent token
-    /// `[machine.forges]` sets for it, for any scoped caller; none for an
-    /// unscoped caller or a host without one.
-    GitCredential { host: String },
+    /// `[machine.forges]` sets for it. An unscoped caller gets none.
+    GitCredential {
+        host: String,
+    },
     AcknowledgePrUpdates {
         space: SpaceSelector,
         deliveries: Vec<String>,
@@ -278,9 +284,8 @@ impl AgentMethod {
 }
 
 impl AgentMethod {
-    /// Where the request runs when its space is another machine's: its
-    /// agent's hooks and wrapper report from the machine the agent runs on,
-    /// and the rest read or change Shoal's state.
+    /// An agent's hooks and wrapper report to the machine the agent runs
+    /// on, so their requests stay there.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::SetProgress { .. }

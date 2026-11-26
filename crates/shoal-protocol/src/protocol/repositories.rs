@@ -3,7 +3,7 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use super::{Forwarding, Lifetime, Target};
 
-/// Requests about registered repositories, their configuration and their branches.
+/// Requests about registered repositories.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepositoryMethod {
@@ -34,8 +34,8 @@ pub enum RepositoryMethod {
         repository: crate::repository::Selector,
         name: String,
     },
-    /// Share the repository with the other machines of the hub, which
-    /// register and clone it, or stop sharing it.
+    /// Share the repository with the other machines of the hub, or stop
+    /// sharing it.
     ShareRepository {
         repository: crate::repository::Selector,
         shared: bool,
@@ -100,13 +100,12 @@ pub enum RepositoryMethod {
         repository: RepositoryId,
         environment: std::collections::BTreeMap<String, String>,
     },
-    /// Take the commit `commit` that another joined machine carries here
-    /// for a start in the repository whose origin is `origin`, registered
-    /// as a URL clone where there is none: once the daemon answers with
-    /// [`Body::Ok`](super::Body::Ok), the caller writes a bundle of it with
-    /// the history the origin's `branch` lacks, which the daemon fetches
-    /// first, and ends its side, and the daemon answers again once the
-    /// repository has the commit.
+    /// Take `commit`, which another machine carries here for a start in the
+    /// repository whose origin is `origin`. That repository is registered as
+    /// a URL clone where there is none. Once the daemon answers with
+    /// [`Body::Ok`](super::Body::Ok), the caller writes a bundle of the
+    /// history the origin's `branch` lacks and ends its side. The daemon
+    /// answers again once the repository has the commit.
     ReceiveCommits {
         origin: String,
         commit: shoal_refs::CommitId,
@@ -129,10 +128,8 @@ impl RepositoryMethod {
 }
 
 impl RepositoryMethod {
-    /// Each is about the caller's machine's registrations, except commits
-    /// another machine carries, which the hub sends to the machine that
-    /// takes them, and a removal and its preview, which the daemon sends to
-    /// the machine they name.
+    /// Each is about the caller's machine's registrations. The daemon sends
+    /// a removal and its preview to the machine they name.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::ReceiveCommits { .. } => Forwarding::Duplex,

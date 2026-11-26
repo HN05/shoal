@@ -20,12 +20,10 @@ pub enum DemoMethod {
         name: Option<String>,
     },
     /// Open a stream to a workspace's running demo `name`, on whichever
-    /// machine it runs: answered with [`super::Body::DemoStream`], after
+    /// machine it runs. Answered with [`super::Body::DemoStream`], after
     /// which the connection carries the demo's bytes both ways until either
-    /// side closes it. A `server` or `web` demo's are those of one TCP
-    /// connection to its port. A terminal demo's are the frames of
-    /// [`crate::attaching`]: what a terminal made like `terminal` shows of
-    /// the demo's place one way, the viewer's keys and sizes the other.
+    /// side closes it: one TCP connection's for a `server` or `web` demo,
+    /// and [`crate::attaching`] frames for a terminal demo.
     OpenDemoStream {
         workspace: SpaceSelector,
         name: String,
