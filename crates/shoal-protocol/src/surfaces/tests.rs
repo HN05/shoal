@@ -488,6 +488,15 @@ fn images_by_reference_name_attached_files_too() {
         json!({}),
     );
     assert!(refusal(spaced, &[]).contains("image https://example.com/c.png"));
+    // A code block defines nothing, fenced or indented.
+    for code in ["```\n[ref]: shown.png\n```", "    [ref]: shown.png"] {
+        let text = format!("![chart][ref]\n\n{code}\n\n[ref]: https://example.com/d.png");
+        let coded = surface(
+            json!([{"id": "root", "component": "Text", "text": text}]),
+            json!({}),
+        );
+        assert!(refusal(coded, &["shown.png"]).contains("image https://example.com/d.png"));
+    }
     // A bracket without a definition is text, not an image.
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),

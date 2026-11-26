@@ -85,11 +85,14 @@ fn closing(text: &str, from: usize, open: char, close: char) -> Option<usize> {
 
 /// The targets of the reference definitions `[label]: target` in `text`,
 /// by their labels as [`normalized`]. A target may stand on the line after
-/// its label.
+/// its label. A fenced or indented code block defines nothing.
 fn definitions(text: &str) -> BTreeMap<String, &str> {
     let mut defined = BTreeMap::new();
-    let mut lines = text.lines().peekable();
-    while let Some(line) = lines.next() {
+    let mut lines = fenced(text).peekable();
+    while let Some((line, in_fence)) = lines.next() {
+        if in_fence || indent(line) >= 4 {
+            continue;
+        }
         let Some(rest) = line.trim_start().strip_prefix('[') else {
             continue;
         };
@@ -99,8 +102,8 @@ fn definitions(text: &str) -> BTreeMap<String, &str> {
         let target = match target.split_whitespace().next() {
             Some(target) => Some(target),
             None => lines
-                .next_if(|next| !next.trim().is_empty())
-                .and_then(|next| next.split_whitespace().next()),
+                .next_if(|(next, in_fence)| !in_fence && !next.trim().is_empty())
+                .and_then(|(next, _)| next.split_whitespace().next()),
         };
         if let Some(target) = target {
             defined
@@ -109,6 +112,46 @@ fn definitions(text: &str) -> BTreeMap<String, &str> {
         }
     }
     defined
+}
+
+/// The lines of `text`, each with whether it belongs to a fenced code
+/// block: a fence of three or more backticks or tildes, what follows it,
+/// and the fence of the same character, at least as long, that closes it.
+fn fenced(text: &str) -> impl Iterator<Item = (&str, bool)> {
+    let mut open: Option<(char, usize)> = None;
+    text.lines().map(move |line| {
+        let marker = (indent(line) < 4)
+            .then(|| fence_marker(line.trim_start()))
+            .flatten();
+        match (open, marker) {
+            (Some((opened, length)), Some((closing, run, rest)))
+                if closing == opened && run >= length && rest.trim().is_empty() =>
+            {
+                open = None;
+            }
+            (None, Some((opened, run, _))) => open = Some((opened, run)),
+            _ if open.is_none() => return (line, false),
+            _ => {}
+        }
+        (line, true)
+    })
+}
+
+/// How many spaces `line` starts with.
+fn indent(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+/// The fence `line` starts with, a run of three or more backticks or
+/// tildes: its character, its length and what follows it.
+fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
+    let first = line
+        .chars()
+        .next()
+        .filter(|first| matches!(first, '`' | '~'))?;
+    let rest = line.trim_start_matches(first);
+    let run = line.len() - rest.len();
+    (run >= 3).then_some((first, run, rest))
 }
 
 /// `label` as Markdown matches a reference label: without regard to case,
