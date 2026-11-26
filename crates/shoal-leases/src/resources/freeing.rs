@@ -3,7 +3,8 @@
 //! member's slot and a writer needs all of them gone.
 use std::collections::BTreeMap;
 
-use super::{Definition, PoolUsage, ResourceLease, ResourceRequest, select_member};
+use super::usage::{PoolUsage, select_member};
+use super::{Definition, ResourceLease, ResourceRequest};
 
 /// Each set of the pool's `active` leases whose release would let `request`
 /// acquire a member of `definition`: each lease that would alone, then each

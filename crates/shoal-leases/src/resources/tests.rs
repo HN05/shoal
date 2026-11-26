@@ -1,7 +1,17 @@
+use super::acquire::renew_lease;
+use super::catalog::pool_status;
+use super::records::{LEASE_COLUMNS, leases_query, named_lease, pool_leases, row_lease};
+use super::usage::{PoolUsage, grouped_usage, select_member};
 use super::*;
 use crate::stand_in::Fixture;
+use crate::{allocation::Allocation, gates::GuardMode};
+use anyhow::Result;
+use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::acquirers::Acquirer;
 use shoal_store::test_support::queries::{check_owner_query, populated_database};
+use std::collections::BTreeSet;
+use uuid::Uuid;
 
 mod accounting;
 
