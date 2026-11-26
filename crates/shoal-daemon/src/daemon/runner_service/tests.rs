@@ -18,7 +18,7 @@ use crate::{
         lifecycle::STOPPED_REMOVAL,
         manager::Manager,
         notifications::AlertKind,
-        runner::JobStop,
+        runner_service::JobStop,
         test_support::{configure, git, manager, repository},
     },
     forge::backends::ForgeKind,

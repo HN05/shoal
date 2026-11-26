@@ -163,7 +163,7 @@ impl Fixture {
             let review = store::queue(tx, &id, &target, &"fake".into(), &Default::default(), at(1));
             let review = review?.id();
             store::start(tx, review, &head, &"base".into(), at(2))?;
-            let records = crate::daemon::reviews::ReviewRecords;
+            let records = crate::daemon::review_service::ReviewRecords;
             store::submit_run(tx, &records, review, &id, Some("Fine."), true, at(3))?;
             Ok(())
         };

@@ -5,7 +5,7 @@ use super::{
     manager::Manager,
     shutdown_stop::{HandoverWindow, Shutdown, StoppedSpaces},
 };
-use crate::daemon::{log, runner::JobStop};
+use crate::daemon::{log, runner_service::JobStop};
 use crate::protocol::{Exit, QueuedLaunches};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

@@ -41,7 +41,7 @@ impl shoal_spaces::daemon::Hub for Manager {
         Box::pin(async move {
             let opened = self.hub.open_duplex(self, machine, operation, caller);
             let (incoming, outgoing) = opened.await?;
-            crate::daemon::hub::sending::deliver_file(file, incoming, outgoing).await
+            crate::daemon::hub_service::sending::deliver_file(file, incoming, outgoing).await
         })
     }
 

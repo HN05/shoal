@@ -319,8 +319,9 @@ async fn a_post_from_a_side_lost_meanwhile_is_refused() {
     ))
     .await
     .unwrap();
-    let removing =
-        crate::daemon::coordination::CoordinationRecords(manager.spaces.space_removals.clone());
+    let removing = crate::daemon::coordination_service::CoordinationRecords(
+        manager.spaces.space_removals.clone(),
+    );
     let (id, reply) = (thread.id, post("8080"));
     let posted = manager
         .store

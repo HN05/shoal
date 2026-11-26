@@ -2,9 +2,9 @@
 use serde_json::json;
 
 use super::*;
-use crate::daemon::runner::JobStop;
+use crate::daemon::runner_service::JobStop;
 use crate::daemon::{
-    runner::tests::{admit_and_claim, github_fixture, github_job, launched},
+    runner_service::tests::{admit_and_claim, github_fixture, github_job, launched},
     test_support::git,
 };
 use crate::forge::numbers::{JobId, RunId};

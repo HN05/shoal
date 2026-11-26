@@ -356,7 +356,7 @@ impl Hub for Manager {
     }
 
     fn pass_up<'a>(&'a self, above: SpaceId, event: PassedUp<'a>) -> BoxFuture<'a, Result<()>> {
-        let event = crate::daemon::hub::Event {
+        let event = crate::daemon::hub_service::Event {
             name: event.name,
             space: event.space,
             kind: event.kind,

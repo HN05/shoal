@@ -11,7 +11,7 @@ use std::sync::Arc;
 /// marks.
 fn records() -> Arc<dyn shoal_spaces::daemon::Records> {
     Arc::new(crate::daemon::space_service::SpaceRecords {
-        coordination: crate::daemon::coordination::CoordinationRecords(
+        coordination: crate::daemon::coordination_service::CoordinationRecords(
             crate::daemon::spaces::Removing::default(),
         ),
     })

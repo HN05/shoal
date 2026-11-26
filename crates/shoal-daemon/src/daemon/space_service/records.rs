@@ -16,8 +16,8 @@ use shoal_protocol::state::AgentState;
 use shoal_spaces::daemon::Dropped;
 
 use crate::daemon::{
-    coordination::CoordinationRecords, executions, idle_wakes, messages, restarts, turn_retry,
-    turn_state, wake_timers,
+    coordination_service::CoordinationRecords, executions, idle_wakes, messages, restarts,
+    turn_retry, turn_state, wake_timers,
 };
 
 /// The records of the daemon's other subsystems, as the spaces read and
@@ -29,8 +29,11 @@ pub(crate) struct SpaceRecords {
 impl shoal_spaces::daemon::Records for SpaceRecords {
     fn load_workspace(&self, db: &Connection, workspace: &mut Workspace) -> Result<()> {
         let id = &workspace.id.clone();
-        workspace.latest_review =
-            shoal_reviews::store::latest_status(db, &crate::daemon::reviews::ReviewRecords, id)?;
+        workspace.latest_review = shoal_reviews::store::latest_status(
+            db,
+            &crate::daemon::review_service::ReviewRecords,
+            id,
+        )?;
         workspace.agent_state = turn_state::current(db, id)?;
         workspace.sleep = idle_wakes::sleep::current(db, id)?;
         workspace.wake_at = wake_timers::due_at(db, id)?;
@@ -101,7 +104,7 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     fn drop_pending_reviews(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
         shoal_reviews::written::drop_pending_of_removed(
             tx,
-            &crate::daemon::reviews::ReviewRecords,
+            &crate::daemon::review_service::ReviewRecords,
             id,
         )
     }
@@ -162,7 +165,7 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     }
 
     fn next_space_number(&self, tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
-        crate::daemon::hub::numbering::next(tx, id)
+        crate::daemon::hub_service::numbering::next(tx, id)
     }
 
     fn ensure_holders_fit(&self, tx: &Transaction<'_>, paths: &[PathBuf]) -> Result<()> {

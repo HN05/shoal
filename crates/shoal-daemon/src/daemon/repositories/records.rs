@@ -9,7 +9,7 @@ use shoal_repositories::daemon::{Activity, Records};
 
 use crate::{
     daemon::{
-        leases::DaemonRecords,
+        lease_service::DaemonRecords,
         resources::{self, Scope},
         store,
     },

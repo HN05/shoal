@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::*;
 use crate::{
     daemon::{
-        runner::RunnerRecords,
+        runner_service::RunnerRecords,
         test_support::{configure, git, manager, repository},
     },
     forge::backends::ForgeKind,

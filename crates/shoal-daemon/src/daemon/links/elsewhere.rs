@@ -6,7 +6,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_links::daemon::Elsewhere;
 use shoal_protocol::model::SpaceRef;
 
-use crate::daemon::{alerts::AlertKind, hub::Event, manager::Manager};
+use crate::daemon::{alerts::AlertKind, hub_service::Event, manager::Manager};
 
 impl Elsewhere for Manager {
     fn reaches_hub(&self) -> bool {

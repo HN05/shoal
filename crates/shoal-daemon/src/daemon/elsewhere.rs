@@ -14,7 +14,7 @@ use tokio::net::UnixStream;
 use super::{
     Server,
     answer::{self, OperationGuard},
-    hub::{Elsewhere, Unanswered},
+    hub_service::{Elsewhere, Unanswered},
     manager::Manager,
     relayed::Relayed,
     scope::Caller,

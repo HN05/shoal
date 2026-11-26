@@ -7,7 +7,7 @@ use shoal_protocol::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use super::{answer, hub::Incoming, manager::Manager};
+use super::{answer, hub_service::Incoming, manager::Manager};
 
 mod duplex;
 use crate::refusal::{Reason, Refusal};

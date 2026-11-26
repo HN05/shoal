@@ -56,7 +56,7 @@ impl Manager {
             gates.clone(),
             config_state.clone(),
             notifications.clone(),
-            Arc::new(super::leases::DaemonRecords),
+            Arc::new(super::lease_service::DaemonRecords),
         );
         let hub = Arc::new(shoal_hub::Hub::new(
             store.clone(),
@@ -64,7 +64,7 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             paths.clone(),
-            Arc::new(super::hub::HubRecords),
+            Arc::new(super::hub_service::HubRecords),
         ));
         let runner = Arc::new(shoal_runner::Runner::new(
             store.clone(),
@@ -72,14 +72,16 @@ impl Manager {
             config_state.clone(),
             notifications.clone(),
             forges.clone(),
-            Arc::new(super::runner::RunnerRecords),
+            Arc::new(super::runner_service::RunnerRecords),
             paths.clone(),
         ));
         let file_access = Arc::new(super::file_access::FileAccess::default());
         let space_removals = crate::daemon::spaces::Removing::default();
         let space_records: Arc<dyn shoal_spaces::daemon::Records> =
             Arc::new(super::space_service::SpaceRecords {
-                coordination: super::coordination::CoordinationRecords(space_removals.clone()),
+                coordination: super::coordination_service::CoordinationRecords(
+                    space_removals.clone(),
+                ),
             });
         let links = Arc::new(shoal_links::Links::new(
             store.clone(),
@@ -128,8 +130,8 @@ impl Manager {
             gates.clone(),
             forges.clone(),
             operations.clone(),
-            Arc::new(super::reviews::ReviewRecords),
-            Arc::new(super::reviews::gate::GatedRequests),
+            Arc::new(super::review_service::ReviewRecords),
+            Arc::new(super::review_service::gate::GatedRequests),
             paths.clone(),
         ));
         let apps = shoal_apps::Apps::new(store.clone(), config_state.clone());
@@ -141,7 +143,7 @@ impl Manager {
             notifications.clone(),
             signals.clone(),
             operations.clone(),
-            Arc::new(super::coordination::CoordinationRecords(
+            Arc::new(super::coordination_service::CoordinationRecords(
                 space_removals.clone(),
             )),
         );

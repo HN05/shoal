@@ -16,7 +16,7 @@ use super::{Relayed, body_frame};
 use crate::{
     daemon::{
         answer,
-        hub::{Incoming, Outgoing},
+        hub_service::{Incoming, Outgoing},
     },
     refusal::{Reason, Refusal},
 };
