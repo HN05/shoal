@@ -529,8 +529,9 @@ impl Hub {
 }
 
 /// The answer `frames` carry, what another machine's daemon wrote after any
-/// it sent while it still prepared it: one body, or a list's pages joined,
-/// which a closing `Ok` ends; its refusal as an error.
+/// it sent while it still prepared it: one body, a list's pages joined,
+/// which a closing `Ok` ends, or the body its pieces of JSON make; its
+/// refusal as an error.
 fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
     let mut answered: Option<Body> = None;
     for frame in frames {
@@ -544,6 +545,7 @@ fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
     }
     answered
         .context("the other machine's daemon closed the request unanswered")?
+        .joined()?
         .into_result()
 }
 

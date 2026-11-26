@@ -72,6 +72,22 @@ fn a_paged_answer_from_another_machine_arrives_whole() {
 }
 
 #[test]
+fn an_answer_too_large_for_pages_arrives_whole_from_its_pieces() {
+    let text = "x".repeat(shoal_protocol::protocol::MAX_FRAME);
+    let frames = Response::new(1, Body::TrackedConfig(text.clone()))
+        .frames()
+        .unwrap();
+    assert!(frames.len() > 1, "the answer fits one frame");
+    let frames = (frames.into_iter())
+        .map(|response| serde_json::to_value(response).unwrap())
+        .collect();
+    let Body::TrackedConfig(answered) = answered_body(frames).unwrap() else {
+        panic!("the pieces are not joined");
+    };
+    assert_eq!(answered, text);
+}
+
+#[test]
 fn a_single_answer_from_another_machine_stays_as_sent() {
     assert!(matches!(answered_body(vec![frame(Body::Ok)]), Ok(Body::Ok)));
 }
