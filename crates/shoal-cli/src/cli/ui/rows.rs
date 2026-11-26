@@ -1,5 +1,4 @@
-//! The labels pickers and lists show: aligned rows of workspaces, agent
-//! launches and repositories, with their status cells.
+//! The aligned rows pickers and lists show, with their status cells.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceNumber;
 use std::{collections::HashSet, path::Path, time::Duration};
@@ -54,7 +53,6 @@ pub fn wrapped(items: &[String], separator: &str, width: Option<usize>) -> Strin
     lines.join("\n")
 }
 
-/// How lists and status name an agent's reported turn state.
 pub fn agent_state_label(state: AgentState) -> &'static str {
     ListStatus::agent(state).label()
 }
@@ -161,7 +159,6 @@ pub fn workspace_rows(
     rows_with_status(workspaces, repositories, cells, palette, width, true)
 }
 
-/// `name` at `depth` in a tree, below its parent's row.
 fn indented(name: &str, depth: usize) -> String {
     match depth {
         0 => name.to_owned(),
@@ -208,7 +205,6 @@ fn workspace_subject(workspace: &Workspace) -> String {
     }
 }
 
-/// Picker entries for running chats, labelled as lists show them.
 pub fn chat_entries(chats: &[Chat], palette: Palette, width: Option<usize>) -> Entries {
     let (markers, cells): (Vec<_>, Vec<_>) =
         chats.iter().map(|chat| chat_row(chat, 0, palette)).unzip();
@@ -325,7 +321,6 @@ pub fn chat_mode_cell(chat: &Chat) -> Cell {
     mode_cell(chat.mode.as_ref(), &crate::model::chat_mode())
 }
 
-/// A space's number, as the first cell of its row.
 fn number_cell(number: SpaceNumber) -> Cell {
     (number.to_string(), Some(Style::Muted))
 }
@@ -559,7 +554,6 @@ fn repository_column(workspaces: &[Workspace], repositories: &[(String, String)]
     )
 }
 
-/// The name of each repository ID, or empty cells when all name one.
 pub fn repository_cells<'a>(
     ids: impl Iterator<Item = Option<&'a RepositoryId>>,
     repositories: &'a [(String, String)],
@@ -571,7 +565,6 @@ pub fn repository_cells<'a>(
     }))
 }
 
-/// [`repository_cells`] of repositories by their names.
 pub fn named_repository_cells<'a>(names: impl Iterator<Item = Option<&'a str>>) -> Vec<String> {
     let names: Vec<&str> = names
         .map(|name| name.unwrap_or("unknown repository"))
@@ -583,7 +576,6 @@ pub fn named_repository_cells<'a>(names: impl Iterator<Item = Option<&'a str>>) 
         .collect()
 }
 
-/// A table cell's text and its style.
 pub type Cell = (String, Option<Style>);
 
 /// Rows padded into columns two spaces apart. Columns empty in every row are
@@ -656,7 +648,6 @@ pub fn aligned_to<const N: usize>(
     .collect()
 }
 
-/// Narrow `limit.column` by what the row width exceeds `limit.width` by.
 fn narrow(widths: &mut [usize], limit: WidthLimit) {
     let shown = widths.iter().filter(|width| **width > 0).count();
     let total = widths.iter().sum::<usize>() + 2 * shown.saturating_sub(1);
@@ -667,7 +658,6 @@ fn narrow(widths: &mut [usize], limit: WidthLimit) {
     *column = column.saturating_sub(excess).max(MIN_FITTED.min(*column));
 }
 
-/// `text` cut to `width` characters, ending in an ellipsis when cut.
 fn truncated(text: String, width: usize) -> String {
     if text.chars().count() <= width {
         return text;
@@ -694,7 +684,6 @@ pub async fn repository_choices(repos: Vec<Repository>) -> Entries {
     repository_entries(repos, crate::repository::remote_url_from_path).await
 }
 
-/// [`repository_choices`] with `read` reading a checkout's origin URL.
 async fn repository_entries(
     repos: Vec<Repository>,
     read: impl AsyncFn(&Path) -> Result<Option<String>>,
@@ -747,7 +736,6 @@ fn name_label(repo: &Repository, source: &str, shared: &HashSet<&str>) -> String
     }
 }
 
-/// The names more than one of `repos` has.
 fn shared_names(repos: &[Repository]) -> HashSet<&str> {
     let mut seen = HashSet::new();
     repos

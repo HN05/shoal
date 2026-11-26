@@ -16,7 +16,6 @@ use crate::{
 /// `(id, label)` pairs; the id is returned, only the label is shown.
 pub type Entries = Vec<(String, String)>;
 
-/// A typed action and the selected entry id.
 pub struct Picked<T> {
     pub action: T,
     pub id: String,
@@ -226,7 +225,6 @@ pub fn picker_width() -> Option<usize> {
     Some(shoal_core::execution::terminal_width(terminal)?.saturating_sub(3))
 }
 
-/// One picker input line: the id, a tab, and the label on one line.
 pub fn picker_line(id: &str, label: &str) -> String {
     format!("{id}\t{}", label.replace(['\n', '\r', '\t'], " "))
 }
@@ -256,7 +254,6 @@ fn run_picker(
     })
 }
 
-/// Run fzf over the entries with `extra` arguments and return what it printed.
 pub(super) fn picker_output(
     ctx: &Context,
     prompt: &str,
@@ -334,7 +331,6 @@ impl std::fmt::Display for SelectionCanceled {
 
 impl std::error::Error for SelectionCanceled {}
 
-/// The id field of a line fzf printed.
 pub(super) fn entry_id(line: &str) -> String {
     line.split('\t')
         .next()

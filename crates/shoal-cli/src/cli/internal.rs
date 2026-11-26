@@ -6,7 +6,6 @@ use crate::{
     workers::{Worker, internal_command},
 };
 
-/// [`internal_command`] as shell text, for a picker to run.
 pub fn shell_command(paths: &Paths, worker: Worker<'_>) -> Result<String> {
     let words = internal_command(paths, false, worker)?
         .into_iter()

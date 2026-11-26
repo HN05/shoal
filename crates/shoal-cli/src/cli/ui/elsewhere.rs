@@ -1,6 +1,4 @@
-//! The other joined machines' spaces a picker offers after this machine's,
-//! for a command that acts on them there, each marked with its machine as
-//! `shoal list` marks it, with when the hub last saw one that is offline.
+//! The other joined machines' spaces a picker offers after this machine's.
 use shoal_protocol::hub::directory::{HubView, Offered};
 
 use super::{

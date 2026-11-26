@@ -1,6 +1,4 @@
-//! Shoal's CLI: the `shoal` command's arguments and commands. The `shoal`
-//! command passes in the daemon its `shoal daemon run` runs, which this crate
-//! does not build.
+//! Shoal's CLI: the `shoal` command's arguments and commands.
 
 // Every module sees the shared crate's print macros.
 #[macro_use]

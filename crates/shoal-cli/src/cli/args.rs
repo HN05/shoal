@@ -1,5 +1,4 @@
-//! Clap definitions of the commands' arguments, one module per command
-//! group, and the argument types several groups share.
+//! Clap definitions of the commands' arguments.
 pub mod approvals;
 pub mod changes;
 pub mod ci;
@@ -34,16 +33,12 @@ pub struct ConfirmationArgs {
     pub yes: bool,
 }
 
-// The space a listing covers, from its command's `--space` and `--all`.
 #[derive(Debug, Default)]
 pub struct SpaceFilter {
     pub space: Option<SpaceSelector>,
-    /// Every space.
     pub all: bool,
 }
 
-// The spaces of a command that acts on several: workspaces, and chats where
-// it acts on them.
 #[derive(Debug, Default, Args)]
 pub struct SpaceTargets {
     #[arg(value_name = "SPACE")]
@@ -57,7 +52,6 @@ pub struct SpaceTargets {
     pub machines: Vec<String>,
 }
 
-// A description or comment, given inline or read from a file.
 #[derive(Debug, Default, Args)]
 pub struct BodyArgs {
     /// Text of the description or comment.
@@ -68,7 +62,6 @@ pub struct BodyArgs {
     pub body_file: Option<PathBuf>,
 }
 
-// `--model` and `--effort` of a command that starts an agent.
 #[derive(Debug, Default, Clone, clap::Args)]
 pub struct ModelArgs {
     /// Model the agent runs with, overriding [agents.<name>] model and [agent] model.
@@ -95,14 +88,12 @@ pub(in crate::cli) fn item_input(
     input.parse().map_err(|error| format!("{error:#}"))
 }
 
-/// An issue argument: its number or URL.
 pub(in crate::cli) fn issue_input(
     input: &str,
 ) -> Result<crate::forge::items::reference::ItemInput, String> {
     kind_input(input, crate::forge::items::link::LinkKind::Issue)
 }
 
-/// A PR argument: its number or URL.
 pub(in crate::cli) fn pull_input(
     input: &str,
 ) -> Result<crate::forge::items::reference::ItemInput, String> {
@@ -116,7 +107,6 @@ pub(in crate::cli) fn run_input(
     kind_input(input, crate::forge::items::link::LinkKind::Ci)
 }
 
-/// A `kind` item argument: its number or a URL of that kind.
 fn kind_input(
     input: &str,
     kind: crate::forge::items::link::LinkKind,
@@ -135,9 +125,7 @@ fn kind_input(
     }
 }
 
-/// The change one `--permission KEY=VALUE` makes, `KEY=mode` dropping the
-/// key's given value, refusing an unknown key or value before anything is
-/// asked.
+/// Parse one `--permission KEY=VALUE`. `KEY=mode` drops the key's value.
 pub(in crate::cli) fn permission_assignment(
     text: &str,
 ) -> Result<crate::config::permissions::PermissionChange, String> {

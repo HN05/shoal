@@ -11,12 +11,10 @@ use shoal_ids::space_ids::SpaceId;
 pub struct Statuses {
     /// The workspaces whose work `shoal stop` saved.
     pub stopped: HashSet<SpaceId>,
-    /// The agents queued to start, in a workspace or in a new one.
     pub queued: Vec<QueueEntry>,
 }
 
 impl Statuses {
-    /// The status lists show for `workspace`.
     pub fn of(&self, workspace: &Workspace) -> ListStatus {
         let stopped = self.stopped.contains(&workspace.id);
         ListStatus::of_queued_workspace(workspace, stopped, &self.queued)
@@ -38,8 +36,6 @@ impl Statuses {
         shown
     }
 
-    /// The agents queued to start in `workspace`, as
-    /// [`list_status::queued_in`] finds them.
     pub(super) fn entries(&self, workspace: &Workspace) -> Vec<&QueueEntry> {
         list_status::queued_in(workspace, &self.queued)
     }

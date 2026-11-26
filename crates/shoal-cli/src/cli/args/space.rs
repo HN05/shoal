@@ -100,7 +100,6 @@ pub enum SpaceCommand {
     },
 }
 
-// Arguments of `shoal log`.
 #[derive(Debug, Args)]
 pub struct LogArgs {
     pub space: Option<SpaceSelector>,

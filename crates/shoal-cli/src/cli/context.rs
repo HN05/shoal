@@ -17,8 +17,6 @@ pub struct Context {
     pub(in crate::cli) place: Option<shoal_workers::hosting::Place>,
     /// Emit machine-readable output and never prompt.
     pub json: bool,
-    /// The name under which the command remembers the workspaces it acts on,
-    /// for `-`; `None` for commands without that history.
     pub(in crate::cli) recent: Option<String>,
     /// The subcommand path, such as `["repo", "rm"]`, whose arguments
     /// refusals name.
@@ -26,7 +24,6 @@ pub struct Context {
 }
 
 impl Context {
-    /// Show elapsed time while waiting for silent work, without changing its result.
     pub async fn progress<T>(
         &self,
         message: &str,
@@ -89,7 +86,6 @@ impl Context {
         Self::is_interactive(false)
     }
 
-    /// What the hosting of places reads of this command.
     pub(in crate::cli) fn caller(&self) -> Caller<'_> {
         Caller {
             paths: &self.paths,
@@ -102,7 +98,6 @@ impl Context {
         !json && io::stdin().is_terminal() && io::stderr().is_terminal()
     }
 
-    /// Print a human-readable line, or `value` as one JSON line with `--json`.
     pub fn emit(&self, message: &str, value: impl Output) -> Result<()> {
         outln!("{}", output::line(self.json, message, &value)?);
         Ok(())
@@ -113,7 +108,6 @@ impl Context {
         self.emit(&Palette::stdout(self.json).paint(style, message), value)
     }
 
-    /// Print `value` as JSON with `--json`; otherwise render it with `text`.
     pub fn show<T: Output>(&self, value: &T, text: impl FnOnce(&T)) -> Result<()> {
         if self.json {
             outln!("{}", output::json(value)?);

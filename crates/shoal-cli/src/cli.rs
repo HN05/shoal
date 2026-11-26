@@ -72,15 +72,14 @@ pub struct Cli {
 }
 
 // Every subcommand enum defers its commands' arguments until parsing reaches
-// them: the whole tree takes megabytes that stay resident in each long-lived
-// process, such as an agent's wrapper and hooks. A command's attributes apply
-// before its deferred arguments, so they cannot change those arguments, an
-// argument struct's doc comment would replace the command's description, and
-// code that reads arguments from the tree builds it first.
+// them: the whole tree takes megabytes that would stay resident in each
+// long-lived process, such as an agent's wrapper. A command's attributes
+// apply before its deferred arguments, so they cannot change them. An
+// argument struct's doc comment would replace the command's description.
+// Code that reads arguments from the tree builds it first.
 //
-// A domain's commands form a group enum flattened into this one, so they stay
-// top-level commands. Completion offers commands in the order they are
-// declared, so each group holds commands that are adjacent in that order.
+// Completion offers commands in the order they are declared, so each
+// flattened group holds commands that are adjacent in that order.
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum Command {
@@ -136,8 +135,8 @@ pub enum Command {
 }
 
 impl Cli {
-    /// Parse the process arguments as `Cli::parse` does, recording the
-    /// subcommand path and resolving its output format.
+    /// Parse the process arguments as `Cli::parse` does, and also record the
+    /// subcommand path and resolve the output format.
     pub fn from_args() -> Self {
         let mut matches = <Self as clap::CommandFactory>::command()
             .try_get_matches()
@@ -166,8 +165,6 @@ impl Cli {
         cli
     }
 
-    /// Let the `SHOAL_OUTPUT` `setting` choose JSON when the command line
-    /// selects neither format, so every later step reads one resolved mode.
     fn resolve_output(&mut self, setting: Option<&std::ffi::OsStr>) -> anyhow::Result<()> {
         anyhow::ensure!(
             !(self.json && self.text),
@@ -180,8 +177,6 @@ impl Cli {
     }
 }
 
-/// Reports clap's refusal of the command line `args`, pointing an unknown
-/// top-level name to `shoal run`, which runs configured commands.
 fn exit_parse(error: clap::Error, args: impl IntoIterator<Item = OsString>) -> ! {
     if !error.use_stderr() {
         output::print_clap_output(&error);
@@ -196,13 +191,11 @@ fn exit_parse(error: clap::Error, args: impl IntoIterator<Item = OsString>) -> !
     std::process::exit(error.exit_code())
 }
 
-/// What an unknown top-level name prints after clap's error.
 const CONFIGURED_COMMANDS: &str = "configured commands run with `shoal run <name>`";
 
-/// Whether clap refused `args` for a first command name Shoal does not have,
-/// rather than for an unknown name below one of its commands.
 fn names_unknown_command(error: &clap::Error, args: impl IntoIterator<Item = OsString>) -> bool {
-    // Accepting any name at the top level leaves only deeper names refused.
+    // With any name accepted at the top level, only a deeper name stays
+    // refused.
     error.kind() == clap::error::ErrorKind::InvalidSubcommand
         && <Cli as clap::CommandFactory>::command()
             .allow_external_subcommands(true)
@@ -211,8 +204,8 @@ fn names_unknown_command(error: &clap::Error, args: impl IntoIterator<Item = OsS
 }
 
 impl Command {
-    /// The name under which the command remembers the spaces it acts on,
-    /// so `-` selects the previous one; `None` for commands that keep no history.
+    /// The name under which the command records the spaces it acts on, so that
+    /// `-` selects the previous one.
     pub fn recent_name(&self) -> Option<String> {
         Some(match self {
             Command::Workspace(WorkspaceCommand::Cd { .. }) => "cd".into(),
@@ -234,9 +227,8 @@ impl Command {
         })
     }
 
-    /// Whether the command runs an execution wrapper in a place a terminal
-    /// host or the daemon started for it, which outlives what it runs and
-    /// never replaces itself with another program.
+    /// Whether the command runs an execution wrapper, which outlives what it
+    /// runs and never replaces itself with another program.
     pub fn wraps_execution(&self) -> bool {
         matches!(
             self,
@@ -249,7 +241,6 @@ impl Command {
         )
     }
 
-    /// Whether the command runs the daemon in this process.
     pub fn runs_daemon(&self) -> bool {
         matches!(
             self,
@@ -259,10 +250,8 @@ impl Command {
         )
     }
 
-    /// Whether the command replaces a config file, which may drop a
-    /// narrowing of the permissions, so that no scoped process can check it
-    /// gives only what it holds. A setup's agent edits one instead, which a
-    /// scoped process starts only as its `admin` permission allows.
+    /// Whether the command replaces a config file. A scoped process cannot
+    /// check that the new file narrows its permissions, so it never runs one.
     pub fn rewrites_config(&self) -> bool {
         matches!(
             self,
@@ -272,10 +261,6 @@ impl Command {
         )
     }
 
-    /// Whether only the user's own terminal runs the command: what changes
-    /// the hub's machines or this machine's membership of the hub, the
-    /// shared config, which reaches every machine, and the relay to the
-    /// daemon's socket, over which a member joins as the user.
     pub fn belongs_to_user(&self) -> bool {
         matches!(
             self,
@@ -295,8 +280,8 @@ impl Command {
         )
     }
 
-    /// The registered repository the command names to act in, whose config
-    /// resolves the permission of a chat without a repository.
+    /// The registered repository the command names. Its config resolves the
+    /// permission of a chat without a repository.
     pub fn repository(&self) -> Option<&str> {
         match self {
             Command::Repository(RepositoryCommand::Repo {
@@ -313,8 +298,6 @@ impl Command {
         }
     }
 
-    /// The permission that governs the command, which a scoped process runs
-    /// as its space's permission for it allows.
     pub fn permission(&self) -> Option<PermissionKey> {
         match self {
             Command::Service(

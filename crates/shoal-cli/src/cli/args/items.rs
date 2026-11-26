@@ -77,7 +77,6 @@ pub enum ItemsCommand {
     },
 }
 
-// What `shoal view` shows and how.
 #[derive(Debug, Args)]
 #[command(group(clap::ArgGroup::new("viewed_in").args(["space", "repo"])))]
 pub struct ViewArgs {
@@ -99,7 +98,6 @@ pub struct ViewArgs {
     pub web: bool,
 }
 
-// An optional item selection followed by its relation.
 #[derive(Debug, Args)]
 pub struct RelationArgs {
     /// pr/issue/ci/thread, a number or URL, then assigned, opened or
@@ -127,7 +125,6 @@ impl RelationArgs {
         Ok((items, relation))
     }
 
-    /// The trailing relation.
     pub fn relation(&self) -> Result<Relation> {
         let last = self.args.last().map_or("", String::as_str);
         Relation::from_str(last, false).map_err(|_| {
@@ -182,7 +179,6 @@ pub struct ItemArgs {
     pub space: Option<SpaceSelector>,
 }
 
-/// clap parser for [`ItemWord`].
 pub(in crate::cli::args) fn item_word(word: &str) -> Result<ItemWord, String> {
     word.parse().map_err(|error| format!("{error:#}"))
 }
@@ -204,14 +200,12 @@ impl ItemArgs {
         matches!(self.kind_or_url, Some(ItemWord::Thread))
     }
 
-    /// The thread a thread selection numbers.
     pub fn thread_number(&self) -> Result<shoal_protocol::threads::ThreadNumber> {
         (self.item.as_deref())
             .context("name the thread: view thread <S.N>")?
             .parse()
     }
 
-    /// The review ID a review selection names.
     pub fn review_id(&self) -> Result<Option<ReviewId>> {
         self.item.as_deref().map(str::parse).transpose()
     }

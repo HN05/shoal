@@ -3,7 +3,6 @@
 use crate::{client::connection::Supervision, daemon_owner};
 use shoal_protocol::{paths::Paths, processes::Identity};
 
-/// The `shoal` binary's [`Supervision`].
 pub struct Command;
 
 impl Supervision for Command {

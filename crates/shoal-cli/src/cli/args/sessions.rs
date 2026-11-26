@@ -392,7 +392,6 @@ pub enum DemoCommand {
     },
 }
 
-// The options of `shoal restore --from`.
 #[derive(Debug, Args)]
 pub struct ImportArgs {
     /// A file shoal move wrote, a directory of them, or - for standard input; repeatable.

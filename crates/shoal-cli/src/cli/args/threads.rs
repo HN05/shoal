@@ -136,8 +136,6 @@ pub enum ThreadCommand {
     },
 }
 
-// What an outcome of `shoal thread resolve` takes besides its name; a doc
-// comment here would replace that command's description.
 #[derive(Debug, Args)]
 pub struct OutcomeData {
     /// The thread a duplicate repeats.
@@ -152,8 +150,6 @@ pub struct OutcomeData {
     pub issue: Option<crate::forge::items::reference::ItemInput>,
 }
 
-// What `shoal send` takes for a post in a thread; a doc comment would
-// replace the command's help.
 #[derive(Debug, Default, Args)]
 pub struct PostArgs {
     /// Offer an interface to pick or fill in: an A2UI 1.0 createSurface

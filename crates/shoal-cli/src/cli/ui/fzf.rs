@@ -23,7 +23,6 @@ pub(super) fn failure(status: ExitStatus) -> anyhow::Error {
     }
 }
 
-/// What `fzf --version` printed, when it ran.
 fn installed_version() -> Option<String> {
     let output = Command::new(Tool::Fzf.program())
         .arg("--version")

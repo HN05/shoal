@@ -1,6 +1,5 @@
-//! The joined machine a command acts on, picked among the hub's other
-//! machines: those online to pick, by name, and the offline ones listed
-//! above them with when the hub last saw them, which cannot be picked.
+//! Picking another joined machine. Offline machines are listed but cannot be
+//! picked.
 use anyhow::{Result, ensure};
 use shoal_protocol::hub::{Member, MemberKind, directory::HubView};
 
@@ -26,12 +25,10 @@ pub fn pick_machine(ctx: &Context, prompt: &str, view: &HubView) -> Result<Strin
     Ok(named(view, &id))
 }
 
-/// Whether `view` has another machine online to pick.
 pub fn can_pick_machine(view: &HubView) -> bool {
     !other_machines(view).0.is_empty()
 }
 
-/// The machines of `view` but this one, online and offline, each by name.
 fn other_machines(view: &HubView) -> (Vec<&Member>, Vec<&Member>) {
     let mut others: Vec<&Member> = (view.directory.machines.iter())
         .filter(|member| member.kind == MemberKind::Machine && member.id != view.machine)

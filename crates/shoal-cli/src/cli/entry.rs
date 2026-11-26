@@ -10,18 +10,15 @@ use crate::{
 };
 
 /// Runs the daemon in this process, given its state, whether its service
-/// manager started it and the handoff from the daemon it replaces. The
-/// `shoal` command passes the daemon crate's `run` to [`run`].
+/// manager started it and the handoff from the daemon it replaces.
 pub type RunDaemon =
     fn(Paths, bool, Option<Handoff>) -> LocalBoxFuture<'static, anyhow::Result<()>>;
 
-/// The daemon `shoal daemon run` runs in this process.
 pub(crate) struct Daemon {
     pub(crate) run: RunDaemon,
     pub(crate) handoff: Option<Handoff>,
 }
 
-/// Run the command this process was started with, and exit.
 pub fn run(daemon: RunDaemon) {
     clap_complete::CompleteEnv::with_factory(cli::completion::command)
         .var(env::COMPLETE)

@@ -17,7 +17,6 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ModeChoice {
     Named(ModeName),
-    /// A mode picked on the terminal.
     Pick,
 }
 
@@ -50,7 +49,6 @@ impl ModeChoice {
     }
 }
 
-/// What the picker calls the space of a mode without a repository.
 const MASTER: &str = "master";
 
 /// The picker's entries for the `modes` that start in the spaces `fit`

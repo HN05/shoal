@@ -88,8 +88,6 @@ impl<W: Write> Spinner<W> {
     }
 }
 
-/// Whether progress shows for text, rather than JSON, written to a terminal
-/// when `text_terminal`, whose `TERM` is `term`.
 fn shows(text_terminal: bool, term: Option<&std::ffi::OsStr>) -> bool {
     text_terminal && term != Some(std::ffi::OsStr::new("dumb"))
 }

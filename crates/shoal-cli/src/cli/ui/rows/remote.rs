@@ -1,6 +1,5 @@
-//! The rows of other joined machines' spaces, as their machines last
-//! reported them, in the tree of every machine's spaces or a list of their
-//! own.
+//! The rows of other joined machines' spaces, as their machines last reported
+//! them.
 use shoal_protocol::hub::directory::Listed as Remote;
 
 use super::{
@@ -92,7 +91,6 @@ pub(super) fn remote_row(
     )
 }
 
-/// `cells` with `machine` after the space's name.
 pub(super) fn with_machine([number, name, rest @ ..]: [Cell; 8], machine: Cell) -> [Cell; 9] {
     let [a, b, c, d, e, f] = rest;
     [number, name, machine, a, b, c, d, e, f]

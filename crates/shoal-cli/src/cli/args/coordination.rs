@@ -282,8 +282,6 @@ pub enum AlertCommand {
     Clear,
 }
 
-// Arguments of `shoal alert list`; a doc comment would replace the
-// command's help.
 #[derive(Debug, Args)]
 pub struct AlertListArgs {
     /// Space, a workspace or chat, whose agent's alerts to show; defaults
@@ -314,8 +312,6 @@ pub struct AlertListArgs {
     pub limit: u32,
 }
 
-// Arguments of `shoal sleep` that set the agent's timer, replacing the one
-// it had; a doc comment would replace the command's help.
 #[derive(Debug, Args)]
 #[group(id = "timer", multiple = false, conflicts_with = "undo")]
 pub struct SleepTimerArgs {

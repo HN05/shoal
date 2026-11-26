@@ -1,5 +1,4 @@
-//! Arguments of `shoal ci`: listing, starting, rerunning, cancelling and
-//! approving CI runs.
+//! Arguments of `shoal ci`.
 use clap::{Args, Subcommand};
 
 use crate::cli::args::{pull_input, run_input};
@@ -43,7 +42,6 @@ pub enum CiCommand {
     },
 }
 
-// A run, or a PR and the checks on its head, to act on.
 #[derive(Debug, Args)]
 pub struct Target {
     #[command(flatten)]
@@ -54,7 +52,6 @@ pub struct Target {
     pub checks: Vec<String>,
 }
 
-// A run, or else a PR, to act on.
 #[derive(Debug, Args)]
 pub struct Subject {
     /// The run's web URL, as `shoal ci run` or a check links it, or the number
@@ -73,7 +70,6 @@ pub struct Subject {
     pub repo: crate::cli::args::changes::TargetRepo,
 }
 
-// Which runs `shoal ci ls` lists.
 #[derive(Debug, Args)]
 pub struct ListArgs {
     /// Space, a workspace or chat, to use; defaults to the current workspace or
@@ -97,7 +93,6 @@ pub struct ListArgs {
     pub limit: usize,
 }
 
-// Arguments of `shoal ci run`.
 #[derive(Debug, Args)]
 pub struct RunArgs {
     /// Workflow file or ID, such as ci.yml, a Bitbucket custom pipeline, or

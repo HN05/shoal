@@ -88,8 +88,6 @@ pub fn json_error(error: &anyhow::Error) -> CommandError {
     }
 }
 
-/// The specific code of `error`: the daemon's, an operation's failure, a
-/// denied approval, or a refusal the CLI raised.
 fn error_code(error: &anyhow::Error) -> Option<ErrorCode> {
     if let Some(remote) = error.downcast_ref::<RemoteError>() {
         return Some(remote.code.clone());
@@ -133,8 +131,6 @@ impl Palette {
         Self::detect(true)
     }
 
-    /// The palette for text, rather than JSON, written to a terminal when
-    /// `text_terminal`.
     fn detect(text_terminal: bool) -> Self {
         Self::for_environment(
             text_terminal,

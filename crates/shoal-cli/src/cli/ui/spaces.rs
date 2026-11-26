@@ -1,6 +1,5 @@
-//! Choosing the spaces, workspaces or chats, a command acts on: the named
-//! ones, the current one, or those from a picker, and what `shoal resume`
-//! brings back in each.
+//! Choosing the spaces a command acts on: the named ones, the current one, or
+//! those from a picker.
 use shoal_ids::space_ids::SpaceId;
 use std::collections::{HashMap, HashSet};
 
@@ -196,7 +195,6 @@ pub fn saved_status(summary: Option<&SavedSummary>) -> Option<(String, bool)> {
     Some((format!("stopped: {}", parts.join(", ")), summary.unfinished))
 }
 
-/// How completion names a workspace whose agent has nothing to resume.
 pub const NOTHING_TO_RESUME: &str = "nothing to resume";
 
 fn resumable_status_cell(text: String, unfinished: bool) -> Cell {
@@ -206,7 +204,6 @@ fn resumable_status_cell(text: String, unfinished: bool) -> Cell {
     }
 }
 
-/// Pick a space among the workspaces and running chats, wherever this runs.
 pub async fn pick_any_space(ctx: &Context, acting: &Acting) -> Result<SpaceSelector> {
     let spaces = crate::client::spaces::list(&ctx.paths).await?;
     let workspaces = spaces.workspaces();
@@ -268,7 +265,6 @@ pub enum Workspaces {
     Any,
 }
 
-/// The workspace of `which` containing the current directory, else `chat`.
 async fn current_workspace_or_chat(
     ctx: &Context,
     chat: SpaceId,
@@ -365,13 +361,10 @@ async fn pick_space_or_all(
     Ok((id != ALL_ID).then(|| SpaceId::from(id)))
 }
 
-/// The command's argument that names the space it acts on.
 const SPACE: &str = "space";
 
-/// How the space picker names `--all`.
 const ALL_SPACES: &str = "All spaces";
 
-/// What a space picker says when the command takes none of them.
 const NO_SPACE: &str = "no space this command takes";
 
 /// Pick a space: one of `workspaces`, or one of `chats`, listed after them
@@ -417,7 +410,6 @@ async fn space_entries(
     entries
 }
 
-/// The spaces picked by the IDs their entries carry.
 fn picked_ids(picked: Vec<String>) -> Vec<SpaceSelector> {
     picked
         .into_iter()

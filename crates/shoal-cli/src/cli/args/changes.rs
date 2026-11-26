@@ -420,7 +420,6 @@ pub enum IssueCommand {
     },
 }
 
-// A reaction to add or remove, and the comment it is on.
 #[derive(Debug, Args)]
 pub struct ReactArgs {
     /// Reaction: +1, -1, laugh, hooray, confused, heart, rocket or eyes, or a
@@ -435,7 +434,6 @@ pub struct ReactArgs {
     pub remove: bool,
 }
 
-// Which issues or PRs of the workspace's repository, or another one, to list.
 #[derive(Debug, Args)]
 pub struct ListArgs {
     /// Text the forge searches for in titles and descriptions.
@@ -465,8 +463,6 @@ pub struct ListArgs {
     pub limit: u16,
 }
 
-// An issue or PR of the repository of the space, a workspace or chat, or of
-// the repository --repo or the item's URL names.
 #[derive(Debug, Args)]
 pub struct ItemSelector {
     /// Number or URL; defaults to the linked one.
@@ -491,7 +487,6 @@ pub struct TargetRepo {
     pub name: Option<String>,
 }
 
-// A merged PR of the space's repository to revert.
 #[derive(Debug, Args)]
 pub struct RevertedPr {
     /// Number or URL; defaults to the linked one.
@@ -503,7 +498,6 @@ pub struct RevertedPr {
     pub space: Option<SpaceSelector>,
 }
 
-// What a new PR is opened with.
 #[derive(Debug, Args)]
 pub struct OpenPullArgs {
     /// PR title; defaults to the linked issue's title, then the last commit's subject.
@@ -536,7 +530,6 @@ pub struct OpenPullArgs {
     pub milestone: Option<String>,
 }
 
-// What the PR that reverts a merged one is opened with.
 #[derive(Debug, Args)]
 pub struct RevertArgs {
     /// PR title; defaults to Revert "<title of the reverted PR>".
@@ -560,7 +553,6 @@ pub struct RevertArgs {
     pub reviewers: Vec<String>,
 }
 
-// The changes a PR takes besides those of any item.
 #[derive(Debug, Args)]
 pub struct PrEditArgs {
     #[command(flatten)]
@@ -582,7 +574,6 @@ pub struct PrEditArgs {
     pub no_draft: bool,
 }
 
-// A review's verdict, body and comments on lines of the PR's diff.
 #[derive(Debug, Args)]
 pub struct ReviewArgs {
     #[command(flatten)]
@@ -600,7 +591,6 @@ pub struct ReviewArgs {
     pub comments_file: Option<PathBuf>,
 }
 
-// The verdict of a review; exactly one.
 #[derive(Debug, Args)]
 #[group(required = true, multiple = false)]
 pub struct VerdictArgs {
@@ -615,8 +605,6 @@ pub struct VerdictArgs {
     pub request_changes: bool,
 }
 
-// Title, description, label, assignee and milestone changes either kind of
-// item takes.
 #[derive(Debug, Args)]
 pub struct EditArgs {
     /// New title.
@@ -646,7 +634,6 @@ pub struct EditArgs {
     pub clear_milestone: bool,
 }
 
-// Files to show or link in a description or comment.
 #[derive(Debug, Args)]
 pub struct AttachArgs {
     /// Upload a file, as PATH or PATH#ALT_TEXT; repeat for more. Images and

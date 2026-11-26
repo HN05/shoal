@@ -3,9 +3,7 @@
 use crate::cli::output::{Palette, Style};
 pub use shoal_protocol::list_status::{Group, ListStatus, marks_wait, queued_in};
 
-/// How a [`ListStatus`] shows in the terminal.
 pub trait ListStatusStyle {
-    /// The color of the status column.
     fn style(self) -> Style;
 
     /// A one-column marker for what the status asks of the user, whose

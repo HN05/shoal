@@ -14,7 +14,6 @@ use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::launches::{ItemChoice, Launch, SpaceChoice, StartTarget};
 use shoal_protocol::space_names::SpaceSelector;
 
-/// clap parser for [`StartTarget`].
 fn start_target(input: &str) -> Result<StartTarget, String> {
     input.parse().map_err(|error| format!("{error:#}"))
 }
@@ -57,8 +56,6 @@ pub enum CreateCommand {
     },
 }
 
-// What `shoal convert` turns a space into. A doc comment here would replace
-// the command's description.
 #[derive(Debug, Subcommand)]
 pub enum ConvertCommand {
     /// Turn a chat into a workspace on a branch, with a worktree and setup.
@@ -135,9 +132,6 @@ pub enum ConvertCommand {
     },
 }
 
-// How the agent of a converted space goes on, which every `shoal convert`
-// takes. A doc comment here would replace the description of every command
-// that flattens it.
 #[derive(Debug, Default, Clone, Args)]
 pub struct CarryingArgs {
     #[command(flatten)]
@@ -166,9 +160,6 @@ impl CarryingArgs {
     }
 }
 
-// The branch a new workspace works on, which `shoal convert workspace`
-// takes. A doc comment here would replace the description
-// of every command that flattens it.
 #[derive(Debug, Default, Clone, Args)]
 pub struct BranchArgs {
     /// Git branch name; a portable workspace name is derived from it.
@@ -189,8 +180,6 @@ pub struct BranchArgs {
     pub skip_setup: bool,
 }
 
-// Arguments of `shoal create`, `shoal start`'s that choose what a new
-// workspace starts from and where it goes.
 #[derive(Debug, Default, Clone, Args)]
 pub struct CreateArgs {
     /// Registered repository, or an issue, PR, CI run or branch URL;
@@ -267,7 +256,6 @@ impl CreateArgs {
     }
 }
 
-// Arguments of `shoal start`.
 #[derive(Debug, Default, Clone, Args)]
 pub struct StartArgs {
     /// The mode the agent starts in; for an issue or PR carrying a mode's
@@ -441,8 +429,6 @@ impl StartArgs {
     }
 }
 
-// The workspace a new one copies. A doc comment here would replace the
-// description of every command that flattens it.
 #[derive(Debug, Default, Clone, Args)]
 pub struct CopyArgs {
     /// Start from a copy of this workspace's current files, uncommitted and
@@ -458,14 +444,11 @@ pub struct CopyArgs {
 }
 
 impl CopyArgs {
-    /// Whether a copy was asked for.
     pub fn is_set(&self) -> bool {
         self.copy.is_some() || self.checkpoint.is_some()
     }
 }
 
-// What a new workspace leaves out. A doc comment here would replace the
-// description of every command that flattens it.
 #[derive(Debug, Default, Clone, Args)]
 pub struct CreationArgs {
     /// Skip setup.command, hooks.pre_setup, setup.copy_ignored, hooks.post_setup
@@ -489,7 +472,6 @@ impl From<CreationArgs> for crate::protocol::CreationOptions {
     }
 }
 
-// Arguments of `shoal contribute`.
 #[derive(Debug, Args)]
 pub struct ContributeArgs {
     /// Run in this terminal instead of a new tab or detached session.

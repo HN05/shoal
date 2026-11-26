@@ -1,6 +1,5 @@
 //! The keys pickers bind, and fzf's names for them.
 
-/// A key a picker binds to an action.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Key {
     Enter,
@@ -17,7 +16,6 @@ impl Key {
         }
     }
 
-    /// The hint a header shows for it: its name and what it does.
     pub(super) fn hint(self, label: &str) -> String {
         format!("{}: {label}", self.name())
     }

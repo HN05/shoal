@@ -100,7 +100,6 @@ pub enum CleanupKind {
     Caches,
 }
 
-// Options of `shoal cleanup` that every kind takes.
 #[derive(Debug, Args)]
 pub struct CleanupArgs {
     /// List what would be removed without removing anything.
@@ -114,7 +113,6 @@ pub struct CleanupArgs {
     pub yes: bool,
 }
 
-// Arguments of `shoal stop`.
 #[derive(Debug, Args)]
 pub struct StopArgs {
     #[command(flatten)]
@@ -142,7 +140,6 @@ pub struct StopArgs {
     pub leftovers: bool,
 }
 
-// Arguments of `shoal absorb`.
 #[derive(Debug, Args)]
 pub struct AbsorbArgs {
     /// The space to absorb, by number or ID.
@@ -169,7 +166,6 @@ pub struct AbsorbArgs {
     pub force: bool,
 }
 
-// Arguments of `shoal rm`.
 #[derive(Debug, Args)]
 pub struct RmArgs {
     #[arg(value_name = "SPACE")]

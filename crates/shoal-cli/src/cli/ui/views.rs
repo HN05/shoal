@@ -29,7 +29,6 @@ impl<'a> PickerView<'a> {
         }
     }
 
-    /// The names of `keys` this view does not bind.
     fn unbound(&self, keys: &[Key]) -> Vec<String> {
         keys.iter()
             .filter(|key| !self.keys.contains(key))
@@ -55,8 +54,6 @@ impl<'a> PickerView<'a> {
     }
 }
 
-/// The header's hint for each of `keys`, with Tab's after Enter's when the
-/// view `switches`.
 fn hints(keys: &[(Key, &str)], switches: bool) -> Vec<String> {
     let mut hints: Vec<_> = keys.iter().map(|(key, label)| key.hint(label)).collect();
     if switches {
@@ -88,7 +85,6 @@ fn view_after<'a, T>(views: &'a [T], shown: &str, prompt: impl Fn(&T) -> &str) -
 /// another view by running `next`.
 pub struct ViewPicker<'a> {
     pub view: PickerView<'a>,
-    /// Every key a view binds, Enter included.
     pub keys: &'a [Key],
     /// The command whose output, fzf actions, shows the next view.
     pub next: Option<String>,

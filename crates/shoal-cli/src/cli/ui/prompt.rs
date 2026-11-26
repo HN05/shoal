@@ -58,9 +58,8 @@ fn prompted_argument(prompt: &str) -> String {
 }
 
 /// Ctrl-C must cancel a prompt even after the execution wrapper registered its
-/// own SIGINT handlers (which persist for the process lifetime and would
-/// otherwise swallow the keystroke). Restore the default disposition for the
-/// duration of the read, then put the previous handler back.
+/// own SIGINT handlers, which would swallow it. This restores the default
+/// action for the read and puts the previous one back.
 struct InterruptCancels(libc::sigaction);
 
 impl InterruptCancels {
@@ -97,7 +96,7 @@ fn read_answer(input: &mut impl io::BufRead) -> Result<Option<String>> {
     Ok(Some(answer.trim().to_ascii_lowercase()))
 }
 
-/// Approval stays in the CLI. Piped/JSON callers must opt in explicitly.
+/// Callers without a terminal confirm only with `flag`.
 pub fn confirm(ctx: &Context, action: &str, flag: &str) -> Result<bool> {
     ensure!(
         ctx.interactive(),
@@ -298,7 +297,6 @@ where
     }
 }
 
-/// The typed value, or `default` for blank input.
 fn or_default(value: String, default: &str) -> String {
     match value.trim() {
         "" => default.to_owned(),

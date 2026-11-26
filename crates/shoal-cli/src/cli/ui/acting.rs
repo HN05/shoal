@@ -1,6 +1,5 @@
-//! The request a command sends for the space a picker picks, by which the
-//! daemon judges each space the picker could offer, and decides which of
-//! the other joined machines' spaces it offers beside this machine's.
+//! What a picker's command does with the space it picks. The daemon judges each
+//! space the picker could offer by the request the command sends.
 use shoal_protocol::{protocol::Operation, space_names::SpaceSelector};
 
 use crate::client::connection::Sendable;
@@ -45,7 +44,6 @@ impl Acting {
         (self.request)()
     }
 
-    /// Whether the command acts on this machine's spaces only.
     pub(super) fn acts_here(&self) -> bool {
         self.here
     }

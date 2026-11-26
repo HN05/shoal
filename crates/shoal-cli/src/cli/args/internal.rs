@@ -368,22 +368,18 @@ fn agent(name: &str) -> Result<crate::agent::Agent, String> {
     Ok(crate::agent::Agent::unchecked(name.to_owned()))
 }
 
-/// The viewer an attach for another machine receives as JSON.
 fn viewer(json: &str) -> Result<shoal_protocol::attaching::Viewer, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
-/// The place a demo shown to another machine runs in, received as JSON.
 fn place(json: &str) -> Result<crate::sessions::Origin, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
-/// A `--permission` narrowing a worker receives as JSON.
 fn narrowing(json: &str) -> Result<crate::config::permissions::PermissionsConfig, String> {
     serde_json::from_str(json).map_err(|error| error.to_string())
 }
 
-// Arguments of the place worker.
 #[derive(Debug, Args)]
 pub struct PlaceWorkerArgs {
     /// The host whose place this worker runs in; none for an agent that

@@ -7,7 +7,6 @@ use crate::cli::args::ConfirmationArgs;
 use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
-// Arguments of `shoal move`.
 #[derive(Debug, Args)]
 pub struct MoveArgs {
     #[arg(conflicts_with = "all", value_name = "SPACE")]

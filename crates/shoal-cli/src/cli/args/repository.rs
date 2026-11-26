@@ -23,8 +23,6 @@ pub enum RepositoryCommand {
     },
 }
 
-// Arguments of `shoal repo labels`, `shoal forge capabilities` and
-// `shoal forge reactions`.
 #[derive(Debug, Args)]
 pub struct RepositoryArgs {
     /// Read another repository: a registered repository's name, OWNER/NAME
@@ -34,7 +32,6 @@ pub struct RepositoryArgs {
     pub repo: Option<String>,
 }
 
-// Arguments of `shoal forge api`.
 #[derive(Debug, Args)]
 pub struct ApiArgs {
     /// Path under the forge's API root, where `{owner}` and `{repo}` name the
@@ -54,7 +51,6 @@ pub struct ApiArgs {
     pub repo: Option<String>,
 }
 
-// Arguments of `shoal forge download`.
 #[derive(Debug, Args)]
 pub struct DownloadArgs {
     /// URL of an image or attached file on the repository's forge, such as
@@ -178,7 +174,6 @@ pub enum RepoCommand {
     Ls,
 }
 
-// Arguments of `shoal repo move`.
 #[derive(Debug, Args)]
 pub struct MoveArgs {
     /// New root directory, saved as root_dir first; omit to use the configured one.

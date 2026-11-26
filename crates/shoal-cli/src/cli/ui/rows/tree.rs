@@ -29,16 +29,12 @@ pub struct Elsewhere<'a> {
     pub machines: Machines<'a>,
 }
 
-/// `workspace_rows` for the workspaces, the running and stopped chats and
-/// the other machines' spaces of `listing`, and the agents queued to start
-/// in a workspace without a row, in one tree: the spaces whose parent is not
-/// listed, on any machine, each followed by the spaces below it, indented,
-/// and spaces under one parent by their status, then their number. A chat
-/// row names the chat, its status and its agent, and a queued agent's row
-/// what it starts. Workspace, queued agent and other machines' rows name
-/// their repository, of `(id, name)` pairs for this machine's, when the rows
-/// span several, and once the tree lists other machines' spaces, every row
-/// names its machine after its name.
+/// `workspace_rows` for every space of `listing`, and for the agents queued to
+/// start in a workspace without a row, in one tree. Each space whose parent is
+/// not listed starts a branch, with the spaces below it indented. Spaces under
+/// one parent sort by status, then number. Rows name their repository once they
+/// span several, and their machine once the tree lists another machine's
+/// spaces.
 pub fn space_tree_rows(
     listing: Listing<'_>,
     statuses: &Statuses,
@@ -67,7 +63,6 @@ enum Listed<'a> {
     Workspace(&'a Workspace),
     Chat(&'a Chat),
     Queued(&'a QueueEntry),
-    /// A space of another machine.
     Elsewhere(&'a Remote),
 }
 
@@ -125,14 +120,12 @@ impl<'a> Listed<'a> {
     }
 }
 
-/// Listed spaces arranged under their listed parents.
 struct SpaceTree<'a> {
     /// Every listed space with its status, in the order lists show them:
     /// queued agents, whose rows have no number, after the numbered spaces
     /// of their status.
     spaces: Vec<(Listed<'a>, ListStatus)>,
     statuses: &'a Statuses,
-    /// The `(id, name)` pairs of the repositories of this machine's spaces.
     repositories: &'a [(String, String)],
     /// Whether rows name their repository, as they do once the listed
     /// spaces span several.
@@ -184,13 +177,11 @@ impl<'a> SpaceTree<'a> {
         }
     }
 
-    /// The name of the repository of `space`, when rows name one.
     fn repository_cell(&self, space: Listed<'a>) -> Cell {
         let named = (space.repository(self.repositories)).filter(|_| self.names_repositories);
         (named.unwrap_or_default().to_owned(), None)
     }
 
-    /// The machine of `space`, when rows name one.
     fn machine_cell(&self, space: Listed<'a>) -> Cell {
         match (self.machines, space) {
             (None, _) => (String::new(), None),
@@ -199,7 +190,6 @@ impl<'a> SpaceTree<'a> {
         }
     }
 
-    /// The spaces whose parent is not listed.
     fn roots(&self) -> Vec<(Listed<'a>, ListStatus)> {
         let listed: HashSet<&SpaceId> = (self.spaces.iter())
             .filter_map(|(space, _)| space.id())
@@ -209,7 +199,6 @@ impl<'a> SpaceTree<'a> {
             .collect()
     }
 
-    /// The row of `space` at `depth`, then those of the spaces below it.
     fn push(
         &self,
         rows: &mut Vec<(String, [Cell; 9])>,
@@ -238,7 +227,6 @@ impl<'a> SpaceTree<'a> {
     }
 }
 
-/// A workspace's row, with its status and the agents queued in it.
 fn tree_workspace_row(
     workspace: &Workspace,
     (status, entries): (ListStatus, &[&QueueEntry]),

@@ -169,8 +169,6 @@ pub fn navigate(ctx: &CliContext, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Warn a user on a terminal that its shell cannot follow a command into a
-/// directory without Shoal's shell integration.
 pub fn not_integrated(json: bool) {
     if CliContext::is_interactive(json) {
         eprintln!(

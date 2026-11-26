@@ -1,6 +1,5 @@
-//! How the request a picker's command sends judges each space the picker
-//! could offer, as the daemon of the machine that runs the space decides,
-//! and the other joined machines' spaces the command reaches.
+//! How the daemons judge the spaces a picker could offer for the request its
+//! command sends.
 use std::collections::HashMap;
 
 use shoal_ids::space_ids::SpaceId;
@@ -17,11 +16,8 @@ pub(super) struct Offers {
     pub(super) elsewhere: Option<HubView>,
 }
 
-/// How a picker shows a space it offers.
 pub(super) enum Shown<'a> {
-    /// As the command would act on it.
     Taken,
-    /// With the reason the command would refuse it.
     Refused(&'a str),
 }
 
@@ -65,8 +61,6 @@ impl Offers {
         }
     }
 
-    /// The verdicts `judged` on the spaces of this machine and of the
-    /// other machines in `elsewhere`.
     #[cfg(test)]
     pub(super) fn new(judged: HashMap<SpaceId, Offer>, elsewhere: Option<HubView>) -> Self {
         Self { judged, elsewhere }

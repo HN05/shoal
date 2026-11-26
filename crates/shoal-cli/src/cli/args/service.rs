@@ -91,7 +91,6 @@ pub enum ConfigCommand {
     Setup(Box<ConfigSetupArgs>),
 }
 
-// Arguments of `shoal config setup`.
 #[derive(Debug, Args)]
 pub struct ConfigSetupArgs {
     /// Run in this terminal instead of a new tab or detached session.
@@ -138,9 +137,6 @@ pub enum DaemonCommand {
     Connect,
 }
 
-// Whether stopping the daemon waits for work it runs itself, such as
-// workspace setup and removal, which its exit would cut off. A doc comment
-// here would replace the description of the commands that flatten it.
 #[derive(Debug, Args)]
 pub struct ExitWait {
     /// Refuse instead of waiting when such work runs.

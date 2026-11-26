@@ -30,7 +30,6 @@ pub enum HubCommand {
     Revoke { member: String },
 }
 
-// Arguments of `shoal hub join`.
 #[derive(Debug, Args)]
 pub struct JoinArgs {
     /// The code shoal hub pair printed.

@@ -125,7 +125,6 @@ fn failure_value(workspace: &str, error: &anyhow::Error) -> Failure {
 /// then a summary, or with `--json` the output naming the items it acted on
 /// and those it failed on.
 pub struct Report<T> {
-    /// What the command does, as in `cannot remove first`.
     verb: &'static str,
     done: Vec<T>,
     failed: Vec<Failure>,
@@ -140,7 +139,6 @@ impl<T> Report<T> {
         }
     }
 
-    /// Record an item the command acted on, printing `message`.
     pub fn done(&mut self, ctx: &Context, message: &str, value: T) {
         if !ctx.json {
             outln!("{}", Palette::stdout(false).paint(Style::Success, message));
@@ -169,7 +167,6 @@ impl<T> Report<T> {
         self.failed.push(failure_value(workspace, error));
     }
 
-    /// The items acted on and the failures.
     #[cfg(test)]
     pub fn into_parts(self) -> (Vec<T>, Vec<Failure>) {
         (self.done, self.failed)

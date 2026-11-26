@@ -1,5 +1,5 @@
-//! The spaces each command last acted on, so `-` can name the previous one,
-//! read from and kept in [`shoal_workers::history`].
+//! The spaces each command last acted on, so that `-` can name the previous
+//! one.
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::{Context as _, Result, ensure};
@@ -11,7 +11,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// Whether `selector` is `-`, which names the previous space.
 pub fn is_previous(selector: &SpaceSelector) -> bool {
     *selector == SpaceSelector::Previous
 }
@@ -51,7 +50,6 @@ fn command(ctx: &Context) -> Result<&str> {
     Ok(command)
 }
 
-/// Remember that the command acted on the space `selector` names.
 pub async fn record(ctx: &Context, selector: &SpaceSelector) {
     record_where(ctx, selector, |_| true).await;
 }

@@ -1,5 +1,4 @@
-//! Arguments of `shoal merge`, which merges a space's work, through its PR
-//! on the forge or locally into the default branch, or a PR it names.
+//! Arguments of `shoal merge`.
 use anyhow::{Result, bail, ensure};
 use clap::Args;
 
@@ -58,7 +57,6 @@ pub struct MergeArgs {
     pub confirmation: ConfirmationArgs,
 }
 
-/// What a merge merges.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Merged {
     /// The space's work, through its PR or locally, as the daemon decides.
@@ -68,8 +66,6 @@ pub enum Merged {
 }
 
 impl MergeArgs {
-    /// What the arguments merge: a PR its item names, or the space's work
-    /// without one.
     pub fn merged(&self) -> Result<Merged> {
         self.ensure_one_path()?;
         let Some(word) = &self.kind_or_url else {
@@ -124,7 +120,6 @@ impl MergeArgs {
         Ok(())
     }
 
-    /// Refuse the flags of a local merge for a merge through `pr`.
     pub fn ensure_pull_flags(&self, pr: &str) -> Result<()> {
         if let Some(flag) = self.local_flag() {
             bail!("{flag} applies to a local merge; this merge goes through {pr}");
@@ -132,8 +127,6 @@ impl MergeArgs {
         Ok(())
     }
 
-    /// Refuse the flags of a PR merge for a local merge of the space
-    /// `space`.
     pub fn ensure_local_flags(&self, space: &str) -> Result<()> {
         if let Some(flag) = self.pull_flag() {
             bail!("{flag} applies to a PR merge; {space} has no open PR, so it merges locally");
@@ -141,7 +134,6 @@ impl MergeArgs {
         Ok(())
     }
 
-    /// The first flag given that only a PR merge takes.
     fn pull_flag(&self) -> Option<&'static str> {
         [
             (self.delete_branch, "--delete-branch"),
@@ -152,7 +144,6 @@ impl MergeArgs {
         .find_map(|(given, flag)| given.then_some(flag))
     }
 
-    /// The flag given that only a local merge takes.
     fn local_flag(&self) -> Option<&'static str> {
         match (self.push, self.no_push) {
             (true, _) => Some("--push"),

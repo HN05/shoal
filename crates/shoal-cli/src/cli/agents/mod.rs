@@ -1,6 +1,5 @@
-//! The CLI's side of the agents Shoal launches (see [`crate::agents`]):
-//! picking one, the names help and completion offer, and the desktop app
-//! `shoal open --app` names. [`shoal_workers::launch`] launches them.
+//! The CLI's side of the agents Shoal launches: picking one, and the names
+//! help and completion offer.
 
 use anyhow::{Context as _, Result, ensure};
 
@@ -52,8 +51,6 @@ pub(in crate::cli) fn pick_reviewer(ctx: &Context, settings: &Effective) -> Resu
     pick_agent(ctx, settings, available, Some("No agent"))
 }
 
-/// A picker of the agents `available` accepts, with the choice of none
-/// under the label `none` when given.
 fn pick_agent(
     ctx: &Context,
     settings: &Effective,
@@ -112,7 +109,6 @@ pub(in crate::cli) fn ensure_reviewer_available(name: &Agent, settings: &Effecti
     ensure_program(name.name(), program)
 }
 
-/// The app `shoal open --app` names.
 pub(in crate::cli) fn app(name: DesktopApp) -> &'static App {
     match name {
         DesktopApp::Claude => &desktop::CLAUDE,

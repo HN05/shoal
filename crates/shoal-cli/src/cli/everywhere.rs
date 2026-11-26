@@ -1,6 +1,5 @@
-//! The spaces the caller sees on every machine, as the daemon lists them:
-//! this machine's, and the other joined machines' as the hub lists them,
-//! which lists, the inbox and pickers show beside this machine's.
+//! The spaces the caller sees on every machine: this machine's, and the
+//! other joined machines' as the hub lists them.
 use anyhow::Result;
 use shoal_protocol::{hub::directory::HubView, model::Everywhere, protocol::Operation};
 
@@ -16,9 +15,8 @@ pub(in crate::cli) async fn spaces(ctx: &Context) -> Result<Everywhere> {
     Ok(everywhere)
 }
 
-/// The other machines' spaces, none on a machine in no hub, and none, with
-/// a warning that what the caller reads of them, `left_out`, is left out,
-/// while they cannot be listed.
+/// The other machines' spaces, none on a machine in no hub. While they cannot
+/// be listed, none, with a warning that `left_out` is left out.
 pub(in crate::cli) async fn elsewhere(ctx: &Context, left_out: &str) -> Option<HubView> {
     let everywhere = crate::client::spaces::everywhere(&ctx.paths, false).await;
     listed_or_left_out(everywhere, left_out)
@@ -43,8 +41,6 @@ pub(in crate::cli) async fn offered(ctx: &Context, acting: Operation) -> Everywh
     }
 }
 
-/// The other machines' spaces `everywhere` lists, none, with a warning that
-/// `left_out` is left out, while they cannot be listed.
 fn listed_or_left_out(everywhere: Result<Everywhere>, left_out: &str) -> Option<HubView> {
     let error = match everywhere {
         Ok(Everywhere {

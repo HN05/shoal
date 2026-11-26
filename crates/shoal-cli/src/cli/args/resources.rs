@@ -90,7 +90,6 @@ pub enum LeaseKind {
     Repo,
 }
 
-// Options shared by leases that a workspace may hold several of.
 #[derive(Debug, Args)]
 pub struct LeaseOptions {
     /// Stable lease name; use different names to hold several leases.
@@ -187,7 +186,6 @@ pub enum AcquireKind {
     },
 }
 
-// A pool, optionally narrowed to one named lease.
 #[derive(Debug, Args)]
 pub struct PoolSelection {
     /// Configured resource or pool; omit to release every lease of this kind.

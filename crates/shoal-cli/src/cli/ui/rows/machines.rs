@@ -20,7 +20,6 @@ impl<'a> Machines<'a> {
         }
     }
 
-    /// This machine's cell.
     pub fn here(&self) -> Cell {
         self.cell(&self.view.machine)
     }

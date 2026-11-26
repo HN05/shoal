@@ -1,4 +1,5 @@
-//! Completion runs before the normal CLI: read-only, scoped, and time bounded.
+//! Shell completion. It runs before the normal CLI: read-only, scoped and
+//! time-bounded.
 use crate::paths::PathsExt;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -39,25 +40,21 @@ use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::model::Offer;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
-/// What was already typed on the command line when completion was requested.
 #[derive(Default)]
 struct Typed {
     state: Option<PathBuf>,
     workspace: Option<SpaceSelector>,
     pool: Option<String>,
-    /// `--all` is already on the line.
     all: bool,
-    /// What `shoal restore`'s line asks of the spaces it names.
     restore: RestoreAction,
     /// Workspaces already named on the line, which are not offered again.
     named: Vec<String>,
-    /// What the typed command sends for the space it acts on, by which the
-    /// daemon judges the spaces offered for each of its space arguments.
+    /// What the typed command sends for the space it acts on. The daemon judges
+    /// the offered spaces by it.
     acting: Option<Acting>,
     settings: OnceLock<Settings>,
 }
 
-/// What a `shoal restore` line acts on, by the flags already on it.
 #[derive(Clone, Copy, Default)]
 enum RestoreAction {
     /// Removed spaces, which it reopens.
@@ -70,7 +67,6 @@ enum RestoreAction {
 }
 
 impl RestoreAction {
-    /// The action the flags of `matches` ask for.
     fn of(matches: &clap::ArgMatches) -> Self {
         let given = |id: &str| matches.try_contains_id(id).unwrap_or(false);
         let discard = matches.try_get_one::<bool>("discard_agent").ok().flatten() == Some(&true);
@@ -81,7 +77,6 @@ impl RestoreAction {
         }
     }
 
-    /// The target `restore`'s spaces complete for this action.
     fn target(self) -> Target {
         match self {
             Self::Reopen => Target::RemovedSpaces,
@@ -91,36 +86,26 @@ impl RestoreAction {
     }
 }
 
-/// The configuration completion reads, from cwd when no workspace resolves.
+/// The configuration completion reads, from the current directory when no
+/// workspace resolves.
 struct Settings {
-    /// The configured commands `shoal run` runs.
     commands: Commands,
     /// The agents' launchers, whose programs decide which agents complete.
     launchers: Commands,
     /// Agents pickers offer, installed or not.
     agents: Vec<Agent>,
-    /// The modes `shoal start` takes.
     modes: Vec<ModeName>,
 }
 
-/// Live values an argument can be completed with.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Target {
     Commands,
     Repositories,
-    /// The branches of the current directory's repository, local and
-    /// remote-tracking, which `shoal start --branch` opens.
     Branches,
     /// Workspaces, each described by why the command would refuse it.
     Workspaces,
-    /// Spaces: workspaces as [`Target::Workspaces`] offers them, then
-    /// chats.
     Spaces,
-    /// Workspaces described by what `shoal resume` brings back in them,
-    /// then the stopped chats.
     ResumeSpaces,
-    /// The spaces `shoal restore` acts on: the removed ones it opens
-    /// again, or as [`RestoreAction`] says for the flags on the line.
     RemovedSpaces,
     Pools,
     Members,
@@ -176,9 +161,8 @@ pub fn command() -> Command {
     decorate(command, &[], Arc::new(typed))
 }
 
-/// What the command `words` type, before the one being completed, sends
-/// for the space it acts on; none where they do not yet parse, as while a
-/// required argument is missing.
+/// What the command in `words` sends for the space it acts on. None while
+/// the words do not parse yet, such as while a required argument is missing.
 fn typed_acting(words: &[OsString]) -> Option<Acting> {
     let typed = &words[..words.len().saturating_sub(1)];
     let command = crate::cli::Cli::command().ignore_errors(true);
@@ -191,7 +175,6 @@ fn value(matches: &clap::ArgMatches, id: &str) -> Option<String> {
     matches.try_get_one::<String>(id).ok().flatten().cloned()
 }
 
-/// The text of the space argument `id`, as typed.
 fn space_value(matches: &clap::ArgMatches, id: &str) -> Option<SpaceSelector> {
     matches
         .try_get_one::<SpaceSelector>(id)
@@ -311,7 +294,6 @@ fn own_first(arg: clap::Arg) -> clap::Arg {
 }
 
 impl Typed {
-    /// The configured commands `shoal run` names; agents are not commands.
     fn command_names(&self) -> Vec<String> {
         self.settings().commands.keys().cloned().collect()
     }
@@ -556,9 +538,9 @@ impl Typed {
         Ok(names.into_iter().map(CompletionCandidate::new).collect())
     }
 
-    /// The daemon's verdicts on this machine's spaces for the typed
-    /// command's request; none, which offers every space, without one or
-    /// while the daemon cannot say.
+    /// The daemon's verdicts on this machine's spaces for the typed command's
+    /// request. None, which offers every space, without a request or while the
+    /// daemon cannot say.
     async fn offers(&self, paths: &CommandPaths) -> HashMap<SpaceId, Offer> {
         let Some(acting) = &self.acting else {
             return HashMap::new();
@@ -580,7 +562,6 @@ impl Typed {
     }
 }
 
-/// Apply the interactive deadline to a live lookup.
 async fn live<T>(lookup: impl Future<Output = Result<T>>) -> Result<T> {
     tokio::time::timeout(Duration::from_millis(500), lookup)
         .await
@@ -593,15 +574,13 @@ fn space_candidate(number: SpaceNumber, name: &SpaceName) -> CompletionCandidate
     CompletionCandidate::new(number.to_string()).help(Some(name.to_string().into()))
 }
 
-/// A chat by its number, described by its name and `kind`.
 fn chat_candidate(chat: &Chat, kind: &str) -> CompletionCandidate {
     let help = format!("{} ({kind})", chat.name);
     CompletionCandidate::new(chat.number.to_string()).help(Some(help.into()))
 }
 
-/// `candidate`, the space `name` labels, as `offer` shows it: described by
-/// the reason it is refused, or left out where it lacks what the command
-/// acts on.
+/// `candidate` as `offer` shows it: described by why the command refuses
+/// it, or left out where it lacks what the command acts on.
 fn offered(
     candidate: CompletionCandidate,
     name: String,
@@ -616,7 +595,6 @@ fn offered(
     }
 }
 
-/// Every chat `offers` offers, a stopped one described as such.
 async fn chat_candidates(
     paths: &CommandPaths,
     offers: &HashMap<SpaceId, Offer>,
@@ -634,7 +612,6 @@ async fn chat_candidates(
         .collect())
 }
 
-/// The stopped chats among `chats`, whose agents `shoal resume` brings back.
 fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
     chats
         .iter()
@@ -643,10 +620,8 @@ fn stopped_chat_candidates(chats: Vec<Chat>) -> Vec<CompletionCandidate> {
         .collect()
 }
 
-/// How completion describes a stopped chat.
 const STOPPED_CHAT: &str = "stopped chat";
 
-/// What the argument `id` of the command `name`, under `parent`, completes.
 fn target_of(id: &str, parent: &str, name: &str) -> Option<Target> {
     match (id, parent, name) {
         ("id", _, "approvals") | ("id", "approvals", "withdraw") => Some(Target::ApprovalRequests),
@@ -673,8 +648,6 @@ fn target_of(id: &str, parent: &str, name: &str) -> Option<Target> {
     }
 }
 
-/// The branches of the current directory's repository, as `--branch`
-/// opens them.
 async fn branch_candidates() -> Result<Vec<CompletionCandidate>> {
     let root = crate::git::worktree_root(&std::env::current_dir()?).await?;
     let names = crate::git::branch::selectors(&root).await?;
@@ -714,8 +687,6 @@ fn repository_candidates(
     candidates
 }
 
-/// What completion offers under `global` and the target's `layers`: a
-/// repository's own agents count as agents too.
 fn layered_settings(global: &Config, layers: &ConfigLayers) -> Settings {
     let commands: Commands = Stack::new(global, layers)
         .map(|stack| stack.named(|config| &config.commands))

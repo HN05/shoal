@@ -78,7 +78,6 @@ pub async fn choose_workspace(
     })
 }
 
-/// The workspace an explicit argument names, where `-` is the previous one.
 pub async fn explicit_workspace(ctx: &Context, selector: SpaceSelector) -> Result<SpaceSelector> {
     if recent::is_previous(&selector) {
         Ok(SpaceSelector::Id(recent::previous(ctx).await?))
@@ -122,15 +121,12 @@ async fn pick_workspace_or_all(
     Ok((id != ALL_ID).then(|| SpaceId::from(id)))
 }
 
-/// How pickers and completion name `--all`.
 pub const ALL_WORKSPACES: &str = "All workspaces";
 /// The picker ID of the entry that stands for `--all`; no workspace has it.
 pub(super) const ALL_ID: &str = "--all";
 
 pub(super) enum Resolution<'a> {
-    /// The space the command line names, or the previous one.
     Named(SpaceSelector),
-    /// The current workspace.
     Current(SpaceId),
     /// No workspace is explicit or current; the user picks among these, for
     /// what the command does with the picked one.
@@ -171,7 +167,6 @@ pub async fn workspace_picker(ctx: &Context, acting: &Acting) -> Result<SpaceId>
     pick_workspace(ctx, spaces.into_workspaces(), WORKSPACE, acting).await
 }
 
-/// The command's argument that names the workspace it acts on.
 const WORKSPACE: &str = "workspace";
 
 /// Pick one of `workspaces`, or for a command that acts on them one of the
@@ -192,7 +187,6 @@ pub async fn pick_workspace(
     Ok(SpaceId::from(pick(ctx, "Workspace> ", entries)?))
 }
 
-/// What a workspace picker says when the command takes none of them.
 const NO_WORKSPACE: &str = "no workspace this command takes";
 
 /// Pick one of `workspaces`, which a command chose from this machine's
