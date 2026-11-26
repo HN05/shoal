@@ -67,7 +67,6 @@ impl PromptSession {
         Ok(self)
     }
 
-    /// Submit `text` as a prompt in the session.
     pub async fn submit(&self, text: &str) -> Result<()> {
         submit_prompt(&self.place, text).await
     }

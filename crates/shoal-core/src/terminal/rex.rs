@@ -1,8 +1,6 @@
-//! Rex windows and blocks: Shoal opens a block per place, in a window of its
-//! own or splitting the caller's block, that runs Shoal's launch step and
-//! then the user's shell, since Rex sets no environment for a new terminal.
-//! Rex keeps sessions running without a connected app, so agents run in
-//! place in their block and outlive the Mac app or the phone.
+//! Rex as a terminal host: a block per place, in a window of its own or
+//! splitting the caller's block. Rex sets no environment for a new terminal,
+//! so the block runs Shoal's launch step and then the user's shell.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
@@ -190,11 +188,6 @@ impl Types for Rex {
     }
 }
 
-/// What Rex's section sets: `rex.enabled`, whether it opens places
-/// (`rex.new_window`) and splits the caller's block for them
-/// (`rex.placement`), their names (`rex.window_name`), the session for a
-/// terminal outside Rex (`rex.session_name`), and `rex.close_when_done`,
-/// which overrides the top-level option.
 pub(super) fn options(config: &crate::config::Rex) -> super::Options {
     super::Options {
         enabled: config.enabled,
@@ -212,7 +205,6 @@ fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())
 }
 
-/// Whether this process runs in a Rex block.
 fn in_rex() -> bool {
     var("REX_BLOCK").is_some()
 }
@@ -263,7 +255,6 @@ fn opened(origin: &Origin, block: String) -> Origin {
     }
 }
 
-/// The server of `origin`, or the one this process reaches.
 fn server_of(origin: Option<&Origin>) -> Result<Server> {
     match origin {
         Some(origin) => Server::recorded(&origin.data),

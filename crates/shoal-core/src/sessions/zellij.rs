@@ -1,11 +1,7 @@
-//! The Zellij CLI against the sessions of one socket directory, for the
-//! terminal host and the daemon's cleanup alike. Zellij runs a server per
-//! session and numbers its panes afresh each time one starts, so a place
-//! names its session beside the pane and records the server's instance, its
-//! process and birth: a pane under a recorded ID is the recorded one only on
-//! the server instance that created it. Zellij takes no condition with a
-//! command, so Shoal reads the instance just before each command on a
-//! recorded pane.
+//! The Zellij CLI against the sessions of one socket directory. Zellij
+//! numbers a session's panes afresh each time its server starts, so a pane
+//! under a recorded ID is the recorded one only on the server instance that
+//! created it, which Shoal reads just before each command on such a pane.
 use std::{
     collections::{BTreeMap, HashSet},
     ffi::OsString,
@@ -160,7 +156,6 @@ struct Listed {
 }
 
 impl Pane {
-    /// Whether the pane is a terminal rather than a plugin.
     pub(crate) fn is_terminal(&self) -> bool {
         self.id.starts_with("terminal_")
     }
@@ -176,7 +171,6 @@ impl Zellij {
         }
     }
 
-    /// The sessions this process reaches.
     pub(crate) fn here() -> Self {
         Self {
             socket_dir: var(SOCKET_DIR_VAR).map(PathBuf::from),
@@ -236,14 +230,12 @@ impl Zellij {
         command
     }
 
-    /// A `zellij action` command on `session`.
     fn action(&self, session: &str) -> Command {
         let mut command = self.command();
         command.args(["--session", session, "action"]);
         command
     }
 
-    /// Refuse a `zellij` older than [`OLDEST`].
     pub(crate) async fn ensure_supported(&self) -> Result<()> {
         let mut version = self.command();
         version.arg("--version");
@@ -540,7 +532,6 @@ impl Zellij {
         }
     }
 
-    /// The command that opens `shell` in a new tab of `session`.
     fn new_tab(&self, session: &str, shell: &Shell<'_>) -> Command {
         let mut open = self.action(session);
         open.args(["new-tab", "--name"])
@@ -712,7 +703,6 @@ impl Zellij {
         Ok(())
     }
 
-    /// The command that names the tab `tab` of `session` `name`.
     fn renaming(&self, session: &str, tab: u64, name: &str) -> Command {
         let mut rename = self.action(session);
         rename
@@ -721,7 +711,6 @@ impl Zellij {
         rename
     }
 
-    /// Wait until the tab `tab` of `session` shows the name `name`.
     async fn tab_shows_name(&self, session: &str, tab: u64, name: &str) -> Result<()> {
         self.listing_shows(session, None, |panes| {
             tab_named(panes, tab, name).then_some(())
@@ -782,8 +771,6 @@ impl Zellij {
         Ok(())
     }
 
-    /// The command that closes `pane` of `session`, whose panes are
-    /// `panes`, with its tab when no other pane is there.
     fn closing(&self, session: &str, pane: &Pane, panes: &[Pane]) -> Command {
         let mut close = self.action(session);
         if alone_in_tab(pane, panes) {
@@ -794,8 +781,6 @@ impl Zellij {
         close
     }
 
-    /// Wait until Zellij no longer lists `pane` of `session` on the server
-    /// instance `instance`.
     async fn pane_closes(&self, session: &str, instance: &str, pane: &Pane) -> Result<()> {
         self.listing_shows(session, Some(instance), |panes| {
             (!listed_in(pane, panes)).then_some(())
@@ -816,7 +801,6 @@ impl Zellij {
         Ok(())
     }
 
-    /// Ask Zellij to end `session`.
     async fn kill_session(&self, session: &str) -> Result<Reply<()>> {
         let mut kill = self.command();
         kill.args(["kill-session", session]);
@@ -851,7 +835,6 @@ enum Acted {
 }
 
 impl<T> Reply<T> {
-    /// What the server answered, if it did.
     fn answer(self) -> Option<T> {
         match self {
             Self::Answered(answer) => Some(answer),
@@ -949,7 +932,6 @@ fn pane_command<'a>(shell: &Shell<'a>) -> Vec<&'a str> {
     args
 }
 
-/// What `command` prints, failing when it fails.
 async fn run(command: Command) -> Result<String> {
     let output = Run::new(command).timeout(TIMEOUT).checked().await?;
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -985,7 +967,6 @@ fn listed(output: &Output) -> Result<Reply<String>> {
     bail!("zellij failed: {}", reason.trim())
 }
 
-/// The place ID of `pane` in `session`.
 pub(crate) fn place_id(session: &str, pane: &str) -> String {
     format!("{session}:{pane}")
 }
@@ -1223,7 +1204,6 @@ fn tab_named(panes: &[Pane], tab: u64, name: &str) -> bool {
         .any(|pane| pane.tab == tab && pane.tab_name == name)
 }
 
-/// Whether `pane` is the only one of `panes` in its tab.
 fn alone_in_tab(pane: &Pane, panes: &[Pane]) -> bool {
     panes
         .iter()
@@ -1242,7 +1222,6 @@ fn pane_ids(panes: &[Pane]) -> String {
         .join(", ")
 }
 
-/// Whether the plugin `pane` is one Zellij's layouts put in every tab.
 fn in_layout(pane: &Listed) -> bool {
     pane.plugin_url
         .as_deref()

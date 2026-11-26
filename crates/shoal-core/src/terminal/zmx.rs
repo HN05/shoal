@@ -1,9 +1,5 @@
-//! zmx sessions keep terminal agents running after their terminal closes. zmx
-//! owns the pty, passes output through unchanged while attached, and restores
-//! the screen on attach. Shoal names each session after its workspace or chat,
-//! and `shoal attach` finds it where the daemon recorded the agent or chat
-//! running; labels with the workspace's or chat's ID only decide which owner's
-//! cleanup closes it.
+//! zmx as a terminal host: sessions that keep terminal agents running after
+//! their terminal closes. See `docs/design/terminals.md`.
 use std::{
     collections::{BTreeMap, HashSet},
     ffi::OsString,
@@ -44,7 +40,6 @@ impl Host for Zmx {
         HostName::Zmx
     }
 
-    /// A zmx session.
     fn serves(&self) -> bool {
         in_session()
     }
@@ -236,7 +231,6 @@ fn on_terminal() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal() && !in_session()
 }
 
-/// Whether this process runs in a zmx session.
 fn in_session() -> bool {
     std::env::var_os(SESSION_VAR).is_some()
 }
@@ -596,13 +590,11 @@ fn hosts(sessions: &[(String, Fields)], place: &Watched) -> Result<bool> {
     }))
 }
 
-/// A session's process and creation time.
 fn instance(fields: &Fields) -> String {
     let value = |key| field(fields, key).unwrap_or_default();
     format!("{}:{}", value("pid"), value("created"))
 }
 
-/// The label naming `owner` as a session's owner.
 fn owner_label(owner: Owner<'_>) -> String {
     let key = match owner.kind() {
         OwnerKind::Workspace => WORKSPACE_LABEL,

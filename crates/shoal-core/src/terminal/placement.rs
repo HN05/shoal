@@ -1,7 +1,6 @@
 //! Whether a launch takes the caller's terminal or runs in the background.
 use crate::config::{Effective, modes::ModeName};
 
-/// Whether a launch takes the caller's terminal or runs in the background.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Placement {
     Focus,

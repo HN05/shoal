@@ -26,7 +26,6 @@ impl PlaceName {
         }
     }
 
-    /// This name under the host's name `template`.
     pub fn templated(&self, template: Option<String>) -> Self {
         Self {
             template,
@@ -43,7 +42,6 @@ impl PlaceName {
         }
     }
 
-    /// `template` filled in.
     fn fill(&self, template: &str, branch: &str, name: &str) -> String {
         crate::config::templates::render(
             template,

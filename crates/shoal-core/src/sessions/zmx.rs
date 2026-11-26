@@ -1,4 +1,4 @@
-//! zmx session discovery and termination, shared by launchers and cleanup.
+//! zmx session discovery and termination.
 use anyhow::{Context as _, Result, bail, ensure};
 use sha2::{Digest, Sha256};
 use shoal_ids::space_ids::SpaceId;
@@ -34,7 +34,6 @@ async fn socket_directory() -> Result<std::path::PathBuf> {
     reported_socket_directory(&version().await?)
 }
 
-/// Refuse a zmx older than [`OLDEST`].
 pub(crate) async fn ensure_supported() -> Result<()> {
     let version = version().await?;
     if let Some(found) = parse_version(&version) {
@@ -106,7 +105,6 @@ pub(crate) async fn kill(session: &str) -> Result<()> {
 
 pub(crate) type Fields = Vec<(String, String)>;
 
-/// Every zmx session with its fields and labels.
 pub(crate) async fn list() -> Result<Vec<(String, Fields)>> {
     let mut command = Command::new(Tool::Zmx.program());
     command.arg("list");

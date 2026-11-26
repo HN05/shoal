@@ -1,11 +1,6 @@
-//! The terminal hosts Shoal runs work in: the [`Host`] trait, the
-//! capability traits in [`host`] a host may support, the registry that
-//! chooses one under config, and the hosts themselves. Generic code never
-//! names a host; adding one means naming it in
-//! [`HostName`](crate::sessions::HostName), implementing [`Host`] and the
-//! capability traits it supports, and registering it where the compiler then
-//! asks; a `default_host` value of its name makes it the host for terminals
-//! no host serves.
+//! The terminal hosts Shoal runs work in, and the registry that chooses one
+//! under config. Generic code never names a host. See
+//! `docs/design/terminals.md`.
 mod environment;
 pub mod groups;
 mod herdr;

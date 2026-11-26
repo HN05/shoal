@@ -88,7 +88,6 @@ async fn label_of(place: &Origin, tab: &str) -> Result<Option<String>> {
     Ok(tab.and_then(|tab| tab.result.tab.label))
 }
 
-/// Name `tab`, on the server `place` records, `label`.
 async fn rename_tab(place: &Origin, tab: &str, label: &str) -> Result<()> {
     run_on(super::herdr(place), ["tab", "rename", tab, label])
         .await
@@ -99,7 +98,6 @@ async fn run<const N: usize>(args: [&str; N]) -> Result<()> {
     run_on(here(), args).await
 }
 
-/// Run `herdr` with `args`, failing unless it succeeds.
 async fn run_on<const N: usize>(mut command: Command, args: [&str; N]) -> Result<()> {
     command.args(args);
     Run::new(command).checked().await?;

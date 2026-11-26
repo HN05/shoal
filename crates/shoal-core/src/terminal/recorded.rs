@@ -433,7 +433,6 @@ fn still_shown(found: Option<&Session>) -> bool {
     found.is_none_or(|session| session.clients > 0)
 }
 
-/// `place` where `itself`, otherwise the session nested in it, if any.
 fn shown_place(place: &Origin, itself: bool) -> &Origin {
     match &place.nested {
         Some(nested) if !itself => nested,

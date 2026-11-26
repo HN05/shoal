@@ -29,7 +29,6 @@ pub(crate) struct Typed {
     file: tempfile::TempPath,
 }
 
-/// What the launch step runs.
 #[derive(Serialize, Deserialize)]
 struct Launch {
     argv: Vec<String>,

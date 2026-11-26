@@ -48,7 +48,6 @@ pub(super) fn nested_host() -> Option<HostName> {
     std::env::var(env::NESTED_SESSION).ok()?.parse().ok()
 }
 
-/// A place this process runs in, with the host that names it.
 type Hosted = (&'static dyn Host, Origin);
 
 /// The place this process runs in, outside any session nested in it, and

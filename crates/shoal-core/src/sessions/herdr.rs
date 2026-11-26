@@ -1,6 +1,6 @@
-//! The Herdr CLI against one Herdr server, for the terminal host and the
-//! daemon's cleanup alike. Herdr never reuses a session's tab or pane IDs
-//! and keeps them when its server restarts, so a pane ID identifies a place.
+//! The Herdr CLI against one Herdr server. Herdr never reuses a session's tab
+//! or pane IDs and keeps them when its server restarts, so a pane ID
+//! identifies a place.
 use std::{collections::BTreeMap, path::Path, process::Output};
 
 use anyhow::{Context as _, Result, bail};

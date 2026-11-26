@@ -1,7 +1,5 @@
-//! The tmux CLI against one tmux server, for the terminal host and the
-//! daemon's cleanup alike. tmux numbers sessions, windows and panes afresh
-//! each time its server starts, so a place records the server's instance, its
-//! process and start time, beside the pane ID: a pane under a recorded ID is
+//! The tmux CLI against one tmux server. tmux numbers sessions, windows and
+//! panes afresh each time its server starts, so a pane under a recorded ID is
 //! the recorded one only on the server instance that created it.
 use std::{
     collections::BTreeMap,
@@ -26,7 +24,6 @@ const OLDEST: (u32, u32) = (3, 3);
 /// may hold a space.
 const PANE_FORMAT: &str = "#{pane_id} #{window_id} #{window_active} #{session_attached} \
     #{pane_in_mode} #{pane_pid} #{pid}:#{start_time} #{window_name}";
-/// What tmux reports for a session: its ID and name.
 const SESSION_FORMAT: &str = "#{session_id} #{session_name}";
 /// A server instance, its process and start time, as tmux formats it.
 const INSTANCE_FORMAT: &str = "#{pid}:#{start_time}";
@@ -51,7 +48,6 @@ pub(crate) struct Tmux {
     socket: Option<PathBuf>,
 }
 
-/// A pane and where it sits now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Pane {
     pub(crate) id: String,
@@ -64,11 +60,9 @@ pub(crate) struct Pane {
     pub(crate) in_mode: bool,
     /// The process tmux started in it, usually a shell.
     pub(crate) pid: u32,
-    /// The server instance it belongs to.
     pub(crate) instance: String,
 }
 
-/// A session, with the socket of the server it runs on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Group {
     pub(crate) session: String,
@@ -139,7 +133,6 @@ impl Tmux {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
-    /// Refuse a `tmux` older than [`OLDEST`].
     pub(crate) async fn ensure_supported(&self) -> Result<()> {
         let version = self.run(&["-V"]).await?;
         if let Some(found) = parse_version(&version) {
@@ -194,7 +187,6 @@ impl Tmux {
         self.group(session).await
     }
 
-    /// The ID of the first session named `name`.
     async fn find_session(&self, name: &str) -> Result<Option<String>> {
         let listed = self.list(&["list-sessions", "-F", SESSION_FORMAT]).await?;
         Ok(listed
@@ -227,7 +219,6 @@ impl Tmux {
             .to_owned())
     }
 
-    /// The session `session` and the socket of the server it runs on.
     async fn group(&self, session: String) -> Result<Group> {
         let socket = self
             .run(&["display-message", "-p", "-t", &session, "#{socket_path}"])
@@ -426,7 +417,6 @@ pub(crate) fn var(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|value| !value.is_empty())
 }
 
-/// The `tmux` arguments that open `shell` and print the pane they opened.
 fn open_args(shell: &Shell<'_>) -> Vec<OsString> {
     let mut args: Vec<OsString> = match shell.beside {
         Some(anchor) => vec![
@@ -487,7 +477,6 @@ fn is_instance(instance: &str) -> Result<String> {
     Ok(format!("#{{==:{INSTANCE_FORMAT},{instance}}}"))
 }
 
-/// The tmux format that is true while both formats are.
 fn both(first: &str, second: &str) -> String {
     format!("#{{&&:{first},{second}}}")
 }
@@ -552,7 +541,6 @@ fn command_list(commands: &[Vec<String>]) -> String {
         .join(" ; ")
 }
 
-/// `words` as an owned command.
 fn words(words: &[&str]) -> Vec<String> {
     words.iter().map(|word| (*word).to_owned()).collect()
 }
@@ -604,7 +592,6 @@ fn parse_pane(line: &str) -> Option<Pane> {
     })
 }
 
-/// A listed session's ID and name.
 fn parse_session(line: &str) -> Option<(&str, &str)> {
     line.split_once(' ')
 }

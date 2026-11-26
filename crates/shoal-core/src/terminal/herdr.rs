@@ -1,4 +1,5 @@
-//! Herdr terminal handoffs; workspace ownership stays with the daemon.
+//! Herdr as a terminal host: a tab per place beside the caller's pane. See
+//! `docs/design/terminals.md`.
 use std::{
     collections::BTreeMap,
     ffi::OsString,
@@ -39,7 +40,6 @@ impl Host for Herdr {
         HostName::Herdr
     }
 
-    /// A Herdr pane.
     fn serves(&self) -> bool {
         in_herdr()
     }
@@ -193,10 +193,6 @@ fn ensure_reachable(data: &BTreeMap<String, String>) -> Result<()> {
     crate::tools::ensure_program("background launch", "herdr")
 }
 
-/// What Herdr's section sets: `herdr.enabled`, whether it opens tabs
-/// (`herdr.new_tab`), their names (`herdr.tab_name`), the workspace for a
-/// terminal outside Herdr (`herdr.workspace_name`), and
-/// `herdr.close_when_done`, which overrides the top-level option.
 pub(super) fn options(config: &config::Herdr) -> Options {
     Options {
         enabled: config.enabled,
@@ -236,7 +232,6 @@ fn origin() -> Option<Origin> {
 
 const WORKSPACE_VAR: &str = "HERDR_WORKSPACE_ID";
 
-/// A `herdr` command reaching the server of `origin`.
 fn herdr(origin: &Origin) -> Command {
     herdr::command(&origin.data)
 }
@@ -295,7 +290,6 @@ async fn processes(origin: &Origin, pane: &str) -> Option<PaneProcesses> {
         .map(|info| info.result.process_info)
 }
 
-/// The Herdr pane this process runs in.
 fn current_pane() -> Option<String> {
     if std::env::var("HERDR_ENV").as_deref() != Ok("1") {
         return None;

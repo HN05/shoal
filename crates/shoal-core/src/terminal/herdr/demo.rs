@@ -58,7 +58,6 @@ pub(super) async fn screen(place: &Origin) -> Result<String> {
     Ok(read_text(&output.stdout))
 }
 
-/// Type `keys` into the demo in the pane at `place`, through its server.
 pub(super) async fn send(place: &Origin, keys: &str) -> Result<()> {
     let mut send = herdr(place);
     send.args(["pane", "send-text", place.id(), keys]);

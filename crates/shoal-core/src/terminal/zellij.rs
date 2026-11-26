@@ -1,12 +1,5 @@
-//! Zellij tabs and panes: Shoal opens a pane per place, in a tab of its own
-//! or splitting the caller's pane, that runs its command and then a shell,
-//! as a Herdr tab keeps one. Zellij drops tabs opened in a session no client
-//! shows, so a place for such a session, or for a terminal outside Zellij,
-//! opens as the first pane of a session of its own. Each session's server
-//! keeps its panes running without a client, so agents run in place in their
-//! pane and outlive the terminal that showed them. A session is a group and a
-//! pane a place; Zellij renders panes through its own terminal emulator, so
-//! output reaches the user as Zellij redraws it.
+//! Zellij as a terminal host: a pane per place, in a tab of its own or
+//! splitting the caller's pane. See `docs/design/terminals.md`.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, ensure};
@@ -41,7 +34,6 @@ impl Host for Zellij {
         HostName::Zellij
     }
 
-    /// A Zellij pane.
     fn serves(&self) -> bool {
         var(SESSION_VAR).is_some() && var(PANE_VAR).is_some()
     }
@@ -212,13 +204,6 @@ impl Types for Zellij {
     }
 }
 
-/// What Zellij's section sets: whether it serves Zellij panes
-/// (`zellij.enabled`, unset following whether `default_host` names Zellij),
-/// whether it opens places (`zellij.new_tab`) and splits the caller's pane
-/// for them (`zellij.placement`), their names (`zellij.tab_name`), and
-/// `zellij.close_when_done`, which overrides the top-level option. Zellij
-/// keeps no configured group: a place outside a session a client shows gets
-/// a session of its own.
 pub(super) fn options(config: &crate::config::Zellij, default_host: HostName) -> super::Options {
     super::Options {
         enabled: config.enabled.unwrap_or(default_host == HostName::Zellij),
@@ -271,7 +256,6 @@ async fn reach(place: &Origin) -> Result<(Server, PaneRef<'_>)> {
     Ok((server, pane))
 }
 
-/// The pane `place` names.
 fn pane_of(place: &Origin) -> Result<PaneRef<'_>> {
     parse_place(place.id()).with_context(|| format!("invalid Zellij place {}", place.id()))
 }
@@ -328,7 +312,6 @@ async fn shown_session<'a>(server: &Server, origin: Option<&'a Origin>) -> Resul
     Ok(server.shown(session).await?.then_some(session))
 }
 
-/// The place `opened` is, owned by Shoal, in its session.
 fn opened_place(opened: Opened) -> Origin {
     Origin {
         host: HostName::Zellij,

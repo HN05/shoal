@@ -71,7 +71,6 @@ impl HerdrSession<'_> {
     }
 }
 
-/// The sessions the `herdr` that reaches `place` lists.
 async fn listed_sessions(place: &Origin) -> Result<Vec<ListedSession>> {
     let mut list = herdr(place);
     list.args(["session", "list", "--json"]);
@@ -145,7 +144,6 @@ async fn pane(place: &Origin) -> Result<Option<Pane>> {
     super::pane(herdr(place), place.id()).await
 }
 
-/// `tab` on the server of `place`.
 async fn tab(place: &Origin, tab: &str) -> Result<TabState> {
     let mut get = herdr(place);
     get.args(["tab", "get", tab]);

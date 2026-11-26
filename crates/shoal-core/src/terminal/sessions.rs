@@ -17,7 +17,6 @@ pub enum Owner<'a> {
     Chat(&'a SpaceId),
 }
 
-/// What kind of [`Owner`] a session has.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OwnerKind {
     Workspace,
@@ -88,7 +87,6 @@ impl Session {
         (self.place.host, &self.name)
     }
 
-    /// The session as commands print it.
     pub fn output(self) -> shoal_protocol::sessions::TerminalSession {
         shoal_protocol::sessions::TerminalSession {
             name: self.name,

@@ -1,5 +1,5 @@
-//! Terminal sessions Shoal created, shared by the CLI and daemon. Places the
-//! user opened stay theirs, even when Shoal runs an agent in them.
+//! Terminal sessions Shoal created. Places the user opened stay theirs, even
+//! when Shoal runs an agent in them.
 pub(crate) mod herdr;
 mod locking;
 pub(crate) mod rex;
@@ -31,11 +31,9 @@ pub enum Owner {
     Demo(String),
 }
 
-/// A host exposes its session operations; lifecycle policy belongs to the daemon.
 /// Verified closes must exclude ownership replacement in the native namespace.
 pub trait Host: Send + Sync {
     fn name(&self) -> HostName;
-    /// Refuse when the program this host runs is missing.
     fn ensure_installed(&self) -> Result<()>;
     /// What names the server holding a place among this host's servers, as
     /// the place's `data` records it; empty for a host with one server.

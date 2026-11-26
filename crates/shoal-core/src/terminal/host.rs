@@ -24,7 +24,6 @@ pub trait Host: Sync {
     /// config enables it.
     fn serves(&self) -> bool;
 
-    /// Refuse when the programs this host runs are missing.
     fn ensure_installed(&self) -> Result<()> {
         Ok(())
     }
@@ -368,7 +367,6 @@ pub struct Start<'a> {
     pub state: &'a Path,
     /// The place the start comes from, whose group the new place joins.
     pub origin: Option<&'a Origin>,
-    /// The directory the place opens at.
     pub cwd: &'a Path,
     /// What the place is called: a tab's label, a session's name.
     pub label: &'a str,
@@ -377,7 +375,6 @@ pub struct Start<'a> {
     /// The caller's place, which the new place splits; `None` opens a place
     /// of its own.
     pub split: Option<&'a str>,
-    /// The command the place runs.
     pub argv: &'a [OsString],
     /// Variables the command needs from this process, since the place may
     /// start in an environment of its own.

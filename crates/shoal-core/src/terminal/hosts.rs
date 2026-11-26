@@ -299,7 +299,6 @@ pub(crate) fn launcher_program(settings: &Effective) -> Option<&'static str> {
         .map(Attaches::launcher_program)
 }
 
-/// Whether this process runs on a terminal.
 fn on_terminal() -> bool {
     std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
 }
@@ -360,7 +359,6 @@ pub fn enabled_host(settings: &Effective, name: HostName) -> Option<&'static dyn
         .map(|host| host.host)
 }
 
-/// Whether the places `host` opens show a name.
 pub fn names_places(host: &dyn Host) -> bool {
     host.places().is_some_and(Places::names_places)
 }

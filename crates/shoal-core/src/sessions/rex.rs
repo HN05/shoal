@@ -1,6 +1,5 @@
-//! The Rex CLI against one Rex server, for the terminal host and the
-//! daemon's cleanup alike. Rex never reuses IDs, so session, window and
-//! block IDs identify places; labels only find a session by name.
+//! The Rex CLI against one Rex server. Rex never reuses IDs, so session,
+//! window and block IDs identify places; labels only find a session by name.
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -39,14 +38,12 @@ fn server(data: &BTreeMap<String, String>) -> String {
     data.get(SERVER).cloned().unwrap_or_default()
 }
 
-/// A Rex server and the `rex` that reaches it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Rex {
     program: PathBuf,
     server: Option<String>,
 }
 
-/// A block and where it sits now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Block {
     pub(crate) session: String,
@@ -60,7 +57,6 @@ pub(crate) struct Opened {
     pub(crate) block: String,
 }
 
-/// A shell block to open in a session.
 pub(crate) struct Shell<'a> {
     pub(crate) session: &'a str,
     pub(crate) label: &'a str,
@@ -74,7 +70,6 @@ pub(crate) struct Shell<'a> {
 }
 
 impl Shell<'_> {
-    /// The layout node that starts the shell.
     fn layout(&self) -> Result<serde_json::Value> {
         let mut options = json!({
             "cwd": self.cwd.to_str().context("the shell's directory is not UTF-8")?,
@@ -87,7 +82,6 @@ impl Shell<'_> {
 }
 
 impl Rex {
-    /// The server and `rex` that origin `data` records.
     pub(crate) fn recorded(data: &BTreeMap<String, String>) -> Result<Self> {
         Ok(Self {
             program: program(data.get(BIN_DIR).map(PathBuf::from))?,
@@ -176,14 +170,12 @@ impl Rex {
         }
     }
 
-    /// Every session on the server.
     async fn sessions(&self) -> Result<Vec<Session>> {
         let listed: Sessions = serde_json::from_slice(&self.run(&["ls", "--json"]).await?)
             .context("invalid Rex session list")?;
         Ok(listed.sessions)
     }
 
-    /// A new session labelled `label` at `cwd`.
     async fn create_session(&self, label: &str, cwd: &Path) -> Result<String> {
         let cwd = cwd
             .to_str()
@@ -291,7 +283,6 @@ impl Rex {
         Ok(())
     }
 
-    /// `block`'s screen and scrollback as text.
     pub(crate) async fn capture(&self, block: &str) -> Result<String> {
         let output = self.run(&["capture", "-b", block, "--trim"]).await?;
         Ok(String::from_utf8_lossy(&output).into_owned())
@@ -347,7 +338,6 @@ impl Rex {
         Ok(self.clients().await?.showing(session))
     }
 
-    /// The clients connected to the server.
     async fn clients(&self) -> Result<Clients> {
         let output = self.run(&["client", "ls", "--json"]).await?;
         serde_json::from_slice(&output).context("invalid Rex client list")
@@ -389,14 +379,12 @@ impl Rex {
         Ok(())
     }
 
-    /// Label block `id` of `session` `label`.
     async fn set_block_label(&self, session: &str, id: &str, label: &str) -> Result<()> {
         let input = json!({"session_id": session, "block_id": id, "label": label});
         self.call("session.set_block_label", input).await?;
         Ok(())
     }
 
-    /// Label `window` of `session` `label`.
     async fn set_window_label(&self, session: &str, window: &str, label: &str) -> Result<()> {
         let input = json!({"session_id": session, "window_id": window, "label": label});
         self.call("session.set_window_label", input).await?;
@@ -588,7 +576,6 @@ impl WindowInfo {
         self.layers.iter().flat_map(|layer| &layer.blocks)
     }
 
-    /// Whether block `id` is the window's only block.
     fn holds_only(&self, id: &str) -> bool {
         let mut blocks = self.blocks();
         blocks.next().is_some_and(|block| block.block_id == id) && blocks.next().is_none()
@@ -630,7 +617,6 @@ struct Process {
     name: String,
 }
 
-/// How a terminal takes typed input.
 #[derive(Deserialize)]
 struct InputMode {
     canonical: bool,
@@ -680,7 +666,6 @@ struct ClientInfo {
     label: Option<String>,
 }
 
-/// What `rex whoami` says of the server.
 #[derive(Deserialize)]
 struct Identity {
     tailscale: Option<Tailscale>,
@@ -698,7 +683,6 @@ impl Clients {
             .map(|client| client.client_id.as_str())
     }
 
-    /// The label the connected Mac app reports.
     fn mac_app_label(&self) -> Option<&str> {
         let info = self.mac_app_client()?.info.as_ref()?;
         info.label.as_deref()
@@ -710,7 +694,6 @@ impl Clients {
             .map(|(client, _)| client)
     }
 
-    /// The connected app labelled `label`.
     fn app_labelled(&self, label: &str) -> Option<&str> {
         self.apps()
             .find(|(_, info)| info.label.as_deref() == Some(label))
@@ -725,7 +708,6 @@ impl Clients {
         })
     }
 
-    /// How many connected apps show `session`.
     fn showing(&self, session: &str) -> u32 {
         let count = self
             .clients

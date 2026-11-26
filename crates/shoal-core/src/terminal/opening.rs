@@ -71,7 +71,6 @@ pub fn chat_place_env(paths: &Paths) -> Result<Vec<(&'static str, String)>> {
     Ok(env)
 }
 
-/// This executable with `args`, as a place runs it.
 pub fn shoal_command(paths: &Paths, args: &[OsString]) -> Result<Vec<OsString>> {
     let mut argv = crate::workers::shoal_argv(paths)?;
     argv.extend_from_slice(args);

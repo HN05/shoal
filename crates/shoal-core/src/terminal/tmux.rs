@@ -1,9 +1,5 @@
-//! tmux windows and panes: Shoal opens a pane per place, in a window of its
-//! own or splitting the caller's pane, that runs its command and then a
-//! shell, as a Herdr tab keeps one. The tmux server keeps panes running without a client, so
-//! agents run in place in their pane and outlive the terminal that showed
-//! them. A session is a group and a pane a place; tmux renders panes through
-//! its own terminal emulator, so output reaches the user as tmux redraws it.
+//! tmux as a terminal host: a pane per place, in a window of its own or
+//! splitting the caller's pane. See `docs/design/terminals.md`.
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context as _, Result, bail};
@@ -23,7 +19,6 @@ use crate::{
     tools::{Tool, ensure_program},
 };
 
-/// The variable naming the pane a process runs in.
 const PANE_VAR: &str = "TMUX_PANE";
 /// Lines of scrollback a demo's screen read returns.
 const SCREEN_LINES: u32 = 500;
@@ -37,7 +32,6 @@ impl Host for Tmux {
         HostName::Tmux
     }
 
-    /// A tmux pane.
     fn serves(&self) -> bool {
         in_tmux()
     }
@@ -220,12 +214,6 @@ impl Types for Tmux {
     }
 }
 
-/// What tmux's section sets: whether it serves tmux panes (`tmux.enabled`,
-/// unset following whether `default_host` names tmux), whether it opens
-/// places (`tmux.new_window`) and splits the caller's pane for them
-/// (`tmux.placement`), their names (`tmux.window_name`), the session for a
-/// terminal outside tmux (`tmux.session_name`), and `tmux.close_when_done`,
-/// which overrides the top-level option.
 pub(super) fn options(config: &crate::config::Tmux, default_host: HostName) -> super::Options {
     super::Options {
         enabled: config.enabled.unwrap_or(default_host == HostName::Tmux),
@@ -238,7 +226,6 @@ pub(super) fn options(config: &crate::config::Tmux, default_host: HostName) -> s
     }
 }
 
-/// Whether this process runs in a tmux pane.
 fn in_tmux() -> bool {
     var("TMUX").is_some() && var(PANE_VAR).is_some()
 }
@@ -260,7 +247,6 @@ fn origin() -> Option<Origin> {
     })
 }
 
-/// The server of `origin`, or the one this process reaches.
 fn server_of(origin: Option<&Origin>) -> Server {
     origin.map_or_else(Server::here, |origin| Server::recorded(&origin.data))
 }
@@ -309,7 +295,6 @@ async fn open_pane(start: &Start<'_>) -> Result<Origin> {
     Ok(place)
 }
 
-/// The session `origin` names.
 fn session_of(origin: &Origin) -> Result<&str> {
     origin
         .group
@@ -324,7 +309,6 @@ async fn open_place(origin: &Origin, shell: &Shell<'_>) -> Result<Origin> {
     Ok(opened_place(origin, server.open(shell).await?))
 }
 
-/// The place `opened` is, in the group of `origin`.
 fn opened_place(origin: &Origin, opened: Opened) -> Origin {
     Origin {
         place: Some(opened.pane),
