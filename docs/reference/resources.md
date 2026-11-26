@@ -414,7 +414,7 @@ the checkout as it is.
 ### Resource hooks
 
 [`hooks.post_resource_acquire` and `hooks.pre_resource_release`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hooks)
-run for resource permits, by the [hook path and environment rules](setup.md).
+run for resource permits, by the [hook path and environment rules](setup.md#hooks).
 They run in the daemon without a terminal, for at most 60 seconds.
 `SHOAL_RESOURCE_LEASE` holds the lease as JSON, with its `id`, `scope`,
 `pool`, `resource`, `name`, `mode`, `reason` and `acquirer`.

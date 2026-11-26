@@ -143,7 +143,7 @@ and a daemon restart does not replay it.
 The hook runs without a terminal, with a 60-second limit. Its working
 directory is the one the space's agent works in. A chat without a repository
 runs the global config's hook in its `root_dir`, with the global config's
-`[env]`. The hook receives the [hook environment](setup.md) and
+`[env]`. The hook receives the [hook environment](setup.md#hook-environment) and
 `SHOAL_DONE_CHOICE`, `keep` or `cleanup`.
 
 A failed hook records a `hook_failed` alert. It neither undoes the completion

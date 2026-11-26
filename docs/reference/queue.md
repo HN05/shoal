@@ -167,7 +167,7 @@ commands:
   when the workspace has none.
 - `shoal rm <space>` removes the workspace.
 
-[Setup](setup.md) says how a failed setup is retried or accepted.
+[Setup](setup.md#failed-setup) says how a failed setup is retried or accepted.
 
 ### Failed worktrees
 
