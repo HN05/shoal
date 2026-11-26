@@ -35,6 +35,7 @@ async fn a_review_arrives_after_the_entries_queued_before_it_in_the_same_second(
             space: String::from("reviewed").into(),
             queued_after,
         }),
+        work: crate::queue::state::OneShotWork::Review,
         requested_at: UnixTime::from_seconds(10),
         after_stop: false,
     };

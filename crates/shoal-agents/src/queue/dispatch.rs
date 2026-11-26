@@ -15,6 +15,7 @@ use super::{
     carrier::Carrier,
     expiry,
     limits::{Admission, Place, Waiting, Wake, Work, admit},
+    state::OneShotWork,
     store::{QueuedRow, queued_rows},
     weight::Light,
 };
@@ -122,7 +123,16 @@ impl WaitingWork {
     fn needs_recovery(&self, admitted: &[QueueEntryId]) -> bool {
         self.admitted_restores(admitted)
             .any(|(_, restore)| restore.wake == Wake::Recovery)
-            || self.admits(admitted, |work| *work == Work::OneShot { after_stop: true })
+            || self.admits(admitted, |work| {
+                matches!(
+                    work,
+                    Work::OneShot { after_stop: true }
+                        | Work::Measured {
+                            after_stop: true,
+                            ..
+                        }
+                )
+            })
     }
 
     /// The executions of the restores whose agent holds no slot while it
@@ -132,6 +142,18 @@ impl WaitingWork {
             .filter(|restore| restore.dormant())
             .map(|restore| restore.execution.clone())
             .collect()
+    }
+}
+
+/// What admission weighs for a one-shot run of `work`, which waits for
+/// healthy readings `after_stop`.
+fn oneshot_work(work: OneShotWork, after_stop: bool) -> Work {
+    match work {
+        OneShotWork::Review => Work::OneShot { after_stop },
+        OneShotWork::Measured(measured) => Work::Measured {
+            expected: measured.expected,
+            after_stop,
+        },
     }
 }
 
@@ -368,9 +390,7 @@ impl Agents {
             waited_for_memory: self.agent_queue.waited_for_memory(&oneshot.id, now),
             id: oneshot.id,
             repository: Some(oneshot.repository),
-            work: Work::OneShot {
-                after_stop: oneshot.after_stop,
-            },
+            work: oneshot_work(oneshot.work, oneshot.after_stop),
             light: false,
             place: None,
         });

@@ -54,11 +54,17 @@ pub struct Agents {
     /// is expected to use beyond what its workspace used at the latest
     /// sample.
     pub job_reservation: u64,
+    /// Commands and seed builds running.
+    pub commands: u32,
+    /// The memory the commands and seed builds running have yet to use:
+    /// what each is expected to use beyond what it holds now.
+    pub command_reservation: u64,
     /// Time since the newest agent, job or start began.
     pub newest: Option<Duration>,
 }
 
-/// What one used slot does to measured memory.
+/// What one used slot, or one command or seed build, does to measured
+/// memory.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Activity {
     /// An admitted start whose agent has not registered, since this long.
@@ -76,6 +82,10 @@ pub enum Activity {
         cost: JobCost,
         memory: Option<u64>,
     },
+    /// A command or seed build expected to use `expected` bytes, which
+    /// holds `using` now. Its reservation counts its whole expected memory
+    /// from its start, so it staggers no start.
+    Measured { expected: u64, using: u64 },
 }
 
 /// What measured memory and disk leave for one more start.
@@ -137,6 +147,25 @@ impl Room {
         self.fits(cost.memory)
     }
 
+    /// Whether a command or seed build expected to use `expected` fits.
+    pub fn fits_measured(&self, expected: u64) -> Result<(), Unfit> {
+        self.fits(Some(expected))
+    }
+
+    /// What is left once a command or seed build expected to use
+    /// `expected` starts in this room within one admission pass: less
+    /// memory, and nothing more beside one an idle machine started.
+    pub fn after_measured(self, expected: u64) -> Self {
+        match self {
+            Self::Free { memory, agent } => Self::Free {
+                memory: memory.saturating_sub(expected),
+                agent,
+            },
+            Self::Idle => Self::Staggered,
+            room => room,
+        }
+    }
+
     /// Whether a start using `memory`, or an agent's without it, fits.
     fn fits(&self, memory: Option<u64>) -> Result<(), Unfit> {
         match *self {
@@ -169,8 +198,14 @@ impl Agents {
         agents
     }
 
-    /// Count one used slot.
+    /// Count one used slot, or a command or seed build, which holds none.
     fn add(&mut self, activity: Activity) {
+        if let Activity::Measured { expected, using } = activity {
+            self.commands += 1;
+            let left = expected.saturating_sub(using);
+            self.command_reservation = self.command_reservation.saturating_add(left);
+            return;
+        }
         self.total += 1;
         let age = match activity {
             Activity::Starting(age) => {
@@ -193,7 +228,7 @@ impl Agents {
                 self.jobs += 1;
                 age
             }
-            Activity::Stopped => return,
+            Activity::Measured { .. } | Activity::Stopped => return,
         };
         self.newest = Some(self.newest.map_or(age, |newest| newest.min(age)));
     }
@@ -227,12 +262,14 @@ impl Agents {
         }
     }
 
-    /// The memory the warming agents, each at `agent`, and the jobs are
-    /// expected to use beyond what the machine's reading holds.
+    /// The memory the warming agents, each at `agent`, the jobs, the
+    /// commands and the seed builds are expected to use beyond what the
+    /// machine's reading holds.
     fn reserved_memory(&self, agent: u64) -> u64 {
         agent
             .saturating_mul(u64::from(self.warming))
             .saturating_add(self.job_reservation)
+            .saturating_add(self.command_reservation)
     }
 }
 
@@ -376,12 +413,38 @@ pub fn room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
     if blocked(sample, settings) {
         return Room::Held(HeldBy::Reading);
     }
-    if agents.warming + agents.settled + agents.jobs == 0 {
+    if agents.warming + agents.settled + agents.jobs + agents.commands == 0 {
         return Room::Idle;
     }
     if agents.newest.is_some_and(|age| age < STAGGER) {
         return Room::Staggered;
     }
+    free_room(sample, agents, settings)
+}
+
+/// What measured memory and disk leave for a command or seed build beside
+/// `agents`, as [`room`] leaves it for an agent but for the stagger, since
+/// its reservation counts its whole expected memory from its start. With no
+/// job, command or seed build running, one starts whatever it is expected
+/// to use: the agents it runs beside free no memory by its waiting, so it
+/// would wait for good. Low disk holds back every one, the first too.
+pub fn measured_room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
+    if blocked(sample, settings) {
+        return Room::Held(HeldBy::Reading);
+    }
+    if disk(sample.disk_free, settings) != Disk::Healthy {
+        return Room::Held(HeldBy::Disk);
+    }
+    if agents.jobs + agents.commands == 0 {
+        return Room::Idle;
+    }
+    free_room(sample, agents, settings)
+}
+
+/// What measured memory and disk leave once every warming agent, job,
+/// command and seed build uses what it is expected to, or nothing past the
+/// disk's warning.
+fn free_room(sample: HostSample, agents: Agents, settings: &Overload) -> Room {
     if disk(sample.disk_free, settings) != Disk::Healthy {
         return Room::Held(HeldBy::Disk);
     }

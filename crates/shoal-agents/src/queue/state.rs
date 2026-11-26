@@ -68,6 +68,9 @@ struct OneShots {
 struct OneShot {
     repository: RepositoryId,
     serving: Option<Serving>,
+    work: OneShotWork,
+    /// The memory, in bytes, it holds now, as its last report said.
+    using: u64,
     requested_at: UnixTime,
     /// Whether protection stopped its earlier run, so it waits for healthy
     /// readings as a stopped agent's restore does.
@@ -77,6 +80,55 @@ struct OneShot {
     /// Stops the run for protection, until it is used or the run cannot be
     /// stopped.
     stop: Option<Box<dyn FnOnce() + Send + Sync>>,
+}
+
+/// What a one-shot run runs, which decides how admission weighs it and
+/// where protection stops it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OneShotWork {
+    /// A review's agent, which counts as an agent's start and goes first
+    /// under load, since it starts over at no loss.
+    Review,
+    /// A command or seed build, which counts at its expected memory and
+    /// goes after CI jobs under load.
+    Measured(Measured),
+}
+
+/// A command or seed build, expected to use `expected` bytes of memory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Measured {
+    pub kind: MeasuredKind,
+    pub expected: u64,
+}
+
+/// What a measured run is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MeasuredKind {
+    /// A `shoal run` command, as `shoal queue` names it.
+    Command(String),
+    SeedBuild,
+}
+
+/// An admitted command or seed build, as protection weighs its stop.
+pub struct RunningMeasured {
+    /// Its queue ID while it waited, by which protection stops it.
+    pub id: QueueEntryId,
+    pub repository: RepositoryId,
+    /// The space whose work it serves; none for a seed build.
+    pub space: Option<SpaceId>,
+    /// How long it has run.
+    pub running_for: Duration,
+    /// The memory, in bytes, it holds now.
+    pub using: u64,
+}
+
+/// An admitted one-shot run, as measured memory counts it.
+pub struct AdmittedOneShot {
+    pub repository: RepositoryId,
+    pub work: OneShotWork,
+    /// How long it has run.
+    pub running_for: Duration,
+    pub using: u64,
 }
 
 /// Which admitted one-shot runs protection stops.
@@ -93,6 +145,7 @@ pub struct WaitingOneShot {
     pub repository: RepositoryId,
     /// What it serves, which it ranks with.
     pub serving: Option<Serving>,
+    pub work: OneShotWork,
     pub requested_at: UnixTime,
     pub after_stop: bool,
 }
@@ -113,6 +166,12 @@ fn oneshot_id(number: u64) -> QueueEntryId {
 }
 
 const ONESHOT_PREFIX: &str = "oneshot:";
+
+/// The number of the one-shot request whose queue ID is `id`, if it names
+/// one.
+fn oneshot_number(id: &QueueEntryId) -> Option<u64> {
+    id.as_str().strip_prefix(ONESHOT_PREFIX)?.parse().ok()
+}
 
 impl AgentQueue {
     /// Serialize admission, so two passes cannot fill one slot.
@@ -268,13 +327,29 @@ impl AgentQueue {
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotAdmission<'_> {
-        self.request(repository, Some(serving), after_stop, stop)
+        let review = (Some(serving), OneShotWork::Review);
+        self.request(repository, review, after_stop, stop)
+    }
+
+    /// Ask for admission in `repository` for a command or seed build,
+    /// `measured`, of the work it is `serving`, as [`Self::request_oneshot`]
+    /// asks for a review's.
+    pub fn request_measured(
+        &self,
+        repository: &RepositoryId,
+        serving: Option<Serving>,
+        measured: Measured,
+        after_stop: bool,
+        stop: impl FnOnce() + Send + Sync + 'static,
+    ) -> OneShotAdmission<'_> {
+        let run = (serving, OneShotWork::Measured(measured));
+        self.request(repository, run, after_stop, stop)
     }
 
     fn request(
         &self,
         repository: &RepositoryId,
-        serving: Option<Serving>,
+        (serving, work): (Option<Serving>, OneShotWork),
         after_stop: bool,
         stop: impl FnOnce() + Send + Sync + 'static,
     ) -> OneShotAdmission<'_> {
@@ -287,6 +362,8 @@ impl AgentQueue {
             OneShot {
                 repository: repository.clone(),
                 serving,
+                work,
+                using: 0,
                 requested_at: UnixTime::now(),
                 after_stop,
                 admitted,
@@ -305,7 +382,7 @@ impl AgentQueue {
     /// Hold an admission in `repository` until the daemon restarts, for a run a
     /// stopped daemon left whose processes could not be proven stopped.
     pub fn hold_oneshot(&self, repository: &RepositoryId) {
-        let admission = self.request(repository, None, false, || {});
+        let admission = self.request(repository, (None, OneShotWork::Review), false, || {});
         if let Some(run) = self.oneshots.lock().unwrap().runs.get(&admission.number) {
             run.admitted.send_replace(Some(Instant::now()));
         }
@@ -324,19 +401,22 @@ impl AgentQueue {
                 id: oneshot_id(*number),
                 repository: run.repository.clone(),
                 serving: run.serving.clone(),
+                work: run.work.clone(),
                 requested_at: run.requested_at,
                 after_stop: run.after_stop,
             })
             .collect()
     }
 
-    /// Stop the admitted one-shot runs `which` picks among those not yet
-    /// stopped and not held, returning how many.
+    /// Stop the admitted reviews `which` picks among those not yet stopped
+    /// and not held, returning how many. Commands and seed builds take
+    /// their place in the stop order instead.
     pub fn stop_oneshots(&self, which: OneShotStop) -> usize {
         let mut oneshots = self.oneshots.lock().unwrap();
         let mut stoppable: Vec<&mut OneShot> = oneshots
             .runs
             .values_mut()
+            .filter(|run| run.work == OneShotWork::Review)
             .filter(|run| run.admitted.borrow().is_some() && run.stop.is_some())
             .collect();
         if let OneShotStop::Newest = which {
@@ -351,31 +431,57 @@ impl AgentQueue {
         stoppable.len()
     }
 
-    /// The repository of each admitted one-shot run, with how long it has
-    /// run.
-    pub fn admitted_oneshots(&self) -> Vec<(RepositoryId, std::time::Duration)> {
+    /// The admitted one-shot runs.
+    pub fn admitted_oneshots(&self) -> Vec<AdmittedOneShot> {
         self.oneshots
             .lock()
             .unwrap()
             .runs
             .values()
             .filter_map(|run| {
-                Some((
-                    run.repository.clone(),
-                    run.admitted.borrow().as_ref()?.elapsed(),
-                ))
+                Some(AdmittedOneShot {
+                    repository: run.repository.clone(),
+                    work: run.work.clone(),
+                    running_for: run.admitted.borrow().as_ref()?.elapsed(),
+                    using: run.using,
+                })
             })
             .collect()
+    }
+
+    /// The admitted commands and seed builds protection may stop.
+    pub fn running_measured(&self) -> Vec<RunningMeasured> {
+        let oneshots = self.oneshots.lock().unwrap();
+        (oneshots.runs.iter())
+            .filter(|(_, run)| matches!(run.work, OneShotWork::Measured(_)) && run.stop.is_some())
+            .filter_map(|(number, run)| {
+                Some(RunningMeasured {
+                    id: oneshot_id(*number),
+                    repository: run.repository.clone(),
+                    space: run.serving.as_ref().map(|serving| serving.space.clone()),
+                    running_for: run.admitted.borrow().as_ref()?.elapsed(),
+                    using: run.using,
+                })
+            })
+            .collect()
+    }
+
+    /// Stop the admitted command or seed build `id` for protection,
+    /// returning whether it was there to stop.
+    pub fn stop_measured(&self, id: &QueueEntryId) -> bool {
+        let Some(number) = oneshot_number(id) else {
+            return false;
+        };
+        let stop = (self.oneshots.lock().unwrap().runs.get_mut(&number))
+            .filter(|run| run.admitted.borrow().is_some())
+            .and_then(|run| run.stop.take());
+        stop.map(|stop| stop()).is_some()
     }
 
     /// Admit the one-shot request with queue ID `id`; false when
     /// `id` names no one-shot request.
     pub fn admit_oneshot(&self, id: &QueueEntryId) -> bool {
-        let Some(number) = id
-            .as_str()
-            .strip_prefix(ONESHOT_PREFIX)
-            .and_then(|number| number.parse().ok())
-        else {
+        let Some(number) = oneshot_number(id) else {
             return false;
         };
         if let Some(run) = self.oneshots.lock().unwrap().runs.get(&number) {
@@ -470,6 +576,24 @@ impl OneShotAdmission<'_> {
     pub async fn admitted(&mut self) {
         // The sender lives as long as this request.
         let _ = self.admitted.wait_for(Option::is_some).await;
+    }
+
+    /// Its queue ID while it waits.
+    pub fn id(&self) -> QueueEntryId {
+        oneshot_id(self.number)
+    }
+
+    /// Admit it now, whatever the limits, as `--now` starts work.
+    pub fn admit_now(&self) {
+        self.queue.admit_oneshot(&self.id());
+    }
+
+    /// Record that the run holds `memory` bytes now.
+    pub fn using(&self, memory: u64) {
+        let mut oneshots = self.queue.oneshots.lock().unwrap();
+        if let Some(run) = oneshots.runs.get_mut(&self.number) {
+            run.using = memory;
+        }
     }
 
     /// Keep the admission of a run whose processes may still be running until the

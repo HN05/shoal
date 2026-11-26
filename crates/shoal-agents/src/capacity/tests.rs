@@ -76,6 +76,11 @@ fn slots_count_by_how_far_their_memory_shows() {
             job(MINUTE, None, Some(GIB)),
             job(WARM_UP, Some(GIB), Some(GIB / 2)),
             Activity::Stopped,
+            // A command holds no slot and staggers nothing.
+            Activity::Measured {
+                expected: 4 * GIB,
+                using: GIB,
+            },
         ]),
         Agents {
             total: 8,
@@ -87,6 +92,8 @@ fn slots_count_by_how_far_their_memory_shows() {
             // 1 GiB, then 3 GiB a starting agent counts at less the 1 GiB
             // used, then half of 1 GiB.
             job_reservation: GIB + 2 * GIB + GIB / 2,
+            commands: 1,
+            command_reservation: 3 * GIB,
             newest: Some(MINUTE),
         }
     );
@@ -387,5 +394,40 @@ fn unread_work_admits_nothing() {
     assert_eq!(
         reading_memory(Ok(reading), &Overload::default()),
         (MemoryState::Unavailable, None)
+    );
+}
+
+#[test]
+fn a_command_waits_for_room_beside_other_commands_but_never_for_the_stagger() {
+    let settings = Overload::default();
+    let room = |activities: &[Activity]| {
+        measured_room(
+            sample(20 * GIB),
+            Agents::count(activities.iter().copied()),
+            &settings,
+        )
+    };
+    // Agents alone free nothing by its waiting, however recent their start.
+    let agents = [Activity::Starting(Duration::ZERO), running(WARM_UP, None)];
+    assert_eq!(room(&agents[..]), Room::Idle);
+    // Low disk holds it back all the same.
+    let low_disk = HostSample {
+        disk_free: Some(settings.warning.disk_free_bytes() - 1),
+        ..sample(20 * GIB)
+    };
+    assert_eq!(
+        measured_room(low_disk, Agents::count(agents), &settings),
+        Room::Held(HeldBy::Disk)
+    );
+    let building = Activity::Measured {
+        expected: 12 * GIB,
+        using: 4 * GIB,
+    };
+    assert_eq!(
+        room(&[Activity::Starting(Duration::ZERO), building]),
+        Room::Free {
+            memory: 10 * GIB,
+            agent: 2 * GIB,
+        }
     );
 }

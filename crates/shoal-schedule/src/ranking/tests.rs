@@ -283,7 +283,7 @@ fn a_review_ranks_with_its_workspace_and_what_that_inherits() {
     entry(
         &mut snapshot,
         "review",
-        Work::Review {
+        Work::OneShot {
             space: Some("child".into()),
         },
     );
@@ -348,7 +348,7 @@ fn an_hour_raises_work_from_the_tier_of_its_space() {
     entry(
         &mut snapshot,
         "review",
-        Work::Review {
+        Work::OneShot {
             space: Some("worked".into()),
         },
     );

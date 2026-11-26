@@ -13,6 +13,16 @@ fn free(memory: u64) -> Option<capacity::Room> {
     })
 }
 
+fn command(id: &str, expected: u64) -> Waiting {
+    Waiting {
+        work: Work::Measured {
+            expected,
+            after_stop: false,
+        },
+        ..job(id, 0)
+    }
+}
+
 fn job(id: &str, memory: u64) -> Waiting {
     Waiting {
         id: id.into(),
@@ -65,6 +75,7 @@ fn limits(global: Option<u32>, repositories: &[(&str, Option<u32>)]) -> Limits {
     Limits {
         global,
         room: None,
+        measured: None,
         repositories: repositories
             .iter()
             .map(|(id, limit)| ((*id).into(), *limit))
@@ -683,4 +694,89 @@ fn a_chat_without_a_repository_meets_the_machines_limits_alone() {
     // It counts toward no repository's limit.
     let in_repository = waiting(&[("a1", "a")]).remove(0);
     assert_eq!(pass(&[None], in_repository).admitted, ["a1"]);
+}
+
+#[test]
+fn commands_start_while_their_memory_fits_and_take_it_from_those_after_them() {
+    let limits = Limits {
+        room: free(10 * GIB),
+        measured: free(10 * GIB),
+        ..limits(Some(0), &[])
+    };
+    let waiting = [command("build", 6 * GIB), command("test", 6 * GIB)];
+    assert_eq!(admit(&[], &waiting, &limits, false), ["build"]);
+    assert_eq!(
+        held(&[], &waiting, &limits),
+        [(
+            "test".into(),
+            HeldBy::Memory {
+                needed: 6 * GIB,
+                left: 4 * GIB
+            }
+        )]
+    );
+    // A slot limit holds no command, and an agent after one waits for the
+    // next pass, which measures it.
+    let launch = Waiting {
+        work: Work::Launch,
+        ..job("launch", 0)
+    };
+    let started = admit(&[], &[command("small", GIB), launch], &limits, false);
+    assert_eq!(started, ["small"]);
+}
+
+#[test]
+fn an_idle_machine_starts_one_command_whatever_it_needs() {
+    let limits = Limits {
+        measured: Some(capacity::Room::Idle),
+        ..limits(None, &[])
+    };
+    let waiting = [command("huge", 100 * GIB), command("tiny", 1)];
+    assert_eq!(admit(&[], &waiting, &limits, false), ["huge"]);
+}
+
+#[test]
+fn a_command_waits_for_low_disk_under_a_fixed_limit() {
+    let waiting = [command("build", GIB)];
+    let fixed = limits(Some(4), &[]);
+    assert_eq!(admit(&[], &waiting, &fixed, false), ["build"]);
+    let low_disk = Limits {
+        disk: Some(4),
+        ..limits(Some(4), &[])
+    };
+    assert_eq!(
+        held(&[], &waiting, &low_disk),
+        [("build".into(), HeldBy::Disk)]
+    );
+}
+
+#[test]
+fn a_stopped_command_waits_for_healthy_readings() {
+    let stopped = Waiting {
+        work: Work::Measured {
+            expected: GIB,
+            after_stop: true,
+        },
+        ..job("stopped", 0)
+    };
+    let limits = Limits {
+        measured: free(10 * GIB),
+        ..limits(None, &[])
+    };
+    assert!(admit(&[], std::slice::from_ref(&stopped), &limits, false).is_empty());
+    assert_eq!(admit(&[], &[stopped], &limits, true), ["stopped"]);
+}
+
+#[test]
+fn a_command_waits_for_the_pass_that_measures_a_job_started_before_it() {
+    let limits = Limits {
+        measured: free(10 * GIB),
+        jobs: JobLimits {
+            room: free(10 * GIB),
+            ..JobLimits::default()
+        },
+        ..limits(None, &[])
+    };
+    let waiting = [job("ci", 8 * GIB), command("test", 8 * GIB)];
+    assert_eq!(admit(&[], &waiting, &limits, false), ["ci"]);
 }

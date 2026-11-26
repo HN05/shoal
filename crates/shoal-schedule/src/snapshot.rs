@@ -55,7 +55,7 @@ impl Entry {
                 Some(Node::Space(space.clone()))
             }
             Work::Launch { space: None } => Some(Node::Entry(self.id.clone())),
-            Work::Job { .. } | Work::Review { .. } => None,
+            Work::Job { .. } | Work::OneShot { .. } => None,
         }
     }
 }
@@ -69,8 +69,10 @@ pub enum Work {
     Restore { space: SpaceId },
     /// A CI job of its own `tier`, for `spaces`.
     Job { tier: Tier, spaces: Vec<SpaceId> },
-    /// A review of `space`. A review the daemon left running has none.
-    Review { space: Option<SpaceId> },
+    /// A one-shot run of the work of `space`, such as a review or a
+    /// `shoal run` command. A seed build and a review the daemon left
+    /// running have none.
+    OneShot { space: Option<SpaceId> },
 }
 
 #[derive(Debug)]

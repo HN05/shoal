@@ -8,7 +8,7 @@ use rusqlite::Connection;
 use crate::{
     forge::ci::runner::Trigger,
     model::QueuedJob,
-    queue::state::WaitingOneShot,
+    queue::state::{MeasuredKind, OneShotWork, WaitingOneShot},
     state::{QueueKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
@@ -90,16 +90,16 @@ fn queued(
     Ok(entries)
 }
 
-/// The waiting review `oneshot`, with when it arrived: one that serves
-/// nothing never waits, so it goes last.
+/// The waiting one-shot run `oneshot`, with when it arrived: one that
+/// serves nothing goes last.
 fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
     let serving = oneshot.serving.as_ref();
     let after = serving.map_or(i64::MAX, |serving| serving.queued_after);
     let entry = Entry {
         id: oneshot.id.clone(),
-        name: "review".into(),
+        name: oneshot_name(&oneshot.work),
         priority: None,
-        work: Work::Review {
+        work: Work::OneShot {
             space: serving.map(|serving| serving.space.clone()),
         },
         queued_at: oneshot.requested_at,
@@ -109,6 +109,17 @@ fn oneshot(oneshot: &WaitingOneShot) -> (Arrived, Entry) {
         areas: Vec::new(),
     };
     ((after, true), entry)
+}
+
+/// What `shoal queue` calls a one-shot run of `work`.
+pub fn oneshot_name(work: &OneShotWork) -> String {
+    match work {
+        OneShotWork::Review => "review".into(),
+        OneShotWork::Measured(measured) => match &measured.kind {
+            MeasuredKind::Command(command) => format!("shoal run {command}"),
+            MeasuredKind::SeedBuild => "seed build".into(),
+        },
+    }
 }
 
 /// What an entry of `kind` in `space` starts; `job` is a job's entry's job,

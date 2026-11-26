@@ -249,7 +249,7 @@ fn label(node: &Node, snapshot: &Snapshot) -> String {
 /// The tier of `work` on its own, before it waits or inherits.
 fn own_tier(work: &Work) -> Tier {
     match work {
-        Work::Launch { .. } | Work::Review { .. } => Tier::New,
+        Work::Launch { .. } | Work::OneShot { .. } => Tier::New,
         Work::Restore { .. } => Tier::Started,
         Work::Job { tier, .. } => *tier,
     }
@@ -259,7 +259,7 @@ fn own_tier(work: &Work) -> Tier {
 /// is higher. A tier inherited from waiting work never ages again.
 fn base_tier(entry: &Entry, snapshot: &Snapshot) -> Tier {
     let spaces: &[SpaceId] = match &entry.work {
-        Work::Launch { space } | Work::Review { space } => space.as_slice(),
+        Work::Launch { space } | Work::OneShot { space } => space.as_slice(),
         Work::Restore { space } => std::slice::from_ref(space),
         Work::Job { spaces, .. } => spaces,
     };
@@ -310,7 +310,7 @@ fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) ->
     let tier = aged(own_tier(&entry.work), entry, snapshot.now);
     let (mut rank, space) = match &entry.work {
         Work::Job { spaces, .. } => served(tier, spaces, standing, snapshot),
-        Work::Review { space } => served(tier, space.as_slice(), standing, snapshot),
+        Work::OneShot { space } => served(tier, space.as_slice(), standing, snapshot),
         Work::Launch { .. } | Work::Restore { .. } => agent_rank(entry, tier, standing, snapshot),
     };
     // Waiting raises it from the tier of its space as well as its own.
@@ -330,7 +330,7 @@ fn place<K>(entry: &Entry, lead: K, standing: &Standing, snapshot: &Snapshot) ->
         rank,
         steps: space.map(|space| space.steps).unwrap_or_default(),
         started: space.map_or(entry.queued_at, |space| space.created_at),
-        serves: matches!(entry.work, Work::Job { .. } | Work::Review { .. }),
+        serves: matches!(entry.work, Work::Job { .. } | Work::OneShot { .. }),
         arrival: entry.arrival,
     }
 }

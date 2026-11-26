@@ -9,7 +9,11 @@ use std::{
 
 use anyhow::Result;
 
-use super::{Grant, slots::Slot};
+use super::{
+    Grant,
+    slots::Slot,
+    state::{AdmittedOneShot, OneShotWork},
+};
 use crate::Agents;
 use crate::capacity;
 use crate::capacity::Activity;
@@ -30,6 +34,9 @@ pub struct Limits {
     /// What measured memory and disk leave for an agent's start, under
     /// dynamic admission.
     pub room: Option<capacity::Room>,
+    /// What measured memory and disk leave for a command's or seed build's
+    /// start, under dynamic admission.
+    pub measured: Option<capacity::Room>,
     pub repositories: HashMap<RepositoryId, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
@@ -75,6 +82,12 @@ pub enum Work {
     OneShot {
         after_stop: bool,
     },
+    /// A command or seed build expected to use `expected` bytes; one
+    /// protection stopped waits for healthy readings `after_stop`.
+    Measured {
+        expected: u64,
+        after_stop: bool,
+    },
     /// A stopped agent's restore. `holds_slot` says its agent keeps its slot
     /// while it waits, as one whose wrapper waits for healthy readings does.
     Restore {
@@ -91,6 +104,10 @@ impl Work {
                 wake: Wake::Recovery,
                 ..
             } | Work::OneShot { after_stop: true }
+                | Work::Measured {
+                    after_stop: true,
+                    ..
+                }
         )
     }
 }
@@ -221,14 +238,52 @@ pub fn admit(
     // Whether this pass admitted an agent or a job. Measured memory admits
     // nothing beside it, since the sample predates it.
     let mut started = false;
+    // Whether this pass admitted an agent or a job, whose memory the
+    // commands' room does not count until the next pass measures it.
+    let mut unmeasured = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied.iter().flatten() {
         *used.entry(repository.as_str()).or_default() += 1;
     }
     let mut jobs = limits.jobs.running;
+    let mut measured = limits.measured.clone();
     let mut kept = MemoryKept::default();
     let mut admission = Admission::default();
     for entry in waiting {
+        if let Work::Measured {
+            expected,
+            after_stop,
+        } = entry.work
+        {
+            if after_stop && !recovered {
+                continue;
+            }
+            if let Some(held) = kept.hold(entry).filter(|_| measured.is_some()) {
+                admission.hold(entry, Some(held));
+                continue;
+            }
+            // A fixed limit keeps dynamic admission's disk rule, under which
+            // low disk holds back every command.
+            if measured.is_none() && limits.disk.is_some() {
+                admission.hold(entry, Some(HeldBy::Disk));
+                continue;
+            }
+            if measured.is_some() && unmeasured {
+                continue;
+            }
+            if let Some(room) = &measured
+                && let Err(held) = room.fits_measured(expected)
+            {
+                kept.keep(entry, &held);
+                admission.hold(entry, held);
+                continue;
+            }
+            measured = measured.map(|room| room.after_measured(expected));
+            started = true;
+            recovered &= !after_stop;
+            admission.admitted.push(entry.id.clone());
+            continue;
+        }
         if let Work::Job { cost } = entry.work {
             if let Some(held) = full_job_limit(&limits.jobs, jobs) {
                 admission.hold(entry, Some(held));
@@ -248,14 +303,14 @@ pub fn admit(
                 admission.hold(entry, Some(held));
                 continue;
             }
-            started = true;
+            (started, unmeasured) = (true, true);
             jobs += 1;
             admission.admitted.push(entry.id.clone());
             continue;
         }
         let own = match entry.work {
-            // Admitted above, under the jobs' own limits.
-            Work::Job { .. } => continue,
+            // Admitted above, under their own limits.
+            Work::Job { .. } | Work::Measured { .. } => continue,
             Work::OneShot { after_stop: true } if !recovered => continue,
             Work::Launch | Work::OneShot { .. } => 0,
             Work::Restore {
@@ -311,7 +366,7 @@ pub fn admit(
             total += 1 - own;
         }
         writing += 1 - own;
-        started = true;
+        (started, unmeasured) = (true, true);
         // Each healthy interval restarts one stopped agent or one-shot run.
         recovered &= !entry.work.waits_for_recovery();
         admission.admitted.push(entry.id.clone());
@@ -401,6 +456,22 @@ pub fn room_for_a_job(occupied: &[Option<RepositoryId>], limits: &Limits) -> boo
     !admit(occupied, &probe, limits, false).admitted.is_empty()
 }
 
+/// What the admitted one-shot run `oneshot` does to measured memory: a
+/// review's agent counts as an agent's start, a command or seed build at
+/// what it has yet to use of its expected memory.
+fn oneshot_activity(oneshot: AdmittedOneShot) -> Activity {
+    match oneshot.work {
+        OneShotWork::Review => Activity::Running {
+            age: oneshot.running_for,
+            memory: None,
+        },
+        OneShotWork::Measured(measured) => Activity::Measured {
+            expected: measured.expected,
+            using: oneshot.using,
+        },
+    }
+}
+
 /// A repository's configured value as a slot count. Dynamic admission
 /// measures the whole machine, so it adds no repository limit of its own.
 fn repository_limit(limit: RunLimit) -> Option<u32> {
@@ -427,13 +498,21 @@ impl Agents {
         let global = config.machine.max_heavy_agents;
         let max_jobs = config.machine.max_jobs;
         let (activities, oneshots) = self.activities(slots, jobs);
-        let measured = match [global, max_jobs].contains(&MachineLimit::Dynamic) {
-            true => Some(self.measure(daemon, overload, &activities).await?.1),
+        let readings = match [global, max_jobs].contains(&MachineLimit::Dynamic) {
+            true => Some(self.measure(daemon, overload, &activities).await?),
             false => None,
         };
+        let commands = (readings.as_ref())
+            .filter(|_| global == MachineLimit::Dynamic)
+            .map(|(sample, _)| {
+                let agents = capacity::Agents::count(activities.iter().copied());
+                capacity::measured_room(*sample, agents, overload)
+            });
+        let measured = readings.map(|(_, room)| room);
         let mut limits = Limits {
             global: global.fixed(),
             room: measured.clone().filter(|_| global == MachineLimit::Dynamic),
+            measured: commands,
             repositories: HashMap::new(),
             disk: None,
             oneshots,
@@ -491,10 +570,7 @@ impl Agents {
         let activities = (slots.iter())
             .map(|slot| slot.activity)
             .chain(jobs.iter().copied())
-            .chain(admitted.into_iter().map(|(_, held)| Activity::Running {
-                age: held,
-                memory: None,
-            }))
+            .chain(admitted.into_iter().map(oneshot_activity))
             .collect();
         (activities, oneshots)
     }

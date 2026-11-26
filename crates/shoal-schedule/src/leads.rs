@@ -43,7 +43,7 @@ impl Lead for LongestChain {
         let chain = |node: &Node| chains.get(node).copied().unwrap_or(0);
         let served = match &entry.work {
             Work::Job { spaces, .. } => spaces.clone(),
-            Work::Review { space } => space.iter().cloned().collect(),
+            Work::OneShot { space } => space.iter().cloned().collect(),
             Work::Launch { .. } | Work::Restore { .. } => Vec::new(),
         };
         let own = (entry.agent_node()).unwrap_or_else(|| Node::Entry(entry.id.clone()));
