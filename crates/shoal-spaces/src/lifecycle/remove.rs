@@ -556,8 +556,8 @@ impl Spaces {
         (self.stop_space_agent(daemon, space, removal.stop_policy(), &request)).await
     }
 
-    /// Stops the `cancelled` restores first. Returns the worktree's
-    /// inspection the removal proceeds with.
+    /// Disregards the `cancelled` restores, which the caller already
+    /// stopped. Returns the worktree's inspection the removal proceeds with.
     async fn check_space_and_worktree(
         &self,
         daemon: &dyn Daemon,

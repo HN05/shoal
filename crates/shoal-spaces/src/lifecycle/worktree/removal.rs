@@ -257,9 +257,9 @@ impl Spaces {
         (deleted, error)
     }
 
-    /// Inspects again after stopping the `cancelled` restores. None for a
-    /// deleted directory, whose checks come before the removal stops
-    /// anything.
+    /// Inspects again, disregarding the `cancelled` restores the caller
+    /// already stopped. None for a deleted directory, whose checks come
+    /// before the removal stops anything.
     pub(in crate::lifecycle) async fn check_worktree_removal(
         &self,
         daemon: &dyn Daemon,
@@ -280,8 +280,8 @@ impl Spaces {
             .map(Some)
     }
 
-    /// Stops the `cancelled` restores first. A deleted directory inspects as
-    /// clean, while its HEAD cannot be read.
+    /// Disregards the `cancelled` restores the caller already stopped. A
+    /// deleted directory inspects as clean, while its HEAD cannot be read.
     pub(in crate::lifecycle) async fn check_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -422,7 +422,8 @@ impl Spaces {
         Ok(removed)
     }
 
-    /// Runs once the record is gone: deletes the branch it kept, and runs the
+    /// Runs once the record is gone: records the branch the removal kept for
+    /// cleanup to delete once its commits are elsewhere, and runs the
     /// post-remove hook with the workspace's identity.
     pub async fn complete_worktree_removal(
         &self,
