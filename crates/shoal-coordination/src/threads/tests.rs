@@ -656,6 +656,27 @@ async fn a_long_post_keeps_the_commands_that_answer_its_surface() {
 }
 
 #[tokio::test]
+async fn an_alert_with_more_actions_than_fit_keeps_its_reply_hint() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let child = caller(&tree.child);
+    let thread = open(fixture, Some(&child), None).await;
+    let choices: Vec<String> = (0..60)
+        .map(|number| format!("{number} {}", "option ".repeat(20)))
+        .collect();
+    let choices: Vec<&str> = choices.iter().map(String::as_str).collect();
+    let asked = asking("Which?", &choices, None);
+    post_as(fixture, &thread, &child, asked).await.unwrap();
+    let delivered = alerts(fixture, &tree.parent).await;
+    let alert = delivered.last().unwrap();
+    assert!(alert.len() <= crate::validate::MAX_AGENT_MESSAGE_LEN);
+    assert!(alert.contains("--action 1"), "{alert}");
+    assert!(!alert.contains("--action 60"), "{alert}");
+    assert!(alert.contains("shows the rest"), "{alert}");
+    assert!(alert.contains("thread forward"), "{alert}");
+}
+
+#[tokio::test]
 async fn an_answer_takes_an_action_of_the_other_side_s_latest_surface() {
     let tree = tree().await;
     let fixture = &tree.fixture;

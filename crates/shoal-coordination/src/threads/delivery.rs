@@ -210,7 +210,8 @@ impl Texts {
         agent.push_str(&indented(thread.shown_lines(post)));
         let reader = Party::of(thread, to);
         agent.push_str(&code_lines(post, reader.as_ref()));
-        let mut tail = indented(thread.action_lines(post));
+        let actions = thread.action_lines(post);
+        let mut tail = String::new();
         let changed = changes_since(thread, post);
         if let Some((size, command)) = &changed {
             tail.push_str(&format!(
@@ -221,7 +222,7 @@ impl Texts {
         tail.push_str(&switch_reminder(thread, reader.as_ref()));
         Self {
             kind: AlertKind::ThreadPosted,
-            agent: fitted(thread, agent, &tail),
+            agent: fitted(thread, agent, actions, &tail),
             user: match changed {
                 Some((size, _)) => crate::validate::shorten(
                     format!("{} [{size}]", thread.notice()),
@@ -273,8 +274,8 @@ impl Texts {
             agent.push_str(&code_lines(post, reader.as_ref()));
         }
         let answered = thread.surface_from(side.other());
-        let mut tail = indented(answered.map_or_else(Vec::new, |post| thread.action_lines(post)));
-        tail.push_str(&format!("\n{}", hint(thread, side)));
+        let actions = answered.map_or_else(Vec::new, |post| thread.action_lines(post));
+        let tail = format!("\n{}", hint(thread, side));
         Self {
             kind: AlertKind::ThreadForwarded,
             user: crate::validate::shorten(
@@ -284,7 +285,7 @@ impl Texts {
                 ),
                 crate::validate::MAX_MESSAGE_LEN,
             ),
-            agent: fitted(thread, agent, &tail),
+            agent: fitted(thread, agent, actions, &tail),
         }
     }
 
@@ -372,18 +373,36 @@ fn indented(lines: Vec<String>) -> String {
         .collect()
 }
 
-/// An agent's message of `body`, then `tail`, which says how to answer and
-/// so always fits: `body` is cut short, naming where to read the rest,
-/// where both would pass the length of an agent's message.
-fn fitted(thread: &Thread, body: String, tail: &str) -> String {
+/// An agent's message of `body`, then the lines `actions` that answer it,
+/// then `tail`, which says how to reply and so always fits whole. Where
+/// they would pass the length of an agent's message, `body` is cut short,
+/// then whole lines of `actions`, each naming where to read the rest.
+fn fitted(thread: &Thread, body: String, actions: Vec<String>, tail: &str) -> String {
     let max = crate::validate::MAX_AGENT_MESSAGE_LEN;
-    if body.len() + tail.len() <= max {
-        return body + tail;
+    let mut answering = indented(actions.clone());
+    if body.len() + answering.len() + tail.len() <= max {
+        return body + &answering + tail;
     }
     let rest = format!("\n(`shoal view thread {}` shows the rest)", thread.number);
-    let room = max.saturating_sub(tail.len() + rest.len()).max(MIN_BODY);
+    let room = max.saturating_sub(tail.len() + 2 * rest.len() + MIN_BODY);
+    if answering.len() > room {
+        answering = indented(whole_lines(actions, room)) + &rest;
+    }
+    let room = max
+        .saturating_sub(answering.len() + tail.len() + rest.len())
+        .max(MIN_BODY);
     let body = crate::validate::shorten(body, room);
-    crate::validate::shorten(format!("{body}{rest}{tail}"), max)
+    crate::validate::shorten(format!("{body}{rest}{answering}{tail}"), max)
+}
+
+/// The first of `lines` that fit `room` bytes once indented under a post.
+fn whole_lines(lines: Vec<String>, room: usize) -> Vec<String> {
+    let mut used = 0;
+    let fits = |line: &String| {
+        used += line.len() + 3;
+        used <= room
+    };
+    lines.into_iter().take_while(fits).collect()
 }
 
 /// The least of a post's body an agent's message keeps, however long what
