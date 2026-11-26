@@ -1,5 +1,5 @@
-//! Checkpoints: a workspace's HEAD and unsaved files, kept under private refs
-//! until they expire, which `shoal restore` returns the workspace to.
+//! Checkpoints: a workspace's HEAD and unsaved files, kept under private
+//! refs until they expire.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::execution_ids::ExecutionId;
@@ -22,7 +22,6 @@ use shoal_ids::checkpoint_numbers::CheckpointNumber;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// `shoal checkpoint`: keep the workspace's current state.
     pub async fn take_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -47,9 +46,9 @@ impl Spaces {
             .await
     }
 
-    /// Keep the state an agent left when it exits or is stopped. A workspace
-    /// in another lifecycle operation or removed meanwhile takes none, and a
-    /// failure is only logged.
+    /// Runs when an agent exits or is stopped. A workspace in another
+    /// lifecycle operation, or removed meanwhile, takes none. A failure is
+    /// only logged.
     pub async fn checkpoint_after_agent(&self, daemon: &dyn Daemon, workspace_id: &SpaceId) {
         let Ok(workspace) = self.workspace_by_id(workspace_id).await else {
             return;
@@ -81,9 +80,9 @@ impl Spaces {
         }
     }
 
-    /// Keep HEAD and the unsaved files, within the archive limit where the
-    /// cause is capped, reachable under a new checkpoint. Other than a manual checkpoint, one that would
-    /// keep what the latest already keeps extends that one instead.
+    /// Keeps the unsaved files within the archive limit where the cause is
+    /// capped. Except for a manual checkpoint, one that would keep what the
+    /// latest already keeps extends that one instead.
     pub async fn checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -100,8 +99,7 @@ impl Spaces {
         self.save_checkpoint(daemon, next).await
     }
 
-    /// The workspace's current state as an unnumbered checkpoint, its files
-    /// already kept in a commit.
+    /// Unnumbered, with its files already kept in a commit.
     async fn snapshot(
         &self,
         daemon: &dyn Daemon,
@@ -115,7 +113,7 @@ impl Spaces {
             .cleanup
             .restore
             .retention();
-        // A copy's starting checkpoint keeps what it started with; its
+        // A copy's starting checkpoint keeps what it started with: its
         // source had nothing a checkpoint cannot hold.
         let files_omitted = cause != CheckpointCause::Start
             && !self
@@ -141,9 +139,8 @@ impl Spaces {
         })
     }
 
-    /// A commit with HEAD and, with `files`, the unsaved files of
-    /// `workspace`: those of the worktree Git knows, or those left of one it
-    /// disowned laid over its branch's commit.
+    /// With `files`, the unsaved files are those of the worktree Git knows,
+    /// or what is left of one it disowned, laid over its branch's commit.
     async fn snapshot_files(
         &self,
         daemon: &dyn Daemon,
@@ -165,8 +162,6 @@ impl Spaces {
         })
     }
 
-    /// Whether `workspace` still has the branch, HEAD and unsaved files
-    /// `checkpoint` keeps.
     pub async fn unchanged_since(
         &self,
         daemon: &dyn Daemon,
@@ -185,10 +180,10 @@ impl Spaces {
         keeps_same(&repo.path, checkpoint, &now).await
     }
 
-    /// Point the commit's ref at it, then record the snapshot under the
-    /// workspace's next number, so a record never outlives a missing ref; a
-    /// ref left by a failed record goes with the next expiry pass, which the
-    /// checkpoint mutex keeps from running in between.
+    /// Points the commit's ref at it first, then records the snapshot under
+    /// the workspace's next number, so a record never outlives a missing
+    /// ref. A ref a failed record left goes with the next expiry pass, which
+    /// the checkpoint mutex keeps from running in between.
     async fn save_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -208,8 +203,7 @@ impl Spaces {
         Ok(checkpoint)
     }
 
-    /// The latest checkpoint when it keeps what `next` would, with its expiry
-    /// moved to that of `next`.
+    /// Moves its expiry to that of `next`.
     async fn unchanged_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -232,9 +226,8 @@ impl Spaces {
         Ok(extended.then_some(latest))
     }
 
-    /// A page of the unexpired checkpoints of an existing workspace numbered
-    /// after `after`, oldest first, small enough for one protocol frame;
-    /// `None` when no workspace has that name or ID.
+    /// Numbered after `after`, oldest first, small enough for one protocol
+    /// frame. `None` when no workspace has that name or ID.
     pub async fn checkpoints(
         &self,
         selector: &SpaceSelector,
@@ -250,7 +243,6 @@ impl Spaces {
             .map(Some)
     }
 
-    /// Checkpoint `number` of `workspace`, refusing one it lacks.
     pub async fn numbered_checkpoint(
         &self,
         workspace: &Workspace,
@@ -268,9 +260,8 @@ impl Spaces {
             })
     }
 
-    /// Return the workspace to a checkpoint after keeping its current state
-    /// in another. Nothing else may run in it meanwhile, except the caller's
-    /// own execution.
+    /// Keeps the current state in another checkpoint first. Nothing but the
+    /// caller's own execution may run in the workspace meanwhile.
     pub async fn restore_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -310,8 +301,7 @@ impl Spaces {
         })
     }
 
-    /// Keep the current state and move the worktree to `checkpoint`, unless
-    /// that checkpoint could not keep the unsaved files.
+    /// Refuses a checkpoint that could not keep the unsaved files.
     async fn rewind(
         &self,
         daemon: &dyn Daemon,
@@ -345,7 +335,7 @@ impl Spaces {
         Ok(replaced)
     }
 
-    /// Refuse a rewind that would delete ignored files, disturb another
+    /// Refuses a rewind that would delete ignored files, disturb another
     /// execution or a Git operation, or switch branches.
     async fn ensure_rewindable(
         &self,
@@ -385,8 +375,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Refuse a change to the files of `workspace` while an execution other
-    /// than `own` runs in it, naming the command that stops it.
+    /// The refusal names the command that stops the other execution.
     pub(super) async fn ensure_no_other_execution(
         &self,
         workspace: &Workspace,
@@ -401,7 +390,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// A recorded execution in the workspace other than `own`.
     async fn other_execution(
         &self,
         workspace_id: &SpaceId,
@@ -417,11 +405,11 @@ impl Spaces {
             .await
     }
 
-    /// Drop the removal record of `removed`, which its restore opened under
-    /// its ID, with what keeps its attached files from expiring, and record
-    /// the restore, at once; its checkpoints, events and files stay where
-    /// they are. The files gate keeps the deletion of the removed space's
-    /// files from coming between.
+    /// Takes, at once, the removal record the restore opened the space under
+    /// its ID from, with what keeps its attached files from expiring, and
+    /// records the restore. Its checkpoints, events and files stay. The
+    /// files gate keeps the deletion of the removed space's files from
+    /// coming between.
     pub async fn adopt_removal(&self, removed: &RemovedSpace) -> Result<()> {
         let _files = match &removed.repository_id {
             Some(repository) => Some(self.gates.lock_message_files(repository).await),
@@ -444,12 +432,12 @@ impl Spaces {
             .await
     }
 
-    /// Delete expired checkpoints and removal records, checkpoints and
+    /// Deletes expired checkpoints and removal records, the checkpoints and
     /// imported session files no workspace or removal record owns, and refs
-    /// without a checkpoint, keep only the file versions code references
-    /// still point at, then prune the repository's unreachable loose
-    /// objects as its gc would. A failure keeps what it concerns for the
-    /// next pass and does not skip the rest.
+    /// without a checkpoint. Keeps only the file versions code references
+    /// still point at, then prunes unreachable loose objects as `git gc`
+    /// would. A failure keeps what it concerns for the next pass and does
+    /// not skip the rest.
     pub async fn expire_checkpoints(&self, daemon: &dyn Daemon) -> Result<()> {
         let mut failed = Vec::new();
         if let Err(error) = self.store.run(|db| delete_expired_removals(db)).await {
@@ -467,16 +455,15 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the session files the configured `root_dir` keeps for chats
-    /// without a repository that neither exist nor have a removal record.
+    /// Deletes those of chats that neither exist nor have a removal record.
     async fn expire_outside_sessions(&self) -> Result<()> {
         let home = HomeKey::Root(self.config.current().root_dir(&self.paths)?);
         let _refs = self.gates.lock_checkpoints().await;
         self.expire_imported_sessions(&home).await
     }
 
-    /// A busy repository, or one being moved or removed, keeps its refs until
-    /// a later pass rather than holding up the others.
+    /// A busy repository, or one being moved or removed, keeps its refs
+    /// until a later pass rather than holding up the others.
     async fn expire_repository_checkpoints(
         &self,
         daemon: &dyn Daemon,
@@ -518,9 +505,8 @@ impl Spaces {
         sessions
     }
 
-    /// A ref no checkpoint keeps is left by deleted checkpoints, or by a
-    /// write that failed between the record and the ref. `true` when one
-    /// was deleted.
+    /// Deleted checkpoints leave such refs, and so does a write that failed
+    /// between the record and the ref. True when one was deleted.
     async fn delete_unowned_refs(&self, repo: &Repository, kept: &HashSet<String>) -> Result<bool> {
         let mut deleted = false;
         for (reference, commit) in git::checkpoint::saved_refs(&repo.path).await? {
@@ -532,8 +518,6 @@ impl Spaces {
     }
 }
 
-/// Whether checkpoints `kept` and `next` of a workspace of the repository
-/// checked out at `repo` keep the same branch, HEAD and files.
 async fn keeps_same(repo: &std::path::Path, kept: &Checkpoint, next: &Checkpoint) -> Result<bool> {
     if (&kept.branch, &kept.head, kept.files_omitted)
         != (&next.branch, &next.head, next.files_omitted)
@@ -550,8 +534,7 @@ fn branch_label(branch: Option<&BranchName>) -> String {
     )
 }
 
-/// Record a checkpoint under the workspace's next number, in the caller's
-/// transaction.
+/// Runs in the caller's transaction.
 pub fn insert_numbered(
     tx: &rusqlite::Transaction,
     checkpoint: &Checkpoint,
@@ -582,7 +565,7 @@ pub fn insert_numbered(
     Ok(record.number)
 }
 
-/// Move an unexpired checkpoint's expiry; `false` when it expired meanwhile.
+/// False when it expired meanwhile.
 fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
     Ok(db.execute(
         "UPDATE checkpoints SET expires_at=?3, record=?4
@@ -596,7 +579,6 @@ fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
     )? == 1)
 }
 
-/// Give `to` the unexpired checkpoints of `from`.
 pub fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     db.execute(
         "INSERT INTO checkpoint_numbers(workspace_id,last)
@@ -621,8 +603,8 @@ pub fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// Delete expired removal records, and the numbering of workspaces that
-/// neither exist nor have a removal record or checkpoint left.
+/// Also deletes the numbering of workspaces that neither exist nor have a
+/// removal record or checkpoint left.
 fn delete_expired_removals(db: &Connection) -> Result<()> {
     db.execute(
         "DELETE FROM removed_spaces WHERE expires_at <= unixepoch()",
@@ -637,9 +619,8 @@ fn delete_expired_removals(db: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Delete the repository's checkpoints that expired, other than a
-/// workspace's starting checkpoint, or that neither a workspace nor a
-/// removal record owns.
+/// Leaves a workspace's starting checkpoint. Also deletes checkpoints that
+/// neither a workspace nor a removal record owns.
 fn delete_expired(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     db.execute(
         &format!(
@@ -652,8 +633,8 @@ fn delete_expired(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     Ok(())
 }
 
-/// The commits the repository's checkpoints keep, read once so a pass over
-/// thousands of refs does not query the store for each.
+/// Read at once, so a pass over thousands of refs does not query the store
+/// for each.
 fn kept_commits(db: &Connection, repository_id: &RepositoryId) -> Result<HashSet<String>> {
     db.prepare("SELECT json_extract(record, '$.commit') FROM checkpoints WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?
@@ -677,7 +658,6 @@ pub fn latest(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Checkpoi
         .transpose()?)
 }
 
-/// An unexpired checkpoint of the workspace.
 pub(super) fn find(
     db: &Connection,
     workspace_id: &SpaceId,
@@ -697,23 +677,23 @@ pub(super) fn find(
         .transpose()?)
 }
 
-/// Whether a checkpoint is kept: it has not expired, or it is its
+/// A checkpoint is kept while it has not expired, while it is its
 /// workspace's starting checkpoint, which lasts as long as the workspace,
-/// or the removal checkpoint its restore still creates the worktree from.
+/// and while it is the removal checkpoint a restore still creates the
+/// worktree from.
 const KEPT: &str = "(expires_at > unixepoch() OR EXISTS (SELECT 1 FROM workspaces
     WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number)
     OR EXISTS (SELECT 1 FROM workspaces WHERE id=checkpoints.workspace_id
         AND json_extract(pending_plan,'$.source.kind')='restore'
         AND json_extract(pending_plan,'$.source.checkpoint')=checkpoints.number))";
 
-/// The record bytes of one listing page, leaving room in a protocol frame
-/// for the envelope; [`NAME_LIMIT`] keeps one record well below it.
+/// Leaves room in a protocol frame for the envelope. [`NAME_LIMIT`] keeps
+/// one record well below it.
 pub const PAGE_BYTES: usize = crate::protocol::MAX_FRAME / 2;
-/// The longest checkpoint name, in characters.
+/// In characters.
 pub const NAME_LIMIT: usize = 200;
 
-/// The checkpoints numbered after `after`, oldest first, as many as fit in
-/// [`PAGE_BYTES`] and at least one.
+/// Oldest first, as many as fit in [`PAGE_BYTES`] and at least one.
 fn checkpoint_page(
     db: &Connection,
     workspace_id: &SpaceId,
@@ -736,7 +716,7 @@ fn checkpoint_page(
     Ok(page)
 }
 
-/// The workspace's unexpired checkpoints, oldest first.
+/// Oldest first.
 pub fn workspace_checkpoints(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Checkpoint>> {
     db.prepare(&format!(
         "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT} ORDER BY number"

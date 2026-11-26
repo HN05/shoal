@@ -1,7 +1,6 @@
-//! Branches removal kept because only they had some commits. Cleanup deletes
-//! each once a remote or the default branch has those commits too, the user
-//! deletes the rest on request, and a branch that moved, went away or belongs
-//! to a workspace again is forgotten.
+//! Branches removal kept because only they had some commits. A branch that
+//! moved, went away or belongs to a workspace again is forgotten. See
+//! `docs/design/cleanup.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -21,7 +20,6 @@ use crate::{
     time::UnixTime,
 };
 
-/// A remembered branch, at the commit removal left it on.
 #[derive(Debug, Clone)]
 pub struct Record {
     pub repository_id: RepositoryId,
@@ -30,7 +28,6 @@ pub struct Record {
     pub kept_at: UnixTime,
 }
 
-/// Where a kept branch's commits may also be.
 #[derive(Debug, Clone, Copy)]
 enum Evidence<'a> {
     /// The remote-tracking refs, which may be stale: enough to show a count.
@@ -40,7 +37,6 @@ enum Evidence<'a> {
     Advertised(&'a [git::RemoteHead]),
 }
 
-/// What a kept branch is now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Status {
     /// Deleted, moved, made symbolic, the default branch or a workspace's:
@@ -49,23 +45,22 @@ enum Status {
     /// Checked out by a worktree Shoal does not manage, or the start of a
     /// rebase or bisect in one.
     CheckedOut,
-    /// The branch a workspace builds on, which keeps it while that
-    /// workspace does.
+    /// The branch a workspace builds on, which keeps it while that workspace
+    /// does.
     BuiltOn,
     /// Still at the kept commit, with this many commits only it has.
     Kept { unkept_commits: u64 },
 }
 
 impl Spaces {
-    /// Remember a branch the removal of `workspace` kept, unless it is the
-    /// default branch, which Shoal never deletes.
+    /// Never the default branch, which Shoal never deletes.
     pub async fn remember_kept_branch(
         &self,
         daemon: &dyn Daemon,
         workspace: &Workspace,
         outcome: &super::super::lifecycle::WorktreeRemoval,
     ) -> Result<()> {
-        // Only the workspace's own branch is its to delete later; a worktree
+        // Only the workspace's own branch is its to delete later. A worktree
         // switched onto another leaves that one alone.
         let Some(branch) = outcome
             .branch
@@ -96,7 +91,7 @@ impl Spaces {
         .await
     }
 
-    /// Repositories with kept branches, in a stable order.
+    /// In a stable order.
     pub async fn kept_branch_repositories(&self) -> Result<Vec<RepositoryId>> {
         self.store
             .run(|db| {
@@ -111,9 +106,8 @@ impl Spaces {
             .await
     }
 
-    /// Delete the repository's kept branches whose commits the default branch
-    /// or one of `heads`, which the remotes advertise now, has. The caller has
-    /// fetched the default branch.
+    /// `heads` is what the remotes advertise now. The caller has fetched the
+    /// default branch.
     pub async fn delete_kept_branches_kept_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -146,10 +140,10 @@ impl Spaces {
         Ok(())
     }
 
-    /// Every kept branch Shoal could delete, with the commits no
-    /// remote-tracking ref or the default branch has. The count reads refs
-    /// that may be stale, so a branch it shows none for is listed too.
-    /// The kept branches, only those of the repository `repository` selects.
+    /// Each with the commits no remote-tracking ref or the default branch
+    /// has. The count reads refs that may be stale, so a branch it shows
+    /// none for is listed too. Only of the repository `repository` selects,
+    /// when given.
     pub async fn list_kept_branches(
         &self,
         daemon: &dyn Daemon,
@@ -188,10 +182,9 @@ impl Spaces {
         Ok(listed)
     }
 
-    /// Delete the targets with the commits only they have, checking every
-    /// one before deleting any. A target must be a kept branch still at the
-    /// commit removal left it on and the user saw, not checked out, in a
-    /// repository whose default branch resolves.
+    /// Checks every target before deleting any. A target must be a kept
+    /// branch still at the commit removal left it on and the user saw, not
+    /// checked out, in a repository whose default branch resolves.
     pub async fn delete_kept_branches(
         &self,
         daemon: &dyn Daemon,
@@ -203,8 +196,8 @@ impl Spaces {
             .collect();
         repository_ids.sort();
         repository_ids.dedup();
-        // Each repository's gate stays held until its branches are gone;
-        // taking them in order keeps two requests from waiting on each other.
+        // Each repository's gate stays held until its branches are gone.
+        // Taking them in order keeps two requests from waiting on each other.
         let mut gates = Vec::new();
         let mut chosen = Vec::new();
         for repository_id in &repository_ids {
@@ -256,9 +249,8 @@ impl Spaces {
         Ok(deleted)
     }
 
-    /// Every remembered branch of the repository with its status,
-    /// forgetting the released ones. The caller holds the repository's Git
-    /// gate; `default` is its default branch when that resolves.
+    /// Forgets the released ones. The caller holds the repository's Git
+    /// gate. `default` is its default branch when that resolves.
     async fn kept_statuses(
         &self,
         repo: &Repository,
@@ -277,7 +269,7 @@ impl Spaces {
         Ok(statuses)
     }
 
-    /// Store the record, replacing an earlier one of the same branch.
+    /// Replaces an earlier record of the same branch.
     async fn save_kept_branch(&self, record: Record) -> Result<()> {
         self.store
             .run(move |db| {
@@ -333,8 +325,6 @@ impl Spaces {
             .await
     }
 
-    /// The branches of the repository's workspaces, and the local branches
-    /// they build on.
     async fn workspace_branches(&self, repository_id: &RepositoryId) -> Result<WorkspaceBranches> {
         let workspaces = self.list_workspaces().await?;
         let workspaces =
@@ -349,7 +339,6 @@ impl Spaces {
     }
 }
 
-/// The branches a repository's workspaces are on, and those they build on.
 #[derive(Debug, Default)]
 struct WorkspaceBranches {
     own: Vec<BranchName>,

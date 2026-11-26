@@ -1,5 +1,5 @@
-//! Branch allocation, existing-branch workspaces and default-branch refreshes
-//! against workspace records. Adoption is explicit.
+//! Branch allocation, workspaces on existing branches, and default-branch
+//! refreshes.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::git::existing_branch::BranchExt;
@@ -22,7 +22,6 @@ use crate::{
     model::{OpenedWorkspace, PulledBranch, Repository, SyncedRepository, Workspace},
 };
 
-/// Options that apply only when opening creates a new worktree.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NewWorktreeOptions<'a> {
     pub git_profile: Option<&'a str>,
@@ -31,16 +30,12 @@ pub struct NewWorktreeOptions<'a> {
     pub disposable: bool,
 }
 
-/// What opening an existing branch does.
 pub(super) enum OpenTarget {
-    /// Reopen the workspace that owns the branch.
     Reopen(Box<Workspace>),
-    /// Create a worktree for the branch.
     Create(Branch),
 }
 
-/// Refuse new-worktree options for a workspace that opening reuses, except a
-/// path naming where it already is.
+/// Allows only a path that names where the workspace already is.
 async fn check_reopen_options(
     workspace: &Workspace,
     options: NewWorktreeOptions<'_>,
@@ -67,22 +62,18 @@ async fn check_reopen_options(
     Ok(())
 }
 
-/// What refreshing a branch does.
 enum Refresh {
     /// Nothing: the branch has no upstream to follow.
     Unchanged(PulledBranch),
     Follow(Following),
 }
 
-/// A local branch about to follow its upstream.
 struct Following {
     branch: BranchName,
     local_ref: String,
     previous_commit: CommitId,
     remote: String,
-    /// The upstream branch's ref on `remote`.
     reference: String,
-    /// The worktree that has the branch checked out, if any.
     checkout: Option<std::path::PathBuf>,
 }
 
@@ -107,24 +98,24 @@ pub(super) enum UpstreamPolicy {
 }
 
 impl Spaces {
-    /// The requested branch name, or the nearest free `-2`, `-3`, ... variant.
-    /// Called while holding the repository's Git gate, through worktree creation.
+    /// The requested name, or the nearest free `-2`, `-3`, ... variant.
+    /// Called with the repository's Git gate held, through worktree
+    /// creation.
     pub async fn available_branch(&self, repo: &Repository, name: &str) -> Result<BranchName> {
         Ok(allocate_branch(name, &self.branches_taken(repo).await?))
     }
 
-    /// The nearest free `-2`, `-3`, ... variant of branch `name`, for a
-    /// copy of the work on it, whether or not `name` exists here.
+    /// For a copy of the work on `name`, whether or not `name` exists here.
     pub async fn copy_branch(&self, repo: &Repository, name: &str) -> Result<BranchName> {
         let mut taken = self.branches_taken(repo).await?;
         taken.push(name.into());
         Ok(allocate_branch(name, &taken))
     }
 
-    /// The branch names a new branch of `repo` must not take.
     async fn branches_taken(&self, repo: &Repository) -> Result<Vec<BranchName>> {
         let mut taken = git::branch::names_in_use(&repo.path).await?;
-        // Failed/preparing workspaces still own their recorded branch name.
+        // Failed and preparing workspaces still own their recorded branch
+        // name.
         taken.extend(
             self.list_workspaces()
                 .await?
@@ -135,10 +126,9 @@ impl Spaces {
         Ok(taken)
     }
 
-    /// Fetch every remote that holds a default-branch ref merge checks read:
-    /// the local default branch's upstream and the default remote, so they
-    /// see what the forge merged; local branches stay unchanged. Returns the
-    /// default branch. The caller holds the repository's fetch gate.
+    /// Fetches the local default branch's upstream and the default remote,
+    /// so merge checks see what the forge merged. Local branches stay as
+    /// they are. The caller holds the repository's fetch gate.
     pub async fn fetch_default_remotes(&self, repo: &Repository) -> Result<BranchName> {
         let default =
             crate::git::default_branch::locate(&repo.path, DefaultBranchLookup::Discover).await?;
@@ -162,9 +152,7 @@ impl Spaces {
         Ok(default.name)
     }
 
-    /// Fast-forward the local default branch to its upstream as
-    /// [`Self::fetch_default_remotes`] fetched it. The caller holds the
-    /// repository's Git gate.
+    /// The caller holds the repository's Git gate.
     pub async fn fast_forward_default(
         &self,
         repo: &Repository,
@@ -184,7 +172,6 @@ impl Spaces {
         })
     }
 
-    /// The branches every remote of the repository advertises now.
     pub async fn remote_heads(
         &self,
         daemon: &dyn Daemon,
@@ -204,8 +191,7 @@ impl Spaces {
         Ok(heads)
     }
 
-    /// Whether the freshly fetched default branch already has the
-    /// workspace's HEAD changes, whatever commits carry them.
+    /// Whatever commits carry the changes.
     pub async fn default_branch_has_head(
         &self,
         daemon: &dyn Daemon,
@@ -219,7 +205,6 @@ impl Spaces {
         git::status::default_branch_retains_head(&workspace.path, &default).await
     }
 
-    /// Match a canonical checkout path against recorded workspace locations.
     pub(super) async fn managed_workspace_at(&self, path: &Path) -> Result<Option<String>> {
         let workspaces = self.list_workspaces().await?;
         let path = path.to_owned();
@@ -232,8 +217,8 @@ impl Spaces {
         .await
     }
 
-    /// Fetch a local branch's upstream and fast-forward the branch to it. The
-    /// caller holds the repository's Git gate through any subsequent creation.
+    /// The caller holds the repository's Git gate through any creation that
+    /// follows.
     pub(super) async fn refresh_branch(
         &self,
         repo: &Repository,
@@ -254,9 +239,8 @@ impl Spaces {
         Ok(following.pulled(repo, commit))
     }
 
-    /// Fast-forward a local branch to its remote-tracking branch as the last
-    /// fetch left it, without asking the remote, so the caller holds the
-    /// repository's Git gate only for local work.
+    /// Uses the last fetch without asking the remote, so the caller holds
+    /// the Git gate only for local work.
     async fn follow_fetched_upstream(
         &self,
         repo: &Repository,
@@ -274,8 +258,8 @@ impl Spaces {
         Ok(following.pulled(repo, commit))
     }
 
-    /// The branch's upstream and checkout, refusing a checkout a refresh
-    /// cannot advance, or the unchanged branch when there is nothing to follow.
+    /// Refuses a checkout a refresh cannot advance. Returns the branch
+    /// unchanged when there is nothing to follow.
     async fn prepare_refresh(
         &self,
         repo: &Repository,
@@ -329,8 +313,7 @@ impl Spaces {
         }))
     }
 
-    /// Fast-forward the branch to `commit`, which its upstream has, like
-    /// pull --ff-only; returns where the branch ends up.
+    /// Like `pull --ff-only`. Returns where the branch ends up.
     async fn advance(
         &self,
         repo: &Repository,
@@ -348,7 +331,7 @@ impl Spaces {
             git::revision(&repo.path, local_ref, git_run).await?.trim() == previous_commit,
             "{branch} changed during fetch; retry"
         );
-        // An already-ahead branch stays untouched.
+        // A branch that is already ahead stays as it is.
         if git::is_ancestor(
             &repo.path,
             commit.as_str(),
@@ -378,7 +361,7 @@ impl Spaces {
         Ok(commit.clone())
     }
 
-    /// Query advertised remote heads, including branches never fetched locally.
+    /// Includes branches never fetched locally.
     pub async fn branches(
         &self,
         daemon: &dyn Daemon,
@@ -408,8 +391,8 @@ impl Spaces {
             .await
     }
 
-    /// Open the branch `selector` names in `repository`, reopening the
-    /// workspace that owns it or creating one where and as `new` says.
+    /// Reopens the workspace that owns the branch, or creates one as `new`
+    /// says.
     pub async fn open_branch_with(
         &self,
         daemon: &dyn Daemon,
@@ -422,9 +405,9 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::open_branch_with`], opening a new worktree at the removal
-    /// checkpoint a restore `restores`, with the unsaved files it keeps,
-    /// before it can be used; a reopened workspace gets none.
+    /// Opens a new worktree at the removal checkpoint a restore `restores`,
+    /// with the unsaved files it keeps, before it can be used. A reopened
+    /// workspace gets none.
     pub async fn open_branch_restoring(
         &self,
         daemon: &dyn Daemon,
@@ -477,8 +460,7 @@ impl Spaces {
         })
     }
 
-    /// What opening `selector` does: reopen the workspace that owns the branch,
-    /// which new-worktree options cannot change, or create one from it.
+    /// Reopening allows no new-worktree options.
     pub(super) async fn open_target(
         &self,
         daemon: &dyn Daemon,
@@ -510,8 +492,6 @@ impl Spaces {
         Ok(OpenTarget::Reopen(Box::new(workspace)))
     }
 
-    /// The workspace that owns the existing local or remote branch
-    /// `selector` names in `repo`, which opening that branch reopens.
     pub async fn opening_owner(
         &self,
         daemon: &dyn Daemon,
@@ -527,7 +507,6 @@ impl Spaces {
         )
     }
 
-    /// Resolve and validate the local or remote branch selected by the caller.
     async fn select_existing_branch(
         &self,
         daemon: &dyn Daemon,
@@ -566,7 +545,7 @@ impl Spaces {
         Ok(branch)
     }
 
-    /// Check that a selected branch is usable and tracks its requested remote.
+    /// Checks that the branch tracks its requested remote.
     async fn validate_existing_branch(&self, repo: &Repository, branch: &Branch) -> Result<()> {
         let name = &branch.name;
         ensure!(
@@ -608,8 +587,7 @@ impl Spaces {
     }
 }
 
-/// The commit the branch's remote-tracking branch holds, as the last fetch
-/// left it.
+/// As the last fetch left it.
 async fn fetched_upstream_commit(repo: &Repository, following: &Following) -> Result<CommitId> {
     let branch = &following.branch;
     let tracking = git::existing_branch::upstream_ref(&repo.path, branch).await?;
