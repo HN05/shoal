@@ -1,4 +1,6 @@
 use super::*;
+use crate::config::modes;
+use std::fs;
 
 #[test]
 fn setup_cmd_requires_a_nonempty_path() {
