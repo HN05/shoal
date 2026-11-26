@@ -78,8 +78,10 @@ async fn files_relayed_back_to_the_machine_keeping_them_show_their_path() {
     (hub.store)
         .write(|tx| {
             tx.execute(
-                "INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at)
-                    VALUES (7,'child','child','alert','kept.md','/shoal/kept.md',1,1)",
+                "INSERT INTO space_files(id,space_id,space,source,name,path,bytes,created_at,
+                        attached_by)
+                    VALUES (7,'child','child','alert','kept.md','/shoal/kept.md',1,1,
+                        '{\"kind\":\"user\"}')",
                 [],
             )?;
             Ok(())

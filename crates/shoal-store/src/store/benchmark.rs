@@ -36,6 +36,7 @@ fn connect(path: &std::path::Path, metrics: &Metrics) -> Result<Connection> {
     let db = Connection::open(path)?;
     db.busy_timeout(Duration::from_secs(5))?;
     db.execute_batch("PRAGMA foreign_keys=ON;")?;
+    crate::journal::register(&db)?;
     metrics.opens.fetch_add(1, Ordering::Relaxed);
     metrics
         .setup_ns

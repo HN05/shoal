@@ -226,7 +226,7 @@ fn the_hub_refuses_a_copy_of_a_machines_credential() {
     fs::create_dir_all(copy.path().join("state")).unwrap();
     let database = laptop.root.path().join("state/state.db");
     let copied = copy.path().join("state/state.db");
-    rusqlite::Connection::open(&database)
+    shoal_store::test_support::open_database(&database)
         .unwrap()
         .execute("VACUUM INTO ?1", [copied.to_str().unwrap()])
         .unwrap();

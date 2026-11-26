@@ -358,7 +358,7 @@ fn failed_startup_recovery_never_serves() {
         // Bindings drop in reverse: the daemon, then its home.
         let Daemon { root, mut guard } = daemon;
         assert!(guard.child.wait().unwrap().success());
-        rusqlite::Connection::open(root.path().join("state/state.db"))
+        shoal_store::test_support::open_database(root.path().join("state/state.db"))
             .unwrap()
             .execute_batch(&format!(
                 "INSERT INTO repositories(id,path,source,last_used,workspaces_dir)

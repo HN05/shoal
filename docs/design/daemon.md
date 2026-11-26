@@ -169,6 +169,15 @@ The code that makes a change records its event. A chat's events take the same
 recording path and shape as a workspace's, and name the space by its ID and
 kind. No event kind belongs to one kind of space for what both record.
 
+Store triggers detect the changes that rows record, such as a rename, a
+ready mark or a file's deletion, so that no write path or cascade is missed.
+A trigger passes the row it saw to a function the store registers on each of
+its connections. The store's journal code builds every event from Shoal's
+types and writes it, whether a trigger or the code that made the change
+records it. No SQL builds an event's JSON. A connection without the
+function, such as a `sqlite3` shell, reads the store but fails on a change
+that a trigger records.
+
 Each kind of event has one shape. Its kind decides the fields it records,
 and it records each of them, null when empty. When a kind's shape changes,
 a migration rewrites the events stored in the old one.

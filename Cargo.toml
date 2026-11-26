@@ -93,6 +93,7 @@ shoal-core = { path = "crates/shoal-core", features = ["test-support"] }
 shoal-forge = { workspace = true, features = ["test-support"] }
 shoal-protocol = { workspace = true, features = ["test-support"] }
 shoal-schedule.workspace = true
+shoal-store = { workspace = true, features = ["test-support"] }
 socket2 = "0.6"
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

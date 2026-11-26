@@ -1256,7 +1256,8 @@ fn tampered_resource_approvals_fail_instead_of_selecting_a_member() {
         "--approve",
         pending["number"].as_str().unwrap(),
     ]);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     let mut record = pending.clone();
     record["status"] = "approved".into();
     record["specification"] = serde_json::json!({

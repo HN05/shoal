@@ -897,7 +897,8 @@ fn repository_removal_deletes_local_checkout_workspaces_and_leases_and_stops_com
         codex["projects"]["/keep"]["trust_level"].as_str(),
         Some("trusted")
     );
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     for table in [
         "ports",
         "resource_leases",
@@ -1104,7 +1105,8 @@ fn repository_removal_retries_partial_file_deletion_after_restart_but_rejects_re
         ),
         None => format!("{}:{}", metadata.dev(), metadata.ino()),
     };
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute("INSERT INTO repository_removals(repository_id,directory_id,deleting_files) VALUES (?1,?2,1)", rusqlite::params![id, identity]).unwrap();
     let refused = fixture.run(&["create", id, "--branch", "too-late"]);
     assert!(!refused.status.success());
@@ -1245,7 +1247,8 @@ fn repository_removal_preserves_resources_on_failure_and_retries_after_restart()
         fs::read_to_string(fixture.root.path().join("sim-devices.json")).unwrap(),
         "[]"
     );
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     assert!(
         db.query_row("SELECT COUNT(*) FROM simulator_clean_requests", [], |r| r
             .get::<_, i64>(

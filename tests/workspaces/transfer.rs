@@ -664,7 +664,8 @@ fn export_all_checks_every_workspace_first_and_import_takes_the_directory() {
     assert!(paths.iter().all(|path| path.exists()));
     fs::remove_file(directory.join(&files[0])).unwrap();
     // So does one still in a lifecycle operation, which removal refuses.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     let set_state = |state: &str| {
         db.execute(
             "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",

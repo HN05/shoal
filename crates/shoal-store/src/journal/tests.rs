@@ -3,6 +3,8 @@ use crate::test_support::migrated;
 use serde_json::Value;
 use shoal_protocol::model::{RefPart, SpaceRef};
 
+mod triggers;
+
 /// A repository with the workspaces `base` and `work`, which builds on
 /// `base`, and the chat `chat`.
 fn spaces() -> Result<Connection> {

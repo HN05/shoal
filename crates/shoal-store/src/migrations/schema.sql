@@ -1263,13 +1263,6 @@ CREATE INDEX agent_handoffs_space ON agent_handoffs(space_id, session);
 
 CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
-CREATE VIEW space_refs AS
-    SELECT spaces.id, CASE spaces.kind
-            WHEN 'workspace' THEN json_object('id',spaces.id,'name',spaces.name,
-                'kind','workspace','branch',workspaces.branch)
-            ELSE json_object('id',spaces.id,'name',spaces.name,'kind','chat') END AS ref
-    FROM spaces LEFT JOIN workspaces ON workspaces.id=spaces.id AND spaces.kind='workspace';
-
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL
     UNION ALL SELECT space_number FROM access_requests WHERE space_id IS NULL;
@@ -1277,17 +1270,6 @@ CREATE VIEW space_numbers AS
 CREATE VIEW free_space_number AS
     SELECT MIN(n) AS number FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM space_numbers)
         WHERE n NOT IN (SELECT number FROM space_numbers);
-
-CREATE VIEW space_event_records AS
-    SELECT spaces.id, spaces.kind AS space_kind, CASE spaces.kind
-            WHEN 'workspace' THEN json_object('kind',NULL,'space_id',spaces.id,
-                'space_kind','workspace','repository_id',spaces.repository_id,
-                'name',spaces.name,'path',workspaces.path,'branch',workspaces.branch,
-                'cause',NULL,'error',NULL)
-            ELSE json_object('kind',NULL,'space_id',spaces.id,'space_kind','chat',
-                'repository_id',spaces.repository_id,'name',spaces.name,
-                'cause',NULL,'error',NULL) END AS record
-    FROM spaces LEFT JOIN workspaces ON workspaces.id=spaces.id AND spaces.kind='workspace';
 
 CREATE VIEW hub_held_numbers AS
     SELECT member_id, number, NULL AS space_id FROM hub_reserved_numbers
@@ -1364,185 +1346,6 @@ CREATE TRIGGER repository_triggers_removed AFTER DELETE ON repositories BEGIN
     DELETE FROM trigger_keys WHERE scope=OLD.id;
 END;
 
-CREATE TRIGGER space_renamed AFTER UPDATE OF name ON spaces
-WHEN NEW.name IS NOT OLD.name BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,'$.kind','renamed')
-        FROM space_event_records WHERE id=NEW.id;
-END;
-
-CREATE TRIGGER space_converted AFTER UPDATE OF kind ON spaces
-WHEN NEW.kind IS NOT OLD.kind BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,'$.kind','converted')
-        FROM space_event_records WHERE id=NEW.id;
-END;
-
-CREATE TRIGGER space_leaving BEFORE DELETE ON spaces BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','child_removed',
-        '$.child',json((SELECT ref FROM space_refs WHERE space_refs.id=OLD.id))
-    ) FROM space_event_records
-        WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=OLD.id);
-END;
-
-CREATE TRIGGER space_parent_set AFTER INSERT ON space_parents BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','parent_changed',
-        '$.parent',json((SELECT ref FROM space_refs WHERE space_refs.id=NEW.parent_id))
-    ) FROM space_event_records WHERE id=NEW.space_id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER space_parent_changed AFTER UPDATE OF parent_id ON space_parents
-WHEN NEW.parent_id IS NOT OLD.parent_id BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','parent_changed',
-        '$.parent',json((SELECT ref FROM space_refs WHERE space_refs.id=NEW.parent_id))
-    ) FROM space_event_records WHERE id=NEW.space_id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER space_parent_cleared AFTER DELETE ON space_parents BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','parent_changed','$.parent',NULL
-    ) FROM space_event_records WHERE id=OLD.space_id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER space_review_ready AFTER INSERT ON space_review BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','review_ready',
-        '$.review',json_object('kind',NEW.kind,'url',nullif(NEW.url,''))
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_review_ready_again AFTER UPDATE ON space_review BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','review_ready',
-        '$.review',json_object('kind',NEW.kind,'url',nullif(NEW.url,''))
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_review_cleared AFTER DELETE ON space_review BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','review_cleared',
-        '$.review',json_object('kind',OLD.kind,'url',nullif(OLD.url,''))
-    ) FROM space_event_records WHERE id=OLD.space_id;
-END;
-
-CREATE TRIGGER space_agent_state_set AFTER INSERT ON space_agent_state BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','agent_state','$.agent_state',json_object('state',NEW.state)
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_agent_state_changed AFTER UPDATE OF state ON space_agent_state
-WHEN OLD.state IS NOT NEW.state BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','agent_state','$.agent_state',json_object('state',NEW.state)
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_agent_state_cleared AFTER DELETE ON space_agent_state BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','agent_state','$.agent_state',json_object('state',NULL)
-    ) FROM space_event_records WHERE id=OLD.space_id;
-END;
-
-CREATE TRIGGER space_completed AFTER INSERT ON space_completion BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','completed','$.cause',NEW.cause
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_completed_again AFTER UPDATE OF record ON space_completion
-WHEN json_extract(NEW.record,'$.error') IS NULL BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','completed','$.cause',NEW.cause
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER space_undone AFTER DELETE ON space_completion BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,'$.kind','undone')
-        FROM space_event_records WHERE id=OLD.space_id;
-END;
-
-CREATE TRIGGER demo_started AFTER UPDATE OF has_run ON demos
-WHEN NEW.has_run AND NOT OLD.has_run BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','demo_started',
-        '$.demo',json_object('name',NEW.name,'preset',json_extract(NEW.record,'$.preset'),
-            'udid',json_extract(NEW.record,'$.environment.SHOAL_SIM_UDID'))
-    ) FROM space_event_records WHERE id=NEW.workspace_id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER demo_stopped AFTER DELETE ON demos WHEN OLD.has_run BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','demo_stopped',
-        '$.demo',json_object('name',OLD.name,'preset',json_extract(OLD.record,'$.preset'),
-            'udid',json_extract(OLD.record,'$.environment.SHOAL_SIM_UDID'))
-    ) FROM space_event_records WHERE id=OLD.workspace_id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER simulator_acquired AFTER UPDATE OF record ON simulators
-WHEN json_extract(NEW.record,'$.state')='leased'
-    AND json_extract(OLD.record,'$.state') IS NOT 'leased' BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','simulator_acquired',
-        '$.simulator',json_object('name',json_extract(NEW.record,'$.lease_name'),
-            'udid',json_extract(NEW.record,'$.udid'),
-            'device',json_extract(NEW.record,'$.device'),
-            'runtime',json_extract(NEW.record,'$.runtime'))
-    ) FROM space_event_records
-        WHERE id=json_extract(NEW.record,'$.workspace_id') AND space_kind='workspace';
-END;
-
-CREATE TRIGGER simulator_released AFTER UPDATE OF record ON simulators
-WHEN json_extract(OLD.record,'$.state')='leased'
-    AND json_extract(NEW.record,'$.state') IS NOT 'leased' BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','simulator_released',
-        '$.simulator',json_object('name',json_extract(OLD.record,'$.lease_name'),
-            'udid',json_extract(OLD.record,'$.udid'),
-            'device',json_extract(OLD.record,'$.device'),
-            'runtime',json_extract(OLD.record,'$.runtime'))
-    ) FROM space_event_records
-        WHERE id=json_extract(OLD.record,'$.workspace_id') AND space_kind='workspace';
-END;
-
-CREATE TRIGGER simulator_deleted AFTER DELETE ON simulators
-WHEN json_extract(OLD.record,'$.state')='leased' BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','simulator_released',
-        '$.simulator',json_object('name',json_extract(OLD.record,'$.lease_name'),
-            'udid',json_extract(OLD.record,'$.udid'),
-            'device',json_extract(OLD.record,'$.device'),
-            'runtime',json_extract(OLD.record,'$.runtime'))
-    ) FROM space_event_records
-        WHERE id=json_extract(OLD.record,'$.workspace_id') AND space_kind='workspace';
-END;
-
-CREATE TRIGGER space_created AFTER INSERT ON spaces BEGIN
-    UPDATE spaces SET number=(SELECT number FROM free_space_number)
-        WHERE id=NEW.id AND number IS NULL;
-    INSERT INTO space_events(space_id,record) SELECT NEW.id, json_set(record,
-        '$.kind','created',
-        '$.base_ref',workspaces.base_ref,
-        '$.base_workspace',json((SELECT json_object('id',base.id,'name',base_space.name,
-                'branch',base.branch)
-            FROM workspaces AS base JOIN spaces AS base_space USING(id)
-            WHERE base.id=workspaces.base_workspace_id)),
-        '$.parent',json((SELECT ref FROM space_refs
-            WHERE space_refs.id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id)))
-    ) FROM space_event_records AS space
-        LEFT JOIN workspaces ON workspaces.id=space.id AND space.space_kind='workspace'
-        WHERE space.id=NEW.id;
-    INSERT INTO space_events(space_id,record) SELECT NEW.id, json_set(record,'$.kind','ready')
-        FROM space_event_records WHERE id=NEW.id
-            AND id IN (SELECT id FROM workspaces WHERE state='ready') AND space_kind='workspace';
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','child_created',
-        '$.child',json((SELECT ref FROM space_refs WHERE space_refs.id=NEW.id))
-    ) FROM space_event_records
-        WHERE id=(SELECT parent_id FROM space_parents WHERE space_id=NEW.id);
-END;
-
 CREATE TRIGGER space_wake_timer_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM space_wake_timers WHERE space_id=OLD.id;
 END;
@@ -1554,52 +1357,6 @@ END;
 CREATE TRIGGER chat_restart_removed AFTER DELETE ON chats
 WHEN OLD.id NOT IN (SELECT id FROM workspaces) BEGIN
     DELETE FROM agent_restarts WHERE space_id=OLD.id;
-END;
-
-CREATE TRIGGER workspace_base_recorded AFTER UPDATE OF base_ref ON workspaces
-WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
-    UPDATE space_events SET record=json_set(record,'$.base_ref',NEW.base_ref)
-        WHERE id=(SELECT MAX(id) FROM space_events
-            WHERE space_id=NEW.id AND json_extract(record,'$.kind')='created');
-END;
-
-CREATE TRIGGER workspace_base_removed BEFORE DELETE ON workspaces BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','base_changed','$.cause','removed',
-        '$.base_workspace',json((SELECT json_object('id',base.id,'name',base_space.name,
-                'branch',base.branch)
-            FROM workspaces AS base JOIN spaces AS base_space USING(id)
-            WHERE base.id=OLD.base_workspace_id))
-    ) FROM space_event_records WHERE space_kind='workspace'
-        AND id IN (SELECT id FROM workspaces WHERE base_workspace_id=OLD.id);
-    UPDATE workspaces SET base_workspace_id=OLD.base_workspace_id WHERE base_workspace_id=OLD.id;
-END;
-
-CREATE TRIGGER workspace_branch_changed AFTER UPDATE OF observed_branch ON workspaces
-WHEN NEW.observed_branch IS NOT OLD.observed_branch BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','branch_changed','$.branch',NEW.observed_branch
-    ) FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER workspace_branch_renamed AFTER UPDATE OF branch ON workspaces
-WHEN NEW.branch IS NOT OLD.branch BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,'$.kind','renamed')
-        FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER workspace_ready AFTER UPDATE OF state ON workspaces
-WHEN NEW.state='ready' AND OLD.state IN ('preparing','failed','reconciling')
-    AND NEW.error IS NULL BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,'$.kind','ready')
-        FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
-END;
-
-CREATE TRIGGER workspace_setup_failed AFTER UPDATE OF state ON workspaces
-WHEN NEW.state='failed' AND OLD.state='preparing' BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','setup_failed','$.error',NEW.error
-    ) FROM space_event_records WHERE id=NEW.id AND space_kind='workspace';
 END;
 
 CREATE TRIGGER workspace_restart_removed AFTER DELETE ON workspaces
@@ -1715,40 +1472,6 @@ WHEN OLD.execution_id IS NOT NULL BEGIN
         AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
 END;
 
-CREATE TRIGGER thread_opened AFTER INSERT ON threads WHEN NOT NEW.held BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_opened',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name)
-    ) FROM space_event_records WHERE id=NEW.space_id;
-END;
-
-CREATE TRIGGER thread_released AFTER UPDATE OF held ON threads
-WHEN OLD.held AND NOT NEW.held BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_opened',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name)
-    ) FROM space_event_records WHERE id=NEW.space_id;
-    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
-        '$.kind','thread_posted',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,'text',p.text,
-            'sender',COALESCE(p.sender_name,
-                CASE p.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END))
-    ) FROM thread_posts p JOIN space_event_records r ON r.id=NEW.space_id
-    WHERE p.thread_id=NEW.id AND NOT p.forwards ORDER BY p.id;
-END;
-
-CREATE TRIGGER agent_handoff_started AFTER UPDATE OF session ON agent_handoffs
-WHEN OLD.session IS NULL AND NEW.session IS NOT NULL BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','converted',
-        '$.handoff',json_object('from',json(json_extract(NEW.record,'$.from')),
-            'to',json_set(json(json_extract(NEW.record,'$.to')),'$.session',NEW.session)))
-    FROM space_event_records WHERE id=NEW.space_id;
-END;
-
 CREATE TRIGGER agent_handoff_space_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM agent_handoffs WHERE space_id=OLD.id
         AND NOT EXISTS (SELECT 1 FROM removed_spaces WHERE space_id=OLD.id);
@@ -1759,55 +1482,210 @@ CREATE TRIGGER agent_handoff_removal_forgotten AFTER DELETE ON removed_spaces BE
         AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id);
 END;
 
+CREATE TRIGGER space_renamed AFTER UPDATE OF name ON spaces
+WHEN NEW.name IS NOT OLD.name BEGIN
+    SELECT journal_append('renamed', NEW.id, json_object());
+END;
+
+CREATE TRIGGER space_converted AFTER UPDATE OF kind ON spaces
+WHEN NEW.kind IS NOT OLD.kind BEGIN
+    SELECT journal_append('converted', NEW.id, json_object());
+END;
+
+CREATE TRIGGER space_leaving BEFORE DELETE ON spaces BEGIN
+    SELECT journal_append('child_removed', parent_id, json_object('id', OLD.id))
+        FROM space_parents WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER space_parent_set AFTER INSERT ON space_parents BEGIN
+    SELECT journal_append('parent_changed', NEW.space_id,
+        json_object('parent_id', NEW.parent_id));
+END;
+
+CREATE TRIGGER space_parent_changed AFTER UPDATE OF parent_id ON space_parents
+WHEN NEW.parent_id IS NOT OLD.parent_id BEGIN
+    SELECT journal_append('parent_changed', NEW.space_id,
+        json_object('parent_id', NEW.parent_id));
+END;
+
+CREATE TRIGGER space_parent_cleared AFTER DELETE ON space_parents BEGIN
+    SELECT journal_append('parent_changed', OLD.space_id, json_object('parent_id', NULL));
+END;
+
+CREATE TRIGGER space_review_ready AFTER INSERT ON space_review BEGIN
+    SELECT journal_append('review_ready', NEW.space_id,
+        json_object('kind', NEW.kind, 'url', NEW.url));
+END;
+
+CREATE TRIGGER space_review_ready_again AFTER UPDATE ON space_review BEGIN
+    SELECT journal_append('review_ready', NEW.space_id,
+        json_object('kind', NEW.kind, 'url', NEW.url));
+END;
+
+CREATE TRIGGER space_review_cleared AFTER DELETE ON space_review BEGIN
+    SELECT journal_append('review_cleared', OLD.space_id,
+        json_object('kind', OLD.kind, 'url', OLD.url));
+END;
+
+CREATE TRIGGER space_agent_state_set AFTER INSERT ON space_agent_state BEGIN
+    SELECT journal_append('agent_state', NEW.space_id, json_object('state', NEW.state));
+END;
+
+CREATE TRIGGER space_agent_state_changed AFTER UPDATE OF state ON space_agent_state
+WHEN OLD.state IS NOT NEW.state BEGIN
+    SELECT journal_append('agent_state', NEW.space_id, json_object('state', NEW.state));
+END;
+
+CREATE TRIGGER space_agent_state_cleared AFTER DELETE ON space_agent_state BEGIN
+    SELECT journal_append('agent_state', OLD.space_id, json_object('state', NULL));
+END;
+
+CREATE TRIGGER space_completed AFTER INSERT ON space_completion BEGIN
+    SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
+END;
+
+CREATE TRIGGER space_completed_again AFTER UPDATE OF record ON space_completion
+WHEN json_extract(NEW.record,'$.error') IS NULL BEGIN
+    SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
+END;
+
+CREATE TRIGGER space_undone AFTER DELETE ON space_completion BEGIN
+    SELECT journal_append('undone', OLD.space_id, json_object());
+END;
+
+CREATE TRIGGER demo_started AFTER UPDATE OF has_run ON demos
+WHEN NEW.has_run AND NOT OLD.has_run BEGIN
+    SELECT journal_append('demo_started', NEW.workspace_id,
+        json_object('name', NEW.name, 'record', json(NEW.record)));
+END;
+
+CREATE TRIGGER demo_stopped AFTER DELETE ON demos WHEN OLD.has_run BEGIN
+    SELECT journal_append('demo_stopped', OLD.workspace_id,
+        json_object('name', OLD.name, 'record', json(OLD.record)));
+END;
+
+CREATE TRIGGER simulator_acquired AFTER UPDATE OF record ON simulators
+WHEN json_extract(NEW.record,'$.state')='leased'
+    AND json_extract(OLD.record,'$.state') IS NOT 'leased' BEGIN
+    SELECT journal_append('simulator_acquired', json_extract(NEW.record,'$.workspace_id'),
+        json_object('record', json(NEW.record)));
+END;
+
+CREATE TRIGGER simulator_released AFTER UPDATE OF record ON simulators
+WHEN json_extract(OLD.record,'$.state')='leased'
+    AND json_extract(NEW.record,'$.state') IS NOT 'leased' BEGIN
+    SELECT journal_append('simulator_released', json_extract(OLD.record,'$.workspace_id'),
+        json_object('record', json(OLD.record)));
+END;
+
+CREATE TRIGGER simulator_deleted AFTER DELETE ON simulators
+WHEN json_extract(OLD.record,'$.state')='leased' BEGIN
+    SELECT journal_append('simulator_released', json_extract(OLD.record,'$.workspace_id'),
+        json_object('record', json(OLD.record)));
+END;
+
+CREATE TRIGGER space_created AFTER INSERT ON spaces BEGIN
+    UPDATE spaces SET number=(SELECT number FROM free_space_number)
+        WHERE id=NEW.id AND number IS NULL;
+    SELECT journal_append('created', NEW.id, json_object());
+    SELECT journal_append('ready', NEW.id, json_object())
+        WHERE NEW.id IN (SELECT id FROM workspaces WHERE state='ready');
+    SELECT journal_append('child_created', parent_id, json_object('id', NEW.id))
+        FROM space_parents WHERE space_id=NEW.id;
+END;
+
+CREATE TRIGGER workspace_base_recorded AFTER UPDATE OF base_ref ON workspaces
+WHEN OLD.base_ref IS NULL AND NEW.base_ref IS NOT NULL BEGIN
+    SELECT journal_amend_created_base(NEW.id, NEW.base_ref);
+END;
+
+CREATE TRIGGER workspace_base_removed BEFORE DELETE ON workspaces BEGIN
+    SELECT journal_append('base_changed', id,
+        json_object('base_workspace_id', OLD.base_workspace_id))
+        FROM workspaces WHERE base_workspace_id=OLD.id;
+    UPDATE workspaces SET base_workspace_id=OLD.base_workspace_id WHERE base_workspace_id=OLD.id;
+END;
+
+CREATE TRIGGER workspace_branch_changed AFTER UPDATE OF observed_branch ON workspaces
+WHEN NEW.observed_branch IS NOT OLD.observed_branch BEGIN
+    SELECT journal_append('branch_changed', NEW.id, json_object());
+END;
+
+CREATE TRIGGER workspace_branch_renamed AFTER UPDATE OF branch ON workspaces
+WHEN NEW.branch IS NOT OLD.branch BEGIN
+    SELECT journal_append('renamed', NEW.id, json_object());
+END;
+
+CREATE TRIGGER workspace_ready AFTER UPDATE OF state ON workspaces
+WHEN NEW.state='ready' AND OLD.state IN ('preparing','failed','reconciling')
+    AND NEW.error IS NULL BEGIN
+    SELECT journal_append('ready', NEW.id, json_object());
+END;
+
+CREATE TRIGGER workspace_setup_failed AFTER UPDATE OF state ON workspaces
+WHEN NEW.state='failed' AND OLD.state='preparing' BEGIN
+    SELECT journal_append('setup_failed', NEW.id, json_object('error', NEW.error));
+END;
+
+CREATE TRIGGER thread_opened AFTER INSERT ON threads WHEN NOT NEW.held BEGIN
+    SELECT journal_append('thread_opened', NEW.space_id,
+        json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name));
+END;
+
+CREATE TRIGGER thread_released AFTER UPDATE OF held ON threads
+WHEN OLD.held AND NOT NEW.held BEGIN
+    SELECT journal_append('thread_opened', NEW.space_id,
+        json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name));
+    SELECT journal_append('thread_posted', NEW.space_id,
+        json_object('thread_id', thread_id, 'text', text, 'sender', sender,
+            'sender_name', sender_name, 'forwarded_to', forwarded_to,
+            'forwarded_name', forwarded_name))
+        FROM thread_posts WHERE thread_id=NEW.id AND NOT forwards ORDER BY id;
+END;
+
+CREATE TRIGGER agent_handoff_started AFTER UPDATE OF session ON agent_handoffs
+WHEN OLD.session IS NULL AND NEW.session IS NOT NULL BEGIN
+    SELECT journal_append('converted', NEW.space_id,
+        json_object('record', json(NEW.record), 'session', NEW.session));
+END;
+
 CREATE TRIGGER file_added AFTER INSERT ON space_files BEGIN
-    INSERT INTO space_events(space_id,record) SELECT NEW.space_id, json_object(
-        'kind','file_added','space_id',NEW.space_id,
-        'repository_id',NEW.repository_id,
-        'file',json_object('id',NEW.id,
-            'space',json_object('id',NEW.space_id,'name',NEW.space,
-                'kind',CASE WHEN chat THEN 'chat' ELSE 'workspace' END),
-            'source',NEW.source,'name',NEW.name,'title',NEW.title,'path',NEW.path,
-            'bytes',NEW.bytes,'created_at',NEW.created_at,
-            'attached_by',json(NEW.attached_by),'session',json(NEW.session))
-    ) FROM (SELECT NEW.space_id IN (SELECT id FROM spaces WHERE kind='chat')
-        OR NEW.space_id IN (SELECT space_id FROM removed_space_files WHERE chat) AS chat);
+    SELECT journal_append('file_added', NEW.space_id,
+        json_object('id', NEW.id, 'space_id', NEW.space_id, 'space', NEW.space,
+            'repository_id', NEW.repository_id, 'source', NEW.source, 'name', NEW.name,
+            'title', NEW.title, 'path', NEW.path, 'bytes', NEW.bytes,
+            'created_at', NEW.created_at, 'attached_by', json(NEW.attached_by),
+            'session', json(NEW.session)));
 END;
 
 CREATE TRIGGER file_removed AFTER DELETE ON space_files BEGIN
-    INSERT INTO space_events(space_id,record) SELECT OLD.space_id, json_object(
-        'kind','file_removed','space_id',OLD.space_id,
-        'repository_id',OLD.repository_id,
-        'file',json_object('id',OLD.id,
-            'space',json_object('id',OLD.space_id,'name',OLD.space,
-                'kind',CASE WHEN chat THEN 'chat' ELSE 'workspace' END),
-            'source',OLD.source,'name',OLD.name,'title',OLD.title,'path',OLD.path,
-            'bytes',OLD.bytes,'created_at',OLD.created_at,
-            'attached_by',json(OLD.attached_by),'session',json(OLD.session))
-    ) FROM (SELECT OLD.space_id IN (SELECT id FROM spaces WHERE kind='chat')
-        OR OLD.space_id IN (SELECT space_id FROM removed_space_files WHERE chat) AS chat);
+    SELECT journal_append('file_removed', OLD.space_id,
+        json_object('id', OLD.id, 'space_id', OLD.space_id, 'space', OLD.space,
+            'repository_id', OLD.repository_id, 'source', OLD.source, 'name', OLD.name,
+            'title', OLD.title, 'path', OLD.path, 'bytes', OLD.bytes,
+            'created_at', OLD.created_at, 'attached_by', json(OLD.attached_by),
+            'session', json(OLD.session)));
 END;
 
-CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts BEGIN
-    INSERT INTO space_events(space_id,record) SELECT r.id, json_set(r.record,
-        '$.kind',iif(NEW.forwards,'thread_forwarded','thread_posted'),
-        '$.thread',json_object('space_number',t.space_number,'item',t.number,
-            'number',t.space_number||'.'||t.number,'name',t.name,'text',NEW.text,
-            'sender',COALESCE(NEW.sender_name,
-                CASE NEW.sender WHEN 'user' THEN 'the user' ELSE 'Shoal' END),
-            'to',CASE WHEN NOT NEW.forwards THEN NULL
-                WHEN NEW.forwarded_to IS NULL THEN 'the user'
-                ELSE COALESCE((SELECT name FROM spaces WHERE id=NEW.forwarded_to),
-                    NEW.forwarded_name, NEW.forwarded_to) END)
-    ) FROM threads t JOIN space_event_records r ON r.id=t.space_id
-    WHERE t.id=NEW.thread_id AND NOT t.held;
+CREATE TRIGGER thread_posted AFTER INSERT ON thread_posts WHEN NOT NEW.forwards BEGIN
+    SELECT journal_append('thread_posted', space_id,
+        json_object('thread_id', NEW.thread_id, 'text', NEW.text, 'sender', NEW.sender,
+            'sender_name', NEW.sender_name, 'forwarded_to', NEW.forwarded_to,
+            'forwarded_name', NEW.forwarded_name))
+        FROM threads WHERE id=NEW.thread_id AND NOT held;
+END;
+
+CREATE TRIGGER thread_forwarded AFTER INSERT ON thread_posts WHEN NEW.forwards BEGIN
+    SELECT journal_append('thread_forwarded', space_id,
+        json_object('thread_id', NEW.thread_id, 'text', NEW.text, 'sender', NEW.sender,
+            'sender_name', NEW.sender_name, 'forwarded_to', NEW.forwarded_to,
+            'forwarded_name', NEW.forwarded_name))
+        FROM threads WHERE id=NEW.thread_id AND NOT held;
 END;
 
 CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
 WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
-    INSERT INTO space_events(space_id,record) SELECT id, json_set(record,
-        '$.kind','thread_resolved',
-        '$.thread',json_object('space_number',NEW.space_number,'item',NEW.number,
-            'number',NEW.space_number||'.'||NEW.number,'name',NEW.name,
-            'outcome',json_extract(NEW.outcome,'$.outcome'))
-    ) FROM space_event_records WHERE id=NEW.space_id;
+    SELECT journal_append('thread_resolved', NEW.space_id,
+        json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name,
+            'outcome', json(NEW.outcome)));
 END;

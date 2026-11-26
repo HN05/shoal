@@ -9,7 +9,7 @@ mod journal_shapes;
 mod post_surfaces;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 303;
+pub const SCHEMA_VERSION: i64 = 304;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -60,6 +60,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         include_str!("migrations/0303_journal_event_shapes.sql"),
         Some(journal_shapes::rewrite_records),
     ),
+    (
+        304,
+        include_str!("migrations/0304_journal_append.sql"),
+        None,
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
@@ -75,6 +80,8 @@ const REBUILDS: &[i64] = &[];
 const SCHEMA: &str = include_str!("migrations/schema.sql");
 
 pub(super) fn migrate(db: &mut Connection) -> Result<()> {
+    // A migration's writes can fire the triggers that record events.
+    crate::journal::register(db)?;
     if is_new(db)? {
         return create_current(db);
     }

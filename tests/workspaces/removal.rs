@@ -208,7 +208,8 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
     fixture.ok(&["rm", "--wait", &fixture.id("scratch"), "--yes"]);
     // Copies of the record with long checkpoint names add up to more than
     // the 64 KiB frame.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 40)
          INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
@@ -742,7 +743,8 @@ fn a_parent_removes_a_child_an_interrupted_create_left_preparing() {
     let split = scoped_command(&fixture, "parent", &["create", "--branch", "child"]);
     assert!(split.status.success(), "{}", printed(&split));
     // The creation was interrupted before the child's setup started.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "UPDATE workspaces SET state='preparing' WHERE id IN (SELECT id FROM spaces WHERE name='child')",
         [],
@@ -872,7 +874,8 @@ fn removal_of_several_workspaces_confirms_once_and_checks_all_first() {
     assert!(!refused.status.success());
     assert!(path(0).exists());
     // So does one in another lifecycle operation, which the check accepts.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     let set_state = |state: &str| {
         db.execute(
             "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",
@@ -1204,7 +1207,8 @@ fn holds_are_visible_and_manual_removal_confirms_holders() {
     assert!(prompt.contains("app-thread"), "{prompt}");
     let removed = fixture.ok(&["rm", "--wait", &fixture.id("held"), "--yes"]);
     assert_eq!(removed["holds"], expected);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     assert_eq!(
         db.query_row("SELECT count(*) FROM space_holds", [], |row| row
             .get::<_, i64>(0))

@@ -563,7 +563,7 @@ fn multiple_prs_clean_up_only_after_every_merge_and_honor_done_policy(cleanup: b
             false
         );
     }
-    let db = rusqlite::Connection::open(root.join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(root.join("state/state.db")).unwrap();
     let count: i64 = db
         .query_row(
             "SELECT count(*) FROM alerts WHERE kind='workspace_done' AND space='multi'",

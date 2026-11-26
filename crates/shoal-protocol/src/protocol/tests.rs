@@ -646,7 +646,8 @@ fn an_answer_for_another_machine_names_the_machine_that_keeps_its_files() {
         ..serde_json::from_value(json!({"updates": [], "timed_out": false})).unwrap()
     };
     let logged: crate::log::LogEntry = serde_json::from_value(json!({
-        "type": "file", "id": 4, "created_at": 0, "kind": "file_added", "repository_id": null,
+        "type": "file", "id": 4, "created_at": 0, "kind": "file_added", "space_id": "w",
+        "repository_id": null,
         "file": {
             "id": 3, "space": {"id": "w", "name": "charts", "kind": "workspace"},
             "source": "added", "name": "chart.png", "path": "/repo/.attachments/chart.png",

@@ -10,7 +10,8 @@ fn resume_reconciles_a_quarantined_execution_from_a_saved_handoff() {
     let execution = crashed_execution(&mut fixture, "quarantined");
     let execution = execution["id"].as_str().unwrap();
     // The pause path clears the child identity before saving the handoff.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "UPDATE executions SET child=NULL,group_id=NULL WHERE id=?1",
         [execution],
@@ -289,7 +290,8 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
         "reason": null, "state": "creating", "last_used": 1, "error": null,
         "acquirer": {"kind": "user"}
     });
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     for (state, workspace) in states.iter().zip(&workspaces) {
         db.execute(
             "UPDATE workspaces SET state=?1,error='original error' WHERE id=?2",
@@ -403,7 +405,8 @@ fn reconcile_repairs_interrupted_state_and_preserves_work_and_leases() {
         "--space",
         &fixture.id("interrupted"),
     ]);
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "UPDATE workspaces SET state='removing' WHERE id IN (SELECT id FROM spaces WHERE name='interrupted')",
         [],
@@ -965,7 +968,8 @@ fn reconcile_recovers_daemon_crash_and_requires_acknowledgement_without_launch_i
     );
     // A wrapper that died before launching its command recorded no child or
     // group.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
         rusqlite::params![

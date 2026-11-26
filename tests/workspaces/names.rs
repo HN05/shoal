@@ -84,7 +84,8 @@ fn workspace_rename_cli_infers_context_and_enforces_execution_scope() {
         let error: Value = serde_json::from_slice(&output.stderr).unwrap();
         assert_eq!(error["error"]["code"], code, "{args:?}: {error}");
     }
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
         [workspace["id"].as_str().unwrap()],
@@ -296,7 +297,9 @@ fn interrupted_workspace_rename_requires_explicit_repair() {
             "--space",
             &fixture.id("original"),
         ]);
-        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        let db =
+            shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+                .unwrap();
         db.execute(
             "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,'new/topic')",
             [id],
@@ -368,7 +371,9 @@ fn work_rename_finishes_an_interrupted_rename() {
         let workspace = fixture.add("original");
         let path = Path::new(workspace["path"].as_str().unwrap());
         let id = workspace["id"].as_str().unwrap();
-        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        let db =
+            shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+                .unwrap();
         db.execute(
             "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,'new/topic')",
             [id],
@@ -428,7 +433,8 @@ fn deleted_worktree_with_interrupted_rename_can_be_removed() {
         &fixture.id("original"),
     ]);
     let id = workspace["id"].as_str().unwrap();
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,'new/topic')",
         [id],

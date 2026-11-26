@@ -624,7 +624,8 @@ of its chat. Like scope, this is cooperative.
 ### The journal
 
 The journal records each file's record as it is added and deleted. Store
-triggers write it, so no route of attaching or deleting is missed. The journal
+triggers detect both, as [the journal](daemon.md#journal) does for every
+change a row records. The journal
 carries the owner's ID from the record, because a removed space has no row
 left to supply it. Clients showing files follow the journal without polling.
 

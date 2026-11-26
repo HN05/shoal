@@ -16,10 +16,12 @@ pub fn skip_syncs(db: &Connection) -> rusqlite::Result<()> {
     db.pragma_update(None, "synchronous", "OFF")
 }
 
-/// The database at `path` as a test's fixture opens it, with [`skip_syncs`].
+/// The database at `path` as a test's fixture opens it, with [`skip_syncs`]
+/// and the functions the store's triggers call.
 pub fn open_database(path: impl AsRef<Path>) -> rusqlite::Result<Connection> {
     let db = Connection::open(path)?;
     skip_syncs(&db)?;
+    crate::journal::register(&db)?;
     Ok(db)
 }
 

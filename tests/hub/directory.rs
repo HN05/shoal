@@ -51,7 +51,9 @@ pub(super) fn join(machine: &Base, hub: &Base, name: &str) -> String {
 
 /// Whether `machine` keeps spare numbers the hub gave it.
 fn numbers_from_hub(machine: &Base) -> bool {
-    let database = rusqlite::Connection::open(machine.root.path().join("state/state.db")).unwrap();
+    let database =
+        shoal_store::test_support::open_database(machine.root.path().join("state/state.db"))
+            .unwrap();
     database
         .query_row("SELECT EXISTS(SELECT 1 FROM hub_numbering)", [], |row| {
             row.get(0)
@@ -88,11 +90,13 @@ fn copied(machine: &Base) -> Home {
     let copy = home();
     fs::create_dir_all(copy.path().join("state")).unwrap();
     let copied = copy.path().join("state/state.db");
-    let database = rusqlite::Connection::open(machine.root.path().join("state/state.db")).unwrap();
+    let database =
+        shoal_store::test_support::open_database(machine.root.path().join("state/state.db"))
+            .unwrap();
     database
         .execute("VACUUM INTO ?1", [copied.to_str().unwrap()])
         .unwrap();
-    let copied = rusqlite::Connection::open(Path::new(&copied)).unwrap();
+    let copied = shoal_store::test_support::open_database(Path::new(&copied)).unwrap();
     copied.execute("DELETE FROM hub_membership", []).unwrap();
     copy
 }

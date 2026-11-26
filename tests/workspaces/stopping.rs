@@ -107,7 +107,8 @@ fn stop_levels_take_leftovers_then_every_untracked_process() {
     let refused = fixture.run(&["stop", "--leftovers", &fixture.id("procs"), "missing"]);
     assert!(!refused.status.success(), "{}", printed(&refused));
     fixture.add("busy");
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "UPDATE workspaces SET state='stopping' WHERE id IN (SELECT id FROM spaces WHERE name='busy')",
         [],
@@ -269,7 +270,8 @@ fn stop_stops_named_or_all_running_workspaces_and_marks_them_stopped() {
         names
     };
     // One in another lifecycle operation refuses them all, leaving the others running.
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     let set_state = |state: &str| {
         db.execute(
             "UPDATE workspaces SET state=?1 WHERE id IN (SELECT id FROM spaces WHERE name='second')",
@@ -933,7 +935,9 @@ fn stop_asks_before_forgetting_an_execution_it_cannot_prove_ended() {
     // A wrapper that died before launching its command recorded no group, so
     // nothing proves it ended; its birth keeps older processes out.
     let insert = |fixture: &Fixture| {
-        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        let db =
+            shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+                .unwrap();
         db.execute(
             "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('unlaunched',?1,'unknown',?2)",
             rusqlite::params![

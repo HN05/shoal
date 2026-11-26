@@ -705,6 +705,8 @@ pub struct FileEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEventDetails {
     pub kind: FileEventKind,
+    /// The space the file is attached to, which may be gone.
+    pub space_id: SpaceId,
     /// Null for the file of a chat without a repository.
     pub repository_id: Option<RepositoryId>,
     /// The record as `shoal files` lists it.

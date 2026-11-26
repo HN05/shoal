@@ -756,7 +756,9 @@ fn persisted_pr_registrations_survive_disabled_cleanup_and_clear_after_restart()
         } else {
             serde_json::json!({"head": head.trim(), "error": null})
         };
-        let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+        let db =
+            shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+                .unwrap();
         db.execute(
             "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
             rusqlite::params![workspace["id"].as_str().unwrap(), record.to_string()],
@@ -799,7 +801,8 @@ fn persisted_pr_registrations_survive_disabled_cleanup_and_clear_after_restart()
 fn invalid_persisted_pr_registration_retains_workspace_and_can_be_cleared() {
     let mut fixture = Fixture::with_config(Some("[cleanup.auto]\nenabled=false\n"));
     let workspace = fixture.add("invalid");
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     for record in [
         serde_json::json!({"head": null, "error": null}),
         serde_json::json!({"urls": ["https://forge.example/team/repo/pulls/7"], "head": "abc123", "error": null}),

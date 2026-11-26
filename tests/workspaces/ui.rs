@@ -457,7 +457,8 @@ fn status_summarizes_current_workspace_work_and_supports_json() {
             .code(),
         Some(2)
     );
-    let db = rusqlite::Connection::open(fixture.root.path().join("state/state.db")).unwrap();
+    let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
+        .unwrap();
     db.execute(
         "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
         rusqlite::params![
