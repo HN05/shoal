@@ -53,9 +53,9 @@ fn image_at<'a>(
                 "" => alt,
                 label => label,
             };
-            (*defined.get(&label.to_lowercase())?, close + 1)
+            (*defined.get(&normalized(label))?, close + 1)
         }
-        _ => (*defined.get(&alt.to_lowercase())?, after),
+        _ => (*defined.get(&normalized(alt))?, after),
     };
     Some(Image {
         source: &text[start..end],
@@ -84,8 +84,8 @@ fn closing(text: &str, from: usize, open: char, close: char) -> Option<usize> {
 }
 
 /// The targets of the reference definitions `[label]: target` in `text`,
-/// by their labels, which match without regard to case. A target may
-/// stand on the line after its label.
+/// by their labels as [`normalized`]. A target may stand on the line after
+/// its label.
 fn definitions(text: &str) -> BTreeMap<String, &str> {
     let mut defined = BTreeMap::new();
     let mut lines = text.lines().peekable();
@@ -104,11 +104,21 @@ fn definitions(text: &str) -> BTreeMap<String, &str> {
         };
         if let Some(target) = target {
             defined
-                .entry(label.to_lowercase())
+                .entry(normalized(label))
                 .or_insert(unbracketed(target));
         }
     }
     defined
+}
+
+/// `label` as Markdown matches a reference label: without regard to case,
+/// and with its whitespace trimmed and each run of it one space.
+fn normalized(label: &str) -> String {
+    label
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }
 
 /// `target` without the angle brackets Markdown allows around it.

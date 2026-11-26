@@ -481,6 +481,13 @@ fn images_by_reference_name_attached_files_too() {
         json!({}),
     );
     assert!(refusal(below, &[]).contains("image https://example.com/chart.png"));
+    // Labels match with their whitespace trimmed and collapsed.
+    let spaced = surface(
+        json!([{"id": "root", "component": "Text",
+            "text": "![chart][ Latency  Chart ]\n\n[latency chart]: https://example.com/c.png"}]),
+        json!({}),
+    );
+    assert!(refusal(spaced, &[]).contains("image https://example.com/c.png"));
     // A bracket without a definition is text, not an image.
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),
