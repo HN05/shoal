@@ -1,6 +1,5 @@
-//! Which agents are light: those of a mode whose `weight` is `light` start
-//! at once, hold no heavy slot and are never stopped for load, in a
-//! workspace or a chat alike.
+//! Which agents are light, by their mode's `weight`, in a workspace or a chat
+//! alike.
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
@@ -110,8 +109,8 @@ impl Agents {
                     continue;
                 }
                 let path = recovery::record_path(&self.paths, space, &execution);
-                // An unreadable record counts as heavy, as before weights,
-                // rather than failing every admission pass.
+                // An unreadable record counts as heavy rather than failing
+                // every admission pass.
                 if let Some(record) = Record::load(&path).ok().flatten() {
                     stopped.push((execution, repository.clone(), Some(record.mode)));
                 }
@@ -121,9 +120,8 @@ impl Agents {
     }
 
     /// The light modes of each of `repositories`, `None` standing for the
-    /// global config. A repository whose settings do not resolve has none,
-    /// so its agents wait for slots as before; its config fails its
-    /// commands too.
+    /// global config. A repository whose settings do not resolve has none, so
+    /// its agents wait for slots; its config fails its commands too.
     async fn light_modes(
         &self,
         daemon: &dyn Daemon,

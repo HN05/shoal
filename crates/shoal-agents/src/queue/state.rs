@@ -1,8 +1,4 @@
-//! What the daemon keeps in memory about the agent queue: who holds starting
-//! entries, which stopped agents' wrappers wait over their link to restore
-//! them, which one-shot runs
-//! wait for or hold their admission, what held back waiting entries at the last
-//! admission pass, and what wakes the dispatcher.
+//! What the daemon keeps in memory about the agent queue.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
@@ -124,12 +120,10 @@ impl AgentQueue {
         self.admission.lock().await
     }
 
-    /// Count an open hold on the entry `id`.
     pub fn hold(&self, id: &QueueEntryId) {
         *self.holds.lock().unwrap().entry(id.clone()).or_default() += 1;
     }
 
-    /// Drop a hold on `id`.
     pub fn release(&self, id: &QueueEntryId) {
         let mut holds = self.holds.lock().unwrap();
         if let Some(count) = holds.get_mut(id) {
@@ -163,11 +157,10 @@ impl AgentQueue {
         self.attach_keeps.lock().unwrap().remove(id);
     }
 
-    /// Replace what held back waiting entries with the pass's `held` at
-    /// `now`, and keep since when each one held for its memory has been. An
-    /// entry held for anything else, or no longer among the `unstarted` ones
-    /// the pass considered, waits anew; one the pass did not measure, since
-    /// it started another, keeps its wait.
+    /// Replace what held back waiting entries with the pass's `held` at `now`.
+    /// An entry held for its memory keeps since when. One held for anything
+    /// else, or no longer among the `unstarted` ones, waits anew. One the pass
+    /// did not measure, since it started another, keeps its wait.
     pub fn record_held_back(
         &self,
         held: HashMap<QueueEntryId, HeldBy>,
@@ -200,9 +193,9 @@ impl AgentQueue {
         self.held_back.lock().unwrap().get(id).cloned()
     }
 
-    /// Mark the wrapper of `execution`, every process of whose stopped agent
-    /// has stopped, as waiting over its link to restore it while the
-    /// returned link lives, so admission hands the restore to it.
+    /// Mark the wrapper of `execution` as waiting over its link to restore its
+    /// stopped agent, while the returned link lives. Every process of that
+    /// agent has stopped.
     pub fn link_restore(&self, execution: &ExecutionId) -> RestoreLink<'_> {
         self.restore_links
             .lock()
@@ -447,8 +440,6 @@ impl AgentQueue {
         *self.paused.lock().unwrap()
     }
 
-    /// Whether admission waits, while the system shuts down, the machine
-    /// sleeps, the user is away or paused it.
     pub fn holds_admission(&self) -> bool {
         self.suspended()
             || self.asleep.load(Ordering::SeqCst)
@@ -519,7 +510,6 @@ pub struct RestoreLink<'a> {
 }
 
 impl RestoreLink<'_> {
-    /// The execution of the agent the wrapper restores.
     pub fn execution(&self) -> &ExecutionId {
         &self.execution
     }

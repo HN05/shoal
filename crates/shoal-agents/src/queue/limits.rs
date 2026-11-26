@@ -1,6 +1,5 @@
-//! Admission limits: the machine's and each repository's limits on agents
-//! and CI jobs, as configured and as measured memory and disk allow, and
-//! which waiting entries fit them beside the slots in use.
+//! Admission limits, and which waiting entries fit them beside the slots in
+//! use.
 use shoal_ids::repository_ids::RepositoryId;
 use std::{
     collections::{HashMap, HashSet},
@@ -34,8 +33,8 @@ pub struct Limits {
     pub repositories: HashMap<RepositoryId, Option<u32>>,
     /// The machine-wide limit free disk space sets while a fixed limit applies.
     pub disk: Option<u32>,
-    /// The one-shot runs admitted, which hold no slot but count toward the
-    /// disk limit beside the slots.
+    /// The admitted one-shot runs, which hold no slot but count toward the disk
+    /// limit.
     pub oneshots: usize,
     pub jobs: JobLimits,
 }
@@ -47,8 +46,7 @@ pub struct JobLimits {
     pub running: u32,
     /// `machine.max_jobs` when fixed.
     pub fixed: Option<u32>,
-    /// The limit free disk space sets while `machine.max_jobs` is fixed, as
-    /// it does beside a fixed agent limit.
+    /// The limit free disk space sets while `machine.max_jobs` is fixed.
     pub disk: Option<u32>,
     /// What measured memory and disk leave for a job's start, under dynamic
     /// admission.
@@ -72,8 +70,8 @@ pub enum Work {
     Job {
         cost: capacity::JobCost,
     },
-    /// A one-shot run, which the daemon starts without a session; one
-    /// protection stopped waits for healthy readings `after_stop`.
+    /// A one-shot run. One protection stopped waits for healthy readings
+    /// `after_stop`.
     OneShot {
         after_stop: bool,
     },
@@ -86,7 +84,6 @@ pub enum Work {
 }
 
 impl Work {
-    /// Whether it starts only on sustained healthy readings.
     fn waits_for_recovery(self) -> bool {
         matches!(
             self,
@@ -150,10 +147,9 @@ pub struct Place {
     pub tier: Tier,
 }
 
-/// How long work that fits in memory may start ahead of a higher-ranked
-/// entry of its priority and tier that does not: from then on nothing it
-/// outranks starts until it fits, so a large start cannot be passed over for
-/// good.
+/// How long work that fits in memory may start ahead of a higher-ranked entry
+/// of its priority and tier that does not. From then on nothing that entry
+/// outranks starts until it fits.
 pub const BACKFILL_FOR: Duration = Duration::from_secs(15 * 60);
 
 /// The entries a pass held back for their memory, which keep it from the
@@ -210,20 +206,9 @@ impl Admission {
 }
 
 /// The waiting entries that fit, in queue order, and what holds back the
-/// others. `occupied` holds one repository ID per used slot, none for a
-/// chat without one, which counts toward the machine's limits alone, as an
-/// entry without one does. Under fixed
-/// limits a launch, like a restore an update woke, needs a free slot and a
-/// restore whose agent kept its slot takes it back; under dynamic admission
-/// each needs room for its memory. A restore that waits for healthy
-/// readings, like a one-shot run protection stopped, starts only on
-/// sustained healthy readings (`recovered`), one per healthy interval. A CI job counts only against the jobs' limits, and under
-/// dynamic admission needs room for its own memory and takes the pass's one
-/// start, as an agent does, and beside running jobs a CPU below its level. A light agent's entry needs no slot and no room,
-/// so it takes none of the pass's starts and, restored, none of the healthy
-/// interval's: only critical or missing readings and low disk hold it. An
-/// entry that waits or does not fit keeps its place and is passed over, and
-/// one held back for its memory keeps it as `MemoryKept` says.
+/// others. `occupied` holds one repository ID per used slot, none for a chat
+/// without one. `docs/design/queue.md` gives the rules each kind of entry
+/// meets.
 pub fn admit(
     occupied: &[Option<RepositoryId>],
     waiting: &[Waiting],
@@ -233,9 +218,8 @@ pub fn admit(
     let mut total = occupied.len();
     // What the disk limit counts: the slots and the one-shot runs.
     let mut writing = total + limits.oneshots;
-    // Whether an agent or a job was admitted this pass, by measured memory
-    // or a fixed limit: measured memory admits nothing beside it, since the
-    // sample predates it.
+    // Whether this pass admitted an agent or a job. Measured memory admits
+    // nothing beside it, since the sample predates it.
     let mut started = false;
     let mut used: HashMap<&str, usize> = HashMap::new();
     for repository in occupied.iter().flatten() {
@@ -335,9 +319,8 @@ pub fn admit(
     admission
 }
 
-/// What holds back a light agent, which needs no slot and no memory room:
-/// only a critical or missing reading, or disk past the limit it sets beside
-/// the `writing` slots and one-shot runs.
+/// What holds back a light agent: only a critical or missing reading, or disk
+/// past the limit it sets beside the `writing` slots and one-shot runs.
 fn light_hold(limits: &Limits, writing: usize) -> Option<HeldBy> {
     if let Some(capacity::Room::Held(held)) = &limits.room {
         return Some(held.clone());
@@ -352,9 +335,8 @@ fn full_disk(limits: &Limits, writing: usize) -> Option<HeldBy> {
     full.then_some(HeldBy::Disk)
 }
 
-/// Whether a start fits what measured memory and disk leave, when `room`
-/// says so under dynamic admission: none does beside one this pass
-/// `started` already.
+/// Whether a start fits what measured memory and disk leave, under dynamic
+/// admission. None fits beside one this pass `started` already.
 fn measured_fit(
     room: Option<&capacity::Room>,
     started: bool,
@@ -379,10 +361,9 @@ fn full_job_limit(limits: &JobLimits, running: u32) -> Option<HeldBy> {
     }
 }
 
-/// The fixed limit an agent's start in `repository` would exceed, with
-/// `total` slots used on the machine, `writing` slots and one-shot runs on
-/// its disk and `used` slots in the repository, `own` of them its own
-/// already. A chat without a repository meets the machine's limits alone.
+/// The fixed limit an agent's start in `repository` would exceed. `own` of the
+/// repository's `used` slots are the entry's own already. A chat without a
+/// repository meets the machine's limits alone.
 fn full_limit(
     limits: &Limits,
     repository: Option<&RepositoryId>,
@@ -533,9 +514,9 @@ impl Agents {
         Ok((sample, capacity::room(sample, agents, overload)))
     }
 
-    /// The machine's busy CPU over the CPU warning's window, against the
-    /// warning's level, at which a job beside running ones waits; none read
-    /// once the overload monitor's sampling pauses.
+    /// The machine's busy CPU over the CPU warning's window, against the level
+    /// at which a job beside running ones waits. None once the overload
+    /// monitor's sampling pauses.
     fn job_cpu(&self, overload: &Overload) -> capacity::Cpu {
         let window = Duration::from_secs(overload.warning.cpu_sustained_seconds);
         let gap = crate::overload::sample_gap(overload);

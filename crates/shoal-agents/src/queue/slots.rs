@@ -100,13 +100,12 @@ fn persisted_slots(db: &rusqlite::Connection, records: &dyn Records) -> Result<P
 }
 
 impl Agents {
-    /// The used slots. Each agent in a space that is not done uses one
-    /// while it runs, awaits reattachment or waits for resume, counted once by
-    /// its execution, except the `dormant` ones whose restore waits for an
-    /// update; so does each starting launch until its agent registers. An
-    /// admitted restore starts in its agent's slot, and one of a last
-    /// session, which holds none, as a launch. A light agent holds none, nor
-    /// does a one-shot run such as a review.
+    /// The used slots. Each agent in a space that is not done uses one while it
+    /// runs, awaits reattachment or waits for resume, except the `dormant` ones
+    /// whose restore waits for an update. Each starting launch uses one until
+    /// its agent registers. An admitted restore starts in its agent's slot, and
+    /// a last session's, which holds none, counts as a launch. Light agents and
+    /// one-shot runs hold none.
     pub async fn occupied_slots(
         &self,
         daemon: &dyn Daemon,

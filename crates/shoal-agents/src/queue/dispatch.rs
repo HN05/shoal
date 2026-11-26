@@ -1,7 +1,5 @@
-//! Dispatch: each pass ends abandoned starts, takes over the restores whose
-//! wrapper is gone, queues the restores stopped agents request, leaves those
-//! recovery no longer restores for `shoal resume`, then admits the waiting
-//! entries that fit and starts what the daemon starts itself.
+//! The dispatcher's passes, which admit the waiting entries that fit and start
+//! what the daemon starts itself.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceName;
 use std::{
@@ -138,11 +136,8 @@ impl WaitingWork {
 }
 
 impl Agents {
-    /// End abandoned starts and those resolved another way, with the
-    /// restarts they started, return the starts whose setup failed to wait
-    /// for it, take over the restores whose wrapper is gone, queue the
-    /// restores stopped agents request, then start the waiting entries that
-    /// fit.
+    /// One dispatcher pass: settle the starting and stopped entries, then start
+    /// the waiting entries that fit.
     pub async fn dispatch_queue(&self, daemon: &dyn Daemon) -> Result<()> {
         let _gate = self.agent_queue.lock_admission().await;
         self.expire_starting_entries(daemon).await?;
@@ -156,11 +151,11 @@ impl Agents {
         Ok(())
     }
 
-    /// Admit waiting entries that fit, record what holds back the others,
-    /// start launches other than `caller`'s, and return whether `caller`'s
-    /// entry, which the caller may hold, was admitted. An admitted restore
-    /// is left to its waiting agent; nothing is admitted while the system
-    /// shuts down or the machine sleeps. Requires the queue gate.
+    /// Admit waiting entries that fit, record what holds back the others, and
+    /// start launches other than `caller`'s. Returns whether `caller`'s entry,
+    /// which the caller may hold, was admitted. An admitted restore is left to
+    /// its waiting agent. Nothing is admitted while the system shuts down or
+    /// the machine sleeps. Requires the queue gate.
     pub async fn admit_waiting(
         &self,
         daemon: &dyn Daemon,
@@ -209,10 +204,9 @@ impl Agents {
         (self.agent_queue).record_held_back(held, &unstarted, std::time::Instant::now());
     }
 
-    /// The entries of `work` that fit beside the slots in use, and what
-    /// holds back the others, its jobs whose permits are all held and its
-    /// entries whose tool's upstream is limited among them, where
-    /// `recovered` says whether healthy readings are published.
+    /// The entries of `work` that fit beside the slots in use, and what holds
+    /// back the others. `recovered` says whether healthy readings are
+    /// published.
     async fn fitting_entries(
         &self,
         daemon: &dyn Daemon,
@@ -252,13 +246,13 @@ impl Agents {
         Ok(admit(&occupied, &work.admissible(), &limits, recovered))
     }
 
-    /// Grant the `admitted` entries of `work` their start: wake the runners
-    /// for a CI job, let each restore's waiting wrapper go and admit one-shot
-    /// runs, using up the recovery epoch `published` for those that waited
-    /// for healthy readings, which a restore the daemon starts keeps for its
-    /// agent to check. Return the entries left to mark
-    /// starting, or none when a stop, reload or unsafe reading withdrew the
-    /// readings since; the pass it wakes decides again.
+    /// Grant the `admitted` entries of `work` their start: wake the runners for
+    /// a CI job, let each restore's waiting wrapper go and admit one-shot runs.
+    /// Those that waited for healthy readings use up the recovery epoch
+    /// `published`, which a restore the daemon starts keeps for its agent to
+    /// check. Returns the entries left to mark starting, or none when a stop,
+    /// reload or unsafe reading withdrew the readings since; the pass it wakes
+    /// decides again.
     fn grant_admission(
         &self,
         daemon: &dyn Daemon,

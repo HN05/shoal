@@ -1,7 +1,5 @@
-//! What this machine's queue has room for now, which it reports to the hub
-//! so the hub can place new spaces: the heavy and light agents admission
-//! would start, the memory new work may use and the heavy agents waiting,
-//! as one admission pass would find them.
+//! What this machine's queue has room for now, which it reports to the hub for
+//! placement.
 use std::{collections::HashSet, time::Duration};
 
 use crate::state::QueueKind;
