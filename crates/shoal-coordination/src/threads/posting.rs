@@ -12,7 +12,8 @@ use shoal_protocol::{
     code::NewCodeRef,
     space_names::SpaceSelector,
     threads::{
-        Answer, Holder, MAX_POST_LEN, NewPost, Sender, Side, Thread, ThreadNumber, ThreadSpace,
+        Answer, Holder, MAX_POST_LEN, NewPost, Post, Sender, Side, Thread, ThreadNumber,
+        ThreadSpace,
     },
 };
 
@@ -71,6 +72,22 @@ fn interacting(
 /// surface the other side posted, the only one that takes actions, with
 /// the action's whole context; and the action's label.
 fn answered(thread: &Thread, side: Side, answer: Answer) -> Result<(Answer, String)> {
+    let offer = current_offer(thread, side, answer.post)?;
+    let surface = (offer.post.ui.as_ref()).context("the offer has a surface")?;
+    let values = surface.resolve(&answer.action, answer.values)?;
+    let label = (surface.action(&answer.action)).map_or_else(String::new, |action| action.label);
+    let answer = Answer {
+        post: Some(offer.id),
+        action: answer.action,
+        values,
+    };
+    Ok((answer, label))
+}
+
+/// The latest surface the side across from `side` posted in `thread`, the
+/// only one that takes actions, refused unless it is the post `answered`
+/// names, when it names one.
+fn current_offer(thread: &Thread, side: Side, answered: Option<i64>) -> Result<&Post> {
     let other = thread.party(side.other());
     let offer = (thread.surface_from(side.other())).with_context(|| {
         format!(
@@ -81,7 +98,7 @@ fn answered(thread: &Thread, side: Side, answer: Answer) -> Result<(Answer, Stri
     let named = |id: i64| {
         (thread.post_number(id)).map_or_else(|| id.to_string(), |number| format!("#{number}"))
     };
-    if let Some(post) = answer.post {
+    if let Some(post) = answered {
         ensure!(
             post == offer.id,
             "post {} of thread {} is not the latest surface {other} posted, which alone takes \
@@ -91,15 +108,7 @@ fn answered(thread: &Thread, side: Side, answer: Answer) -> Result<(Answer, Stri
             named(offer.id)
         );
     }
-    let surface = (offer.post.ui.as_ref()).context("the offer has a surface")?;
-    let values = surface.resolve(&answer.action, answer.values)?;
-    let label = (surface.action(&answer.action)).map_or_else(String::new, |action| action.label);
-    let answer = Answer {
-        post: Some(offer.id),
-        action: answer.action,
-        values,
-    };
-    Ok((answer, label))
+    Ok(offer)
 }
 
 /// Who posts: the side it takes, none for a participant, who sends it, and
@@ -177,6 +186,11 @@ pub fn record_post(
 ) -> Result<(Thread, Delivered)> {
     let thread = records::reread(tx, id)?;
     ensure_open(&thread)?;
+    // The surface was checked before the post's files were copied; another
+    // post may have replaced it since.
+    if let (Some(side), Some(answer)) = (poster.side, &post.answer) {
+        current_offer(&thread, side, answer.post)?;
+    }
     match poster.side {
         Some(Side::Holder) => records::ensure_held_by(&thread, &poster.seen)?,
         Some(Side::Opener) if thread.opener == Sender::Space => {

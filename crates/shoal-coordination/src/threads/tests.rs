@@ -677,6 +677,44 @@ async fn an_alert_with_more_actions_than_fit_keeps_its_reply_hint() {
 }
 
 #[tokio::test]
+async fn an_answer_checked_before_a_newer_surface_arrived_is_refused() {
+    let tree = tree().await;
+    let fixture = &tree.fixture;
+    let child = caller(&tree.child);
+    let thread = open(fixture, Some(&child), None).await;
+    let asked = asking("Which?", &["Postgres", "SQLite"], None);
+    let first = post_as(fixture, &thread, &child, asked).await.unwrap();
+    let first = first.last_post().unwrap().id;
+    // The parent checked its answer against the first surface, and the
+    // child posted a newer one before the answer was recorded.
+    let asked = asking("Which cache?", &["Redis", "None"], None);
+    let newer = post_as(fixture, &thread, &child, asked).await.unwrap();
+    let poster = super::posting::Poster {
+        side: Some(Side::Holder),
+        sender: Sender::Space,
+        space: Some(shoal_protocol::threads::ThreadSpace::here(
+            tree.parent.id.clone(),
+        )),
+        seen: newer.holder.clone(),
+    };
+    let stale = NewPost {
+        answer: Some(Answer {
+            post: Some(first),
+            action: "1".into(),
+            ..Answer::default()
+        }),
+        ..post("Postgres")
+    };
+    let (id, records) = (thread.id, fixture.coordination.records.clone());
+    let recorded = fixture.coordination.store.write(move |tx| {
+        let attached = super::posting::Attached::default();
+        super::posting::record_post(tx, id, &poster, &stale, attached, false, &*records).map(|_| ())
+    });
+    let refused = recorded.await.unwrap_err();
+    assert!(refused.to_string().contains("answer #2"), "{refused:#}");
+}
+
+#[tokio::test]
 async fn an_answer_takes_an_action_of_the_other_side_s_latest_surface() {
     let tree = tree().await;
     let fixture = &tree.fixture;
