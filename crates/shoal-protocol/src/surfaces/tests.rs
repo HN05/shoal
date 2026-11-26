@@ -767,7 +767,9 @@ fn a_list_input_bound_absolutely_is_an_action_s_input() {
              "value": {"@path": "/shared"}},
             {"id": "pick", "component": "Button", "child": "pick-label",
              "action": {"event": {"name": "pick", "context": {
-                 "shared": {"@path": "/shared"}}}}},
+                 "shared": {"@path": "/shared"},
+                 "float": {"@call": "@index", "args": {"offset": 1.0}},
+                 "bound": {"@call": "@index", "args": {"offset": {"@path": "/start"}}}}}}},
             {"id": "pick-label", "component": "Text", "text": "Pick"},
         ]),
         json!({"items": [{}, {}], "shared": "all", "start": 10}),
@@ -777,5 +779,8 @@ fn a_list_input_bound_absolutely_is_an_action_s_input() {
     let resolved = listed
         .resolve("pick#2", values(&[("shared", json!("each"))]))
         .unwrap();
-    assert_eq!(Value::Object(resolved), json!({"shared": "each"}));
+    assert_eq!(
+        Value::Object(resolved),
+        json!({"shared": "each", "float": 2, "bound": 11})
+    );
 }
