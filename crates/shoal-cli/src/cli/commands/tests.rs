@@ -237,6 +237,19 @@ fn an_earlier_releases_review_watch_hands_over_its_workspace_unchanged() {
 }
 
 #[test]
+fn an_answer_names_an_action_and_values_that_start_with_a_hyphen() {
+    let arguments = [
+        "shoal", "send", "2", "--action", "-confirm", "--value", "-key=-1",
+    ];
+    let cli = <Cli as clap::Parser>::try_parse_from(arguments).unwrap();
+    let Some(Command::Coordination(CoordinationCommand::Send { post, .. })) = cli.command else {
+        panic!("expected send");
+    };
+    assert_eq!(post.action.as_deref(), Some("-confirm"));
+    assert_eq!(post.values, [("-key".to_owned(), "-1".to_owned())]);
+}
+
+#[test]
 fn send_posts_in_a_thread_its_number_leads_and_else_sends_an_alert() {
     use crate::cli::commands::send::{Given, Sending, sending};
     let parse = |arguments: &[&str]| {

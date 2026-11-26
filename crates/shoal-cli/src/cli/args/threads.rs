@@ -173,11 +173,17 @@ pub struct PostArgs {
     pub reason: Option<String>,
     /// Answer the latest surface the other side posted with its action of
     /// this id, as the post lists them; text is never read as an action.
-    #[arg(long, value_name = "ID")]
+    #[arg(long, value_name = "ID", allow_hyphen_values = true)]
     pub action: Option<String>,
     /// A value the action takes, such as name=Ada; repeat a key to select
     /// several options, or leave it empty, as tags=, to select none.
-    #[arg(long = "value", value_name = "KEY=VALUE", requires = "action", value_parser = parse_value)]
+    #[arg(
+        long = "value",
+        value_name = "KEY=VALUE",
+        requires = "action",
+        value_parser = parse_value,
+        allow_hyphen_values = true
+    )]
     pub values: Vec<(String, String)>,
     /// A file, or its lines as PATH:FIRST-LAST, in a worktree your scope
     /// reaches that the post points at; repeat for more. The other side
