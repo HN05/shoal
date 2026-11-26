@@ -530,22 +530,35 @@ impl Hub {
 
 /// The answer `frames` carry, what another machine's daemon wrote after any
 /// it sent while it still prepared it: one body, a list's pages joined,
-/// which a closing `Ok` ends, or the body its pieces of JSON make; its
-/// refusal as an error.
+/// which a closing `Ok` ends, each page first joined from the frames it
+/// took, such as pieces of its JSON; its refusal as an error.
 fn answered_body(frames: Vec<serde_json::Value>) -> Result<Body> {
     let mut answered: Option<Body> = None;
+    let mut taking: Option<Body> = None;
     for frame in frames {
         let response: Response = serde_json::from_value(frame)?;
-        match (&mut answered, response.body) {
-            (_, Body::Keepalive) => {}
-            (None, body) => answered = Some(body),
+        if matches!(response.body, Body::Keepalive) {
+            continue;
+        }
+        let body = match taking.take() {
+            Some(mut started) => {
+                started.extend(response.body)?;
+                started
+            }
+            None => response.body,
+        };
+        if response.more {
+            taking = Some(body);
+            continue;
+        }
+        match (&mut answered, body.joined()?) {
             (Some(_), Body::Ok) => break,
             (Some(answered), page) => answered.extend(page)?,
+            (None, body) => answered = Some(body),
         }
     }
     answered
         .context("the other machine's daemon closed the request unanswered")?
-        .joined()?
         .into_result()
 }
 

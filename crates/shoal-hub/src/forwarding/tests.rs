@@ -88,6 +88,29 @@ fn an_answer_too_large_for_pages_arrives_whole_from_its_pieces() {
 }
 
 #[test]
+fn a_listing_whose_page_came_in_pieces_arrives_whole() {
+    let big = "x".repeat(shoal_protocol::protocol::MAX_FRAME);
+    let pages = [
+        Body::ApiResponse(vec!["small".to_owned()]),
+        Body::ApiResponse(vec![big.clone()]),
+        Body::ApiResponse(vec!["last".to_owned()]),
+    ];
+    let mut frames: Vec<serde_json::Value> = Vec::new();
+    for page in pages {
+        let sent = Response::new(1, page).frames().unwrap();
+        frames.extend(
+            sent.into_iter()
+                .map(|frame| serde_json::to_value(frame).unwrap()),
+        );
+    }
+    frames.push(frame(Body::Ok));
+    let Body::ApiResponse(listed) = answered_body(frames).unwrap() else {
+        panic!("the pages are not joined");
+    };
+    assert_eq!(listed, ["small".to_owned(), big, "last".to_owned()]);
+}
+
+#[test]
 fn a_single_answer_from_another_machine_stays_as_sent() {
     assert!(matches!(answered_body(vec![frame(Body::Ok)]), Ok(Body::Ok)));
 }
