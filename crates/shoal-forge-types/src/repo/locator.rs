@@ -1,5 +1,4 @@
-//! Issue, PR and CI run locator syntax; callers select the route for their
-//! forge.
+//! Where an item's number sits in its web URL, by the route the forge uses.
 use anyhow::{Context, Result, ensure};
 
 use crate::{ForgeRepo, IssueInput};
@@ -44,7 +43,7 @@ impl ItemRoute {
         }
     }
 
-    /// Repository discovery deliberately leaves number validation to lookup.
+    /// Leaves the number unchecked: [`resolve`](Self::resolve) checks it.
     pub fn split_url(self, input: &str) -> Option<ItemUrl<'_>> {
         let url = item_path(input);
         let (repository, number) = url.rsplit_once(self.marker())?;
@@ -125,7 +124,7 @@ impl ForgeRepo {
     }
 }
 
-/// A positive ID in a job URL.
+/// A positive ID in a URL.
 pub fn id(text: &str) -> Option<u64> {
     text.parse::<u64>().ok().filter(|id| *id > 0)
 }

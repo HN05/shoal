@@ -1,5 +1,6 @@
-//! Classify pasted forge links without making network requests. A link of
-//! a host this process has not resolved names its forge by its routes.
+//! Which item or repository a pasted forge link names, read without a
+//! request. A link of a host this process has not resolved names its forge
+//! by its routes.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 

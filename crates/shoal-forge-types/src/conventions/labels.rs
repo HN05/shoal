@@ -1,6 +1,3 @@
-//! The repository's labels as the forge lists them, so agents can follow
-//! the scheme the repository describes in its label descriptions.
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

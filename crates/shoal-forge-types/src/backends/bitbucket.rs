@@ -1,5 +1,3 @@
-//! Bitbucket Cloud's routes: where its items and branches are on the web.
-//! Shoal reads none of its runs.
 use crate::{ForgeRepo, backends::Routes, numbers::RunNumber, repo::locator::ItemRoute};
 
 #[derive(Clone, Copy)]

@@ -1,7 +1,5 @@
 //! The forges Shoal knows and where each keeps its items and runs on the
-//! web. Each forge implements [`Routes`] in a module of its own;
-//! [`ForgeKind`] names the one a repository uses and forwards each call to
-//! it.
+//! web.
 pub mod bitbucket;
 pub mod forgejo;
 pub mod github;
@@ -33,8 +31,7 @@ impl ForgeKind {
     }
 }
 
-/// Run `$body` with `$backend` bound to the forge `$kind` names, as
-/// shoal-forge's own dispatch does for its traits.
+/// Run `$body` with `$backend` bound to the forge `$kind` names.
 macro_rules! dispatch {
     ($kind:expr, $backend:ident => $body:expr) => {
         match $kind {
@@ -59,8 +56,7 @@ macro_rules! dispatch {
 }
 
 /// Where a forge keeps its items and runs on the web: what parsing a link or
-/// a remote needs, without a request. Methods that need the repository take
-/// it as `repo`.
+/// a remote needs, without a request.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub trait Routes {
     /// The forge's name in messages.

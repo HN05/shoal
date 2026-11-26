@@ -1,4 +1,3 @@
-//! What an issue or PR shows now, read across items, reviews and CI: a PR's
-//! status and item views.
+//! What an issue or PR shows now, across its discussion, reviews and CI.
 pub mod status;
 pub mod view;

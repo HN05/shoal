@@ -13,7 +13,7 @@ pub const JOB_URL_BYTES: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CheckLog {
-    /// The PR's.
+    /// The PR's URL.
     pub url: String,
     pub name: String,
     /// The web page of the check's job, unless longer than [`JOB_URL_BYTES`].

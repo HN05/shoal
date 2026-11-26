@@ -1,4 +1,5 @@
-//! Git remote syntax, separate from registration and forge lookup policy.
+//! Reading Git remote URLs, without the checks that registration or a forge
+//! lookup adds.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport<'a> {
@@ -19,8 +20,8 @@ pub struct RemoteUrl<'a> {
 }
 
 impl<'a> RemoteUrl<'a> {
-    /// Preserve incomplete and unknown URL forms: registration keeps their
-    /// existing identity, while forge lookup applies stricter validation.
+    /// Accepts incomplete and unknown forms: registration keys them as they
+    /// are, and a forge lookup checks them itself.
     pub fn parse(source: &'a str) -> Option<Self> {
         let (transport, authority, path) = if let Some((scheme, rest)) = source.split_once("://") {
             let transport = match scheme {
@@ -60,7 +61,8 @@ impl<'a> RemoteUrl<'a> {
         ))
     }
 
-    /// Registration retains ports, path case, and permissive path syntax.
+    /// Keeps the port, the path's case and any path syntax, which a forge
+    /// lookup would refuse.
     pub fn registration_key(&self) -> String {
         if !matches!(self.transport, Transport::Other(_))
             && let Some(path) = self.path
@@ -74,7 +76,7 @@ impl<'a> RemoteUrl<'a> {
     }
 }
 
-/// Naming also accepts local paths and retains the historical colon separator.
+/// The repository's name in `source`, a remote URL or a local path.
 pub fn source_name(source: &str) -> &str {
     let source = source.trim_end_matches('/');
     repository_path(source.rsplit(['/', ':']).next().unwrap_or(source))

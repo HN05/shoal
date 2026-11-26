@@ -16,7 +16,7 @@ states!(
         Waiting => "waiting",
         Requested => "requested",
         /// A required commit status no one has reported yet, as GitHub's
-        /// GraphQL API reported it.
+        /// GraphQL API reports it.
         Expected => "expected",
         /// Finished without a conclusion.
         Completed => "completed",

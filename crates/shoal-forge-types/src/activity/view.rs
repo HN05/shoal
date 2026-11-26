@@ -90,7 +90,6 @@ pub struct AutoMerge {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Comment {
-    /// The forge's ID for the comment.
     pub id: CommentId,
     pub author: String,
     pub created_at: String,

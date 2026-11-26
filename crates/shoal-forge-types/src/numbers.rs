@@ -1,7 +1,5 @@
-//! The numbers a forge gives its issues, PRs, runs, jobs, runners and
-//! comments, each its own type so one is never passed as another. Each
-//! serializes and stores as the number it holds; backends convert where they
-//! read a response or build a request.
+//! The numbers a forge gives what it keeps, each its own type so that one
+//! is never passed as another. Each serializes and stores as a plain number.
 use std::{fmt, num::ParseIntError, str::FromStr};
 
 /// Defines `$name` as a forge number held as a `u64`.

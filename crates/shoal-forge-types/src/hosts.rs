@@ -1,6 +1,5 @@
-//! The forge each host serves that this process knows: the types the
-//! caller pins and the answers hosts gave, which parsing a link of the host
-//! reads to pick the same forge.
+//! The forge each host serves, as the caller pins it or this process
+//! learned it, so that parsing a link of the host picks the same forge.
 use std::{
     collections::HashMap,
     sync::{LazyLock, Mutex, PoisonError, RwLock},
@@ -49,9 +48,8 @@ pub fn learn_pins(pins: impl FnOnce() -> Vec<(String, ForgeKind)> + Send + 'stat
     *PINS.lock().unwrap_or_else(PoisonError::into_inner) = Some(Box::new(pins));
 }
 
-/// The type pinned for `host`, else what this process learned it serves,
-/// once the caller's pins are loaded; a concurrent first reader waits for
-/// them.
+/// The type pinned for `host`, else the one this process learned. The first
+/// call loads the caller's pins, and a concurrent call waits for them.
 pub fn learned(host: &str) -> Option<ForgeKind> {
     pinned(host).or_else(|| {
         LEARNED
@@ -62,10 +60,8 @@ pub fn learned(host: &str) -> Option<ForgeKind> {
     })
 }
 
-/// What this process learned `host` serves, else the well-known hosts by
-/// name, else `linked`, the forge whose routes a link of the host uses;
-/// failing all three a host whose name has a `gitlab` label counts as
-/// GitLab and any other as Forgejo or Gitea.
+/// The forge `host` serves, without asking the host. `linked` is the forge
+/// whose routes a link of the host uses.
 pub fn detect(host: &str, linked: Option<ForgeKind>) -> ForgeKind {
     learned(host)
         .or_else(|| ForgeKind::named(host))
@@ -79,7 +75,6 @@ pub fn detect(host: &str, linked: Option<ForgeKind>) -> ForgeKind {
         })
 }
 
-/// The type pinned for `host`, once the caller's pins are loaded.
 fn pinned(host: &str) -> Option<ForgeKind> {
     let mut pins = PINS.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(load) = pins.take() {

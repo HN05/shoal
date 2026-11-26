@@ -1,5 +1,4 @@
-//! The CI jobs waiting for a runner and the run each belongs to, which Shoal
-//! runs on this machine with the forge's own runner.
+//! CI jobs waiting for a runner, and the run each belongs to.
 
 use crate::items::{link::LinkKind, reference::ItemRef};
 use shoal_refs::CommitId;

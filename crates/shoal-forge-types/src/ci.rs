@@ -1,5 +1,4 @@
-//! CI jobs and the actions Shoal takes on them: a job's state and the rerun
-//! or cancel a caller asks for.
+//! CI jobs and runs, and the actions Shoal takes on them.
 pub mod approval;
 pub mod check_state;
 pub mod checks;
@@ -66,7 +65,7 @@ impl From<CheckState> for JobState {
 }
 
 impl CiAction {
-    /// Whether the action applies to a job in a state, and those states.
+    /// Which job states the action applies to, and how a message names them.
     pub fn applies_to(self) -> (fn(JobState) -> bool, &'static str) {
         match self {
             Self::Rerun => (JobState::rerunnable, "failed"),

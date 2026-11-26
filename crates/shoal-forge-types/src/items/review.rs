@@ -1,5 +1,4 @@
-//! Reviews of a PR: who it can ask, its review threads, and a review to
-//! submit on it, a verdict, a body and comments on lines of its diff.
+//! Reviews of a PR, and a review to submit on it.
 pub mod reviewers;
 pub mod thread;
 

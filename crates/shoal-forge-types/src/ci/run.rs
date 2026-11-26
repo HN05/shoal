@@ -1,5 +1,4 @@
-//! A CI workflow run Shoal started. A started run is a new run, not a rerun
-//! of a PR's checks; only a run on the PR's head commit reports checks there.
+//! A CI workflow run Shoal started.
 
 use serde::{Deserialize, Serialize};
 

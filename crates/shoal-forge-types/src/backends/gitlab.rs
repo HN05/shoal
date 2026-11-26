@@ -1,5 +1,3 @@
-//! GitLab's routes, which keep a project's items, branches and pipelines
-//! under `/-/`, below any nested groups.
 use crate::{
     ForgeRepo,
     backends::Routes,

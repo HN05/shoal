@@ -1,6 +1,4 @@
-//! CI runs a forge holds until a maintainer approves them, as it does for
-//! the PRs of forks and first-time contributors, and the runs an approval
-//! reached.
+//! CI runs a forge holds until a maintainer approves them.
 
 use crate::items::reference::ItemRef;
 use serde::{Deserialize, Serialize};

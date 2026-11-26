@@ -1,15 +1,13 @@
 //! A repository's branches as its forge lists them, and the open PRs that
-//! join them, which decide whether one can go.
+//! join them.
 use serde::{Deserialize, Serialize};
 use shoal_refs::{BranchName, CommitId};
 
 use crate::numbers::PullNumber;
 
-/// A branch of a repository on its forge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForgeBranch {
     pub name: BranchName,
-    /// The commit it points to.
     pub head: CommitId,
     /// When that commit was made, as the forge writes the time; none where
     /// the forge leaves it out.
@@ -35,8 +33,8 @@ pub struct OpenPull {
 }
 
 impl OpenPull {
-    /// Whether `branch` of this repository is its head or base, which
-    /// deleting would close it or leave it without one.
+    /// Whether `branch` of this repository is its head or base, so that
+    /// deleting the branch would close the PR or leave it without a base.
     pub fn joins(&self, branch: &BranchName) -> bool {
         (!self.fork && &self.head == branch) || self.base.as_ref() == Some(branch)
     }

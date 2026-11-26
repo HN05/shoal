@@ -1,5 +1,4 @@
-//! What a forge can do: named so a refusal names the forge and what it
-//! lacks, and listed for clients.
+//! What a forge can do, named so that a refusal says what the forge lacks.
 
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
@@ -116,7 +115,6 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
-    /// Whether the forge has `capability`.
     pub fn supports(&self, capability: Capability) -> bool {
         self.capabilities
             .iter()

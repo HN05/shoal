@@ -1,6 +1,5 @@
-//! What Shoal reads of a forge without sending it a request: repositories,
-//! issues, PRs and CI runs parsed from their URLs, and the data the
-//! requests in `shoal-forge` return, which the daemon's protocol carries.
+//! Forge data that needs no request: repositories and items read from their
+//! URLs, and the data `shoal-forge`'s requests return.
 pub mod activity;
 pub mod backends;
 pub mod branches;
@@ -24,8 +23,9 @@ use items::reference::ItemRef;
 use numbers::{IssueNumber, PullNumber};
 use repo::remote_url::{RemoteUrl, Transport};
 
-/// Classify before resolving a repository; validate identity and number at lookup.
-/// In particular, zero and overflowing numbers still use number-based targeting.
+/// Whether input names an item by number or by URL, read before the
+/// repository is known. Zero and numbers too large count as numbers, so the
+/// lookup refuses them with its own message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IssueInput {
     Number,
@@ -143,7 +143,7 @@ impl ForgeRepo {
         } else {
             repo::remote_url::repository_path(input)
         };
-        // A forge that nests groups takes the longest paths.
+        // The host's forge is not known yet, so accept nested groups.
         ensure!(
             repository_path_valid(path, true),
             "{input} names no repository"
@@ -166,7 +166,6 @@ impl ForgeRepo {
         self.path.split('/').next().unwrap_or_default()
     }
 
-    /// The forge the repository is on.
     pub fn kind(&self) -> ForgeKind {
         self.kind
     }

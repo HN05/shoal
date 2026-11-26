@@ -1,5 +1,3 @@
-//! The routes of Forgejo, and of Gitea, which serves the same pages: where
-//! their items, branches and runs are on the web.
 use crate::{ForgeRepo, backends::Routes, numbers::RunNumber, repo::locator::ItemRoute};
 
 #[derive(Clone, Copy)]

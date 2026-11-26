@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 shoal_states::states!(
-    /// The HTTP methods forge requests use.
     HttpMethod: ValueEnum {
         Get => "GET",
         Post => "POST",

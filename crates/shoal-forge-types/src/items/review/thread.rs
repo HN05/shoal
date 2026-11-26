@@ -1,5 +1,4 @@
-//! Review threads on a PR: an inline comment and the replies to it, and
-//! whether the forge marks them resolved.
+//! Review threads on a PR: an inline comment and the replies to it.
 
 use serde::{Deserialize, Serialize};
 

@@ -80,8 +80,8 @@ pub struct Current {
     /// Whether an open PR conflicts with its base; unknown while the forge
     /// computes it. Forgejo reports none for drafts.
     pub conflict: Option<bool>,
-    /// Whether GitHub would merge the open PR now, which it then refuses
-    /// to merge later.
+    /// Whether GitHub would merge the open PR now. GitHub then refuses an
+    /// automatic merge.
     pub merges_now: bool,
     /// A GitLab merge request's reviewers by username, or a Bitbucket pull
     /// request's by account ID.
