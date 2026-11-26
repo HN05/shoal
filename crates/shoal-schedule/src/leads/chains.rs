@@ -1,13 +1,11 @@
-//! How much work waits on each node, for the `speed` schedule: the most
-//! nodes on any chain of waits that ends at it. Waits may form cycles, such
-//! as a parent waiting on its child while the child asks it a question, so
-//! each cycle's nodes count once and share one length, whatever order they
-//! are visited in.
+//! The longest chain of waits ending at each node, which the `speed`
+//! schedule leads with. Waits may form cycles, such as a parent waiting on
+//! its child while the child asks it a question. A cycle's nodes count once
+//! and share one length, whatever order the search visits them in.
 use std::collections::{HashMap, HashSet};
 
 use crate::snapshot::{Edge, Node};
 
-/// The length of the longest chain of waits ending at each node of `edges`.
 pub(super) fn chains(edges: &[Edge]) -> HashMap<Node, usize> {
     let mut search = Components::new(edges);
     let nodes: Vec<&Node> = (edges.iter())
@@ -21,10 +19,9 @@ pub(super) fn chains(edges: &[Edge]) -> HashMap<Node, usize> {
     lengths(edges, &search.components)
 }
 
-/// Each component's length, from the components that wait on it, which
-/// come first in reverse: a component's own other nodes wait on each of
-/// its nodes, and the longest chain behind a component that waits on it
-/// adds that component's nodes.
+/// Each component's length. In reverse, the components that wait on a
+/// component come before it. Within a component, its other nodes wait on
+/// each node; a component that waits on it adds its own nodes to its chain.
 fn lengths(edges: &[Edge], components: &[Vec<&Node>]) -> HashMap<Node, usize> {
     let component: HashMap<&Node, usize> = (components.iter().enumerate())
         .flat_map(|(index, nodes)| nodes.iter().map(move |node| (*node, index)))

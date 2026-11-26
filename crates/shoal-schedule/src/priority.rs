@@ -1,11 +1,9 @@
-//! How much a space's work matters against other work: a number from 0 to
-//! 100, higher first, which ranks the agent queue ahead of everything else.
+//! A space's priority in the agent queue, higher first.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
-/// A priority, from 0 to 100; [`Self::NORMAL`] unless set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "u8", into = "u8")]
 pub struct Priority(u8);
@@ -15,7 +13,6 @@ impl Priority {
     pub const NORMAL: Self = Self(50);
     pub const URGENT: Self = Self(75);
     const HIGHEST: u8 = 100;
-    /// The names that stand for values.
     const NAMES: [(&'static str, Self); 3] = [
         ("low", Self::LOW),
         ("normal", Self::NORMAL),
@@ -55,7 +52,6 @@ impl From<Priority> for u8 {
 impl FromStr for Priority {
     type Err = anyhow::Error;
 
-    /// A name, or a number from 0 to 100.
     fn from_str(text: &str) -> Result<Self> {
         if let Some((_, priority)) = Self::NAMES.iter().find(|(name, _)| *name == text) {
             return Ok(*priority);
@@ -70,7 +66,6 @@ impl FromStr for Priority {
 }
 
 impl fmt::Display for Priority {
-    /// Its name, or its number when it has none.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match Self::NAMES.iter().find(|(_, priority)| priority == self) {
             Some((name, _)) => f.write_str(name),

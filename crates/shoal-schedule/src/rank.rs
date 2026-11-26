@@ -1,11 +1,9 @@
-//! A waiting entry's rank, which says why it starts where it does: its
-//! priority and tier, each with the work it took them from.
+//! A waiting entry's rank, with the work it took each part from, which
+//! `shoal queue` shows.
 use serde::{Deserialize, Serialize};
 
 use crate::priority::Priority;
 
-/// A waiting entry's rank: its priority and tier, each with the work it
-/// took that from when that work waits on it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueRank {
     pub priority: Priority,
@@ -14,36 +12,32 @@ pub struct QueueRank {
     pub tier: Tier,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier_from: Option<InheritedRank>,
-    /// The areas a launch of a new workspace shares with the workspaces of
-    /// its repository, which put it after launches of its tier that share
-    /// fewer.
+    /// The areas a new workspace's launch shares with its repository's
+    /// other workspaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_areas: Vec<SharedArea>,
 }
 
-/// An area a launch shares, with the spaces holding it: their numbers, or
-/// their names without one.
+/// An area a launch shares. Each of `spaces` is a space's number, or its
+/// name when it has none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SharedArea {
     pub area: String,
     pub spaces: Vec<String>,
 }
 
-/// How close an entry's work is to finished; later tiers start first.
+/// How close an entry's work is to finished. `docs/design/queue.md` defines
+/// each tier. The variants keep their order: a later tier starts first.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Tier {
-    /// Launches, and CI runs started without a PR.
     New,
-    /// Restores of agents that have worked in their space.
     Started,
-    /// Work of a space with an open PR or a ready mark, and CI jobs on open
-    /// PRs and on the default branch.
     Finishing,
 }
 
-/// The work an entry took its rank from: `from` is its space's number, or a
-/// queued launch's name.
+/// The work an entry took part of its rank from. `from` is its space's
+/// number, or a queued launch's name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InheritedRank {
     pub from: String,
@@ -54,17 +48,17 @@ pub struct InheritedRank {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Dependency {
-    /// It is blocked on the entry's work: an `--after` blocker, one its
-    /// issue's forge records, or a progress blocker.
+    /// A blocker of any kind: one the launch names, one its issue's forge
+    /// records, or a progress blocker.
     Blocked,
-    /// It is the parent workspace of the entry's space.
+    /// The waiting work is the parent workspace of the entry's space.
     Parent,
-    /// It opened a thread the entry's space holds, which waits for it.
+    /// The entry's space holds a thread the waiting work opened.
     Thread,
-    /// It is a workspace stacked on the entry's.
+    /// The waiting work is a workspace stacked on the entry's.
     Stacked,
-    /// It waits for a lease the entry's space holds.
+    /// The waiting work is queued for a lease the entry's space holds.
     Lease,
-    /// The entry is a CI job or review for it.
+    /// The entry is a CI job or review for the waiting work.
     Serves,
 }

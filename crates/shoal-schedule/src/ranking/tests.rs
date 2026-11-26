@@ -96,7 +96,6 @@ fn tiered(tier: Tier, tier_from: Option<InheritedRank>) -> QueueRank {
     }
 }
 
-/// Set `priority` on the space `id`.
 fn prioritize(snapshot: &mut Snapshot, id: &str, priority: Priority) {
     snapshot
         .spaces
@@ -650,7 +649,6 @@ fn launch_in_space(snapshot: &mut Snapshot, id: &str, repo: &str, areas: &[&str]
     entry.areas = areas.iter().map(|area| area.to_string()).collect();
 }
 
-/// Let the workspaces `holders` of `repo` occupy `area`.
 fn occupy(snapshot: &mut Snapshot, repo: &str, area: &str, holders: &[&str]) {
     let occupied = snapshot.occupied.entry(repo.into()).or_default();
     let spaces = holders.iter().map(|&id| SpaceId::from(id));

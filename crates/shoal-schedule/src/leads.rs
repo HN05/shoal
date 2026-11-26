@@ -1,6 +1,4 @@
-//! What the built-in schedules put first within a priority: `balanced`
-//! nothing, `speed` the work with the longest chain of work waiting on it,
-//! `cache` restores whose prompt cache is still warm.
+//! The leads of the built-in schedules.
 use std::collections::HashMap;
 
 use shoal_time::UnixTime;
@@ -39,9 +37,8 @@ impl Lead for LongestChain {
         chains::chains(&snapshot.edges)
     }
 
-    /// The longest chain of work waiting on `entry`: on its agent's node,
-    /// or for a CI job or review on itself or the spaces it serves, which
-    /// wait on it.
+    /// The longest chain of work waiting on `entry`. The spaces a CI job or
+    /// review serves wait on it, so their chains count one link more.
     fn key(&self, entry: &Entry, chains: &Self::Context, _: &Snapshot) -> usize {
         let chain = |node: &Node| chains.get(node).copied().unwrap_or(0);
         let served = match &entry.work {

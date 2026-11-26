@@ -1,6 +1,4 @@
-//! What a scheduler reads: the waiting entries, the spaces they and the
-//! work waiting on them belong to, what waits on what, and the running work
-//! it may stop, as the daemon found them.
+//! What a scheduler reads, as the daemon builds it from its state.
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashMap},
@@ -14,18 +12,14 @@ use crate::{
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_time::UnixTime;
 
-/// What ranking reads: the waiting entries, the spaces they and the work
-/// waiting on them belong to, and what waits on what.
 #[derive(Debug, Default)]
 pub struct Snapshot {
     pub entries: Vec<Entry>,
+    /// The spaces of the entries and of the work waiting on them.
     pub spaces: HashMap<SpaceId, Space>,
     pub edges: Vec<Edge>,
     pub now: UnixTime,
-    /// The areas the workspaces of each repository occupy, each with the
-    /// workspaces holding it.
     pub occupied: HashMap<RepositoryId, Occupied>,
-    /// The running work the stop order holds.
     pub running: Running,
 }
 
@@ -33,7 +27,6 @@ pub struct Snapshot {
 /// holding it.
 pub type Occupied = BTreeMap<String, Vec<SpaceId>>;
 
-/// A waiting entry.
 #[derive(Debug)]
 pub struct Entry {
     pub id: QueueEntryId,
@@ -49,10 +42,8 @@ pub struct Entry {
     /// When the prompt cache of a restore's agent expires, as its hooks last
     /// reported it.
     pub prompt_cache_until: Option<UnixTime>,
-    /// The repository it starts in, if any.
     pub repository: Option<RepositoryId>,
-    /// The areas of the issue a launch starts on, which order it while its
-    /// workspace is new.
+    /// The areas of the issue a launch starts on.
     pub areas: Vec<String>,
 }
 
@@ -78,11 +69,10 @@ pub enum Work {
     Restore { space: SpaceId },
     /// A CI job of its own `tier`, for `spaces`.
     Job { tier: Tier, spaces: Vec<SpaceId> },
-    /// A review of `space`, which a review the daemon left running has not.
+    /// A review of `space`. A review the daemon left running has none.
     Review { space: Option<SpaceId> },
 }
 
-/// A space as ranking sees it.
 #[derive(Debug)]
 pub struct Space {
     /// What explanations call it: its number, else its name.
@@ -90,8 +80,7 @@ pub struct Space {
     /// The priority set on it, else the highest its issue's labels map to;
     /// it has the default without one.
     pub priority: Option<Priority>,
-    /// Its own tier: `Finishing` with an open PR or a ready mark, `Started`
-    /// once an agent has worked in it.
+    /// Its tier before it inherits from waiting work.
     pub tier: Tier,
     pub steps: Steps,
     pub created_at: UnixTime,
@@ -105,8 +94,8 @@ pub struct Steps {
 }
 
 impl Steps {
-    /// Compares the shares of steps done, a space without steps counting
-    /// as none done.
+    /// Compares the shares of steps done. A space without steps has none
+    /// done.
     pub(crate) fn cmp_share(self, other: Self) -> Ordering {
         let share = |steps: Self, by: Self| steps.done * by.total.max(1);
         share(self, other).cmp(&share(other, self))
@@ -136,8 +125,7 @@ pub struct Edge {
 pub enum Carries {
     /// Its priority and tier, its own or inherited.
     Rank,
-    /// Only a priority of its space's own, set or from its issue's labels,
-    /// or passed down to it, as a chat passes to its children, which
-    /// compete with every other worker.
+    /// Only a priority its space has of its own or was passed, as a chat
+    /// passes to its children.
     SetPriority,
 }
