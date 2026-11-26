@@ -756,3 +756,26 @@ fn a_button_outside_a_list_takes_an_input_inside_it() {
     let resolved = listed.resolve("pick#2", serde_json::Map::new()).unwrap();
     assert_eq!(Value::Object(resolved), json!({"index": 2}));
 }
+
+#[test]
+fn a_list_input_bound_absolutely_is_an_action_s_input() {
+    let listed = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "row", "path": "/items"}},
+            {"id": "row", "component": "Column", "children": ["shared", "pick"]},
+            {"id": "shared", "component": "TextField", "label": "Shared",
+             "value": {"@path": "/shared"}},
+            {"id": "pick", "component": "Button", "child": "pick-label",
+             "action": {"event": {"name": "pick", "context": {
+                 "shared": {"@path": "/shared"}}}}},
+            {"id": "pick-label", "component": "Text", "text": "Pick"},
+        ]),
+        json!({"items": [{}, {}], "shared": "all", "start": 10}),
+    );
+    let pick = listed.action("pick#2").unwrap();
+    assert_eq!(pick.inputs.len(), 1);
+    let resolved = listed
+        .resolve("pick#2", values(&[("shared", json!("each"))]))
+        .unwrap();
+    assert_eq!(Value::Object(resolved), json!({"shared": "each"}));
+}

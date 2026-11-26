@@ -235,8 +235,16 @@ impl Surface {
 
     /// The scope `component` is placed in where its data could be at
     /// `path`: for each list that repeats it, the item `path` names in
-    /// that list's data; none when `path` lies in no item of one.
+    /// that list's data; none when `path` lies in no item of one. An
+    /// absolute binding reads the same data in every item, so any scope
+    /// serves it.
     fn scope_toward(&self, component: Component<'_>, path: &str) -> Option<String> {
+        if component
+            .binding("value")
+            .is_some_and(|bound| bound.starts_with('/'))
+        {
+            return Some(String::new());
+        }
         let mut scope = String::new();
         for list in self.lists_above(component) {
             let items = scoped(&scope, list.template()?.1);
