@@ -1,9 +1,5 @@
-//! Startup work the daemon does after binding its socket. Meanwhile requests
-//! wait for the daemon to finish starting, as across an update's handoff,
-//! except that a request whose client sends it again when closed unanswered is
-//! closed, and a status request that would outwait its client learns which
-//! step runs, for how long, and the file access it waits on. A step that runs
-//! long is logged.
+//! Startup work the daemon does after binding its socket, and what requests
+//! meanwhile receive, as `docs/design/daemon.md` describes.
 use std::{
     sync::{Arc, Mutex, OnceLock},
     time::Duration,

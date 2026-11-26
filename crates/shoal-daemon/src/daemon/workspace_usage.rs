@@ -1,6 +1,4 @@
-//! The sampler of what each space's processes use, on a fixed cadence and
-//! at once when a workspace's containers start, with what its containers
-//! use and the memory of the one-shot agent runs.
+//! The sampler of what each space's processes and containers use.
 use std::sync::Arc;
 
 use shoal_spaces::workspace_usage::{CONTAINER_READ_LIMIT, SAMPLE_INTERVAL, sample};

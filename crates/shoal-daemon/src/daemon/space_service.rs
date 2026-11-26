@@ -1,8 +1,5 @@
-//! What the spaces service needs of the rest of the daemon: the
-//! implementations of its interface, which call the other subsystems and
-//! convert between the spaces' types and theirs, and the records of the
-//! other subsystems that the spaces read and write in their own
-//! transactions.
+//! What the spaces service needs of the rest of the daemon, which the
+//! daemon implements here.
 use std::collections::{BTreeMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};

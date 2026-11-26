@@ -1,7 +1,5 @@
-//! Acting on spaces once their agents' turns end, through one loop that
-//! looks whenever an agent's state changes and every few seconds besides,
-//! for whatever Shoal recorded to happen to an agent or its space only
-//! between turns.
+//! Acting on spaces once their agents' turns end: one loop carries out
+//! what Shoal recorded to happen only between turns.
 use std::{sync::Arc, time::Duration};
 
 use crate::daemon::{log, manager::Manager};

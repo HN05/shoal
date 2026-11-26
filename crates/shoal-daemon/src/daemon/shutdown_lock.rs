@@ -1,9 +1,5 @@
-//! Hold off a system shutdown until tracked work is stopped. The daemon holds
-//! the login manager's shutdown delay lock while it runs; once a shutdown
-//! starts, it stops what `shoal stop --all` stops while the wrappers can still
-//! save it and hands the spaces over within the lock's delay limit, then
-//! releases the lock so the shutdown continues. Without a login manager the
-//! signals of the shutdown itself stop the work.
+//! Hold off a system shutdown with the login manager's delay lock until
+//! tracked work is saved and stopped, as `docs/design/power.md` describes.
 use std::sync::Arc;
 
 use shoal_power::shutdown::{LoginManager, connect};

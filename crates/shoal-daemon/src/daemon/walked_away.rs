@@ -1,6 +1,6 @@
 //! Read whether the user walked away from this machine, while its
-//! `keep_awake` admits nothing new then. The agents learn of it at each
-//! reading, and of the user's return once the lid opens or input returns.
+//! `keep_awake` admits nothing new then, as `docs/design/hub.md`
+//! describes.
 use std::{sync::Arc, time::Duration};
 
 use shoal_power::presence::{Platform, away, connect};

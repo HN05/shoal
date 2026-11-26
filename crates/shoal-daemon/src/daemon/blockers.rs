@@ -1,9 +1,6 @@
-//! Clearing blockers. Every 30 seconds Shoal looks each forge item that
-//! blocks a queued launch or a space up once, and the newest finished run of
-//! each blocking CI run's workflow on the default branch once, then forgets
-//! the launch blockers that cleared and removes the space blockers that did,
-//! with what cleared them. A space blocker clears once that space is done at
-//! its current HEAD or removed, as admission decides for a launch.
+//! Clearing the blockers of queued launches and spaces, as
+//! `docs/design/progress.md` describes. Each pass looks each blocking item
+//! and workflow up once, however many blockers name it.
 use std::collections::HashSet;
 
 use anyhow::Result;

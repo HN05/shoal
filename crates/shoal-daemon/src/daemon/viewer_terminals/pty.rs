@@ -1,6 +1,4 @@
-//! A pseudo-terminal the daemon makes for a user on another machine: its
-//! controlling side, read and written without blocking and resized as the
-//! user's terminal is, and the terminal side a process runs on.
+//! A pseudo-terminal the daemon makes for a user on another machine.
 use std::{
     io,
     os::fd::{AsRawFd as _, FromRawFd as _, OwnedFd, RawFd},

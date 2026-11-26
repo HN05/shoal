@@ -1,8 +1,4 @@
-//! The daemon's answers to [`HubMethod`] requests, and who may send them:
-//! anyone lists the hub's members and the spaces of its machines, as far as
-//! their scope reaches them, a space updates the hub as its `daemon`
-//! permission allows, only the user changes the members, joins or
-//! leaves, and only an unscoped client serves as the placer.
+//! The daemon's answers to [`HubMethod`] requests, and who may send them.
 use shoal_daemon_base::permitted_actions::Action;
 use std::sync::Arc;
 

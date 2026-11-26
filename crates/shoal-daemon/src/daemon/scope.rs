@@ -1,6 +1,6 @@
-//! Cooperative caller scope. The daemon validates every scoped request,
-//! including direct protocol clients; this is not a security boundary against
-//! the OS user.
+//! The scope of the daemon's callers. It is cooperative: the daemon checks
+//! every scoped request, but scope is no security boundary against the OS
+//! user.
 use crate::{
     daemon::manager::Manager,
     protocol::{ItemMethod, Operation, ThreadMethod},

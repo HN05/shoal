@@ -1,7 +1,6 @@
-//! Subscriptions: the records a caller asked for, as a snapshot, then each
-//! record that changed or was removed, until the client hangs up. A
-//! subscription holds an operation guard only while it writes, so a daemon
-//! restart closes it between writes and the client subscribes again.
+//! Subscriptions, which `docs/design/daemon.md` describes. A subscription
+//! holds an operation guard only while it writes, so a daemon restart
+//! closes it between writes and the client subscribes again.
 mod agents;
 mod logs;
 mod snapshot;

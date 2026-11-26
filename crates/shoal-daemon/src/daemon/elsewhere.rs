@@ -1,12 +1,6 @@
-//! Answering a request for a space this machine has none of: one whose
-//! target the hub lists on another machine before it is handled here, and
-//! one refused here for naming such a space. The machine the hub lists that
-//! space on answers it instead, or the hub holds it for that machine, as
-//! the machine that keeps a removed space's files answers for them, and
-//! only a space no machine has keeps the refusal; the answer of one that
-//! goes on, as a follow's, comes as that machine writes it, and a duplex
-//! one's connection, as a demo stream's, then carries bytes both ways. A
-//! request another machine forwarded here is never forwarded again.
+//! Answering a request for a space this machine does not have, through the
+//! machine the hub lists it on, as `docs/design/hub.md` describes. A request
+//! another machine forwarded here is never forwarded again.
 
 use anyhow::Result;
 use shoal_protocol::{

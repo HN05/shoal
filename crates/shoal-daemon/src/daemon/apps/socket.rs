@@ -1,9 +1,7 @@
 //! The app store on the daemon's socket. A write's bytes come as the frames
-//! the client sends after the request, and the daemon answers with the
-//! entry at its new revision; the hub checks and takes the write of a
-//! shared entry for a machine that joined one. A watch holds an operation
-//! guard only while it writes, so a daemon restart closes it between writes
-//! and the client watches again.
+//! the client sends after the request. A watch holds an operation guard
+//! only while it writes, so a daemon restart closes it between writes and
+//! the client watches again.
 use std::sync::Arc;
 
 use anyhow::Result;

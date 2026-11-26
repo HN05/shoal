@@ -1,7 +1,6 @@
 //! Exiting once nothing the exit would cut off runs, as an update's restart
-//! and an exit that waits do: work the daemon runs itself, in background
-//! operations and in connected commands that cannot reattach, ends with it,
-//! while agents and CI jobs reattach to the next daemon.
+//! and an exit that waits do. `docs/design/daemon.md` says which work
+//! reattaches to the next daemon.
 mod work;
 
 use std::time::Duration;

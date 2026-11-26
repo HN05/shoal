@@ -1,7 +1,5 @@
 //! What the gate needs of the rest of the daemon, which [`Manager`] gives
-//! it: the spaces whose approval requests it decides, the approvals that
-//! carry out its verdicts and the requests' records, which it changes in
-//! the transactions that record its verdicts.
+//! it.
 use anyhow::Result;
 use futures_util::future::BoxFuture;
 use rusqlite::{Connection, Transaction};

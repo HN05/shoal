@@ -1,7 +1,5 @@
-//! What `shoal-coordination` needs of the rest of the daemon: the spaces it
-//! routes between and their files, the agents and the queue, the callers
-//! of scope tokens, the hub, the repositories, the reviews and the links,
-//! and the records it reads and writes in its own transactions.
+//! What `shoal-coordination` needs of the rest of the daemon, which the
+//! daemon implements here.
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 

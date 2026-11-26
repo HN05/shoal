@@ -1,7 +1,5 @@
 //! What reviews need of the rest of the daemon, which [`Manager`] gives
-//! them: the workspaces they review, their repositories and settings, the
-//! agent queue's admission of their runs, the agents and coordinators that
-//! hear of them and the forge a PR's review is posted on.
+//! them.
 use shoal_daemon_base::callers::Caller;
 use shoal_protocol::hub::Member;
 use shoal_protocol::protocol::{Body, Operation};

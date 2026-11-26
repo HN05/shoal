@@ -1,9 +1,8 @@
-//! Relaying a request another machine answers on a duplex stream, as a
-//! demo stream's: the first frame that machine's daemon writes is the
-//! answer, which goes to the caller under its own request's ID, and after
-//! it the bytes both ways are the connection's, relayed unread, until the
-//! other machine ends them, the caller hangs up, or the request's scope
-//! token stops acting for a caller.
+//! Relaying a request another machine answers on a duplex stream, such as
+//! a demo stream. The first frame that machine writes is the answer, which
+//! goes to the caller under its own request's ID. After it, the bytes both
+//! ways are relayed unread, until the other machine ends them, the caller
+//! hangs up, or the request's scope token stops acting for a caller.
 use anyhow::{Result, bail};
 use tokio::{
     io::{AsyncReadExt as _, AsyncWriteExt as _},

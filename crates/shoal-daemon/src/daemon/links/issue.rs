@@ -1,4 +1,4 @@
-//! Persist issue associations.
+//! The issues spaces link.
 #[cfg(test)]
 pub(crate) use crate::model::Assigner;
 use shoal_ids::space_ids::SpaceId;

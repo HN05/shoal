@@ -1,7 +1,5 @@
-//! The logs requests read: a space's, by any selector or, once it is
-//! removed, by its last name or ID until its events expire, within the
-//! caller's scope, and Shoal's own; and the expiry of a removed space's
-//! events.
+//! The logs requests read, a space's or Shoal's own, within the caller's
+//! scope.
 use shoal_daemon_base::permitted_actions::Action;
 
 use anyhow::{Result, ensure};

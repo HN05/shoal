@@ -1,10 +1,7 @@
-//! Streams to running demos: after its answer, a client's connection
-//! carries the bytes of one TCP connection the daemon opens to a `server`
-//! or `web` demo's port, or a `simulator` demo's viewer's, on loopback, both
-//! ways and unread, so WebSockets and the like work as they do on the demo's
-//! own machine; a terminal demo's carries a terminal the daemon makes for
-//! the viewer, on which the demo's place is shown as its host shows a place
-//! to another machine.
+//! Streams to running demos. After its answer, a client's connection
+//! carries the bytes of one loopback TCP connection to the demo, both ways
+//! and unread, or for a terminal demo a terminal the daemon makes for the
+//! viewer.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};

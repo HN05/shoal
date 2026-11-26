@@ -1,9 +1,5 @@
-//! What the daemon gives the agents' service: the spaces agents run in,
-//! their settings, lifecycles and hooks, the repositories whose paths they
-//! trust, the alerts that tell of them, what else ends with an agent's
-//! turn, the operations, merges, demos, links, CI jobs, leases, reviews and
-//! conversions an agent's work meets, the memory it takes, the snapshot the
-//! queue ranks, and the records of other subsystems it reads and writes.
+//! What the agents' service needs of the rest of the daemon, which the
+//! daemon implements here.
 mod alerts;
 mod conversions;
 mod demos;

@@ -1,7 +1,5 @@
-//! The snapshot the agent queue's policy ranks: the waiting entries, the
-//! spaces with their priorities, labels and areas, and what waits on what,
-//! from the store, from what the daemon keeps in memory and from the
-//! repositories' settings.
+//! The snapshot the agent queue's policy ranks, built from the store, what
+//! the daemon keeps in memory and the repositories' settings.
 use std::collections::{HashMap, hash_map};
 
 use anyhow::Result;

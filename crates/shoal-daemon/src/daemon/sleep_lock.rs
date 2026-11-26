@@ -1,11 +1,5 @@
-//! Tell the hub before the machine sleeps. The daemon learns of a coming
-//! sleep from the platform, which waits for it a while. From then
-//! until the machine fully wakes, the agent queue admits nothing, and the
-//! hub link sends the notice and packages within the platform's allowance,
-//! then stays closed, so a dark wake, as macOS's Power Nap makes, neither
-//! starts work nor tells the hub the machine is back. Meanwhile the runner
-//! ends its running CI jobs to rerun, so other runners can take them, and
-//! running reviews stop to run again once the machine wakes.
+//! Tell the hub before the machine sleeps, within the time the platform
+//! waits for it. `docs/design/hub.md` says what a coming sleep stops.
 use std::{sync::Arc, time::Duration};
 
 use tokio::time::Instant;

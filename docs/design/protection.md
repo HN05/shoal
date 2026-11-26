@@ -126,8 +126,11 @@ delete, so its disk warning waits for its next turn too. Their thresholds are
 not validated against stop thresholds, so lowering a stop threshold never
 invalidates an existing configuration. Disk protection reads available space on
 filesystems holding workspaces or daemon state. Below its cleanup threshold it
-removes idle cleanup candidates there without their idle delay, through the same
-removal path and repository settings. When that cannot keep space above its stop
+first deletes the copies of files fetched from other machines and the Xcode data
+that removed workspaces left. It then removes idle cleanup candidates there
+without their idle delay, through the same removal path and repository
+settings. After that it empties shared caches nothing uses, then deletes the
+results removed workspaces handed back. When that cannot keep space above its stop
 threshold, it stops every agent as overload protection does and every other
 tracked execution as manual stop does, since any of them may be writing. Agents
 restore once space reaches the cleanup threshold, so restores cannot refill the

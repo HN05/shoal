@@ -1,8 +1,5 @@
 //! Pausing and unpausing this machine, or another joined machine where the
-//! hub carries the request: a pause admits no new work and then stops what
-//! runs in the background, the agents as before a shutdown, handing the
-//! spaces with something to do over, and the CI jobs, reviews and demos;
-//! an unpause admits work again.
+//! hub carries the request. `docs/design/hub.md` says what a pause stops.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};

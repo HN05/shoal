@@ -1,9 +1,5 @@
-//! What waits on what, from the waiting work to the work it waits on:
-//! queued launches and spaces on their blockers, a space on its
-//! children, a space on the holder of a thread it opened that waits, a
-//! stacked
-//! workspace on its base, and a space queued for a lease on the spaces
-//! holding it.
+//! What waits on what, from the waiting work to the work it waits on, for
+//! the queue's ranking.
 use anyhow::Result;
 use rusqlite::{Connection, params};
 

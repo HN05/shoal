@@ -1,7 +1,6 @@
-//! Attaching a terminal on another machine, or a device, to an agent's
-//! session here: Shoal's own attach runs on a terminal the daemon makes
-//! for the viewer, the same code a local `shoal attach` takes, reporting
-//! the session it chose and whether it left it running.
+//! Attaching a viewer on another machine, or a device, to an agent's
+//! session here. The attach runs the same code a local `shoal attach`
+//! does, on a terminal the daemon makes for the viewer.
 use anyhow::Result;
 use shoal_protocol::{attaching::Viewer, space_names::SpaceSelector};
 

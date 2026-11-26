@@ -1,7 +1,5 @@
-//! The daemon's checks of its environment: the tools on its `PATH`, the
-//! default terminal host, `root_dir`, registered checkouts, the global config
-//! and the forges recorded hosts serve. It reports the
-//! problems they find as alerts when it starts and when its config reloads.
+//! The daemon's checks of its environment, whose problems it reports as
+//! alerts when it starts and when its config reloads.
 use std::{ffi::OsStr, path::PathBuf};
 
 use anyhow::Result;

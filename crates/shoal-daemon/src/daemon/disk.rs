@@ -1,10 +1,6 @@
-//! Keep free space on the filesystems holding workspaces and daemon state by
-//! deleting the copies of files fetched from other machines and Xcode data
-//! that removed workspaces left, then removing
-//! workspaces idle cleanup would remove, without their idle delay,
-//! then emptying shared caches nothing is using, then deleting the results
-//! removed workspaces handed back, then stopping tracked executions when
-//! that cannot free enough space.
+//! Disk protection, which keeps free space on the filesystems holding
+//! workspaces and daemon state, in the order `docs/design/protection.md`
+//! gives.
 use crate::model::EventCause;
 use anyhow::Result;
 use shoal_ids::execution_ids::ExecutionId;

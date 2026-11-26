@@ -1,7 +1,6 @@
 //! The memory of Shoal's work: the limit `[machine] memory_limit` comes to
-//! on this machine, on Linux the cap the daemon gives the work slice from
-//! it, at startup and whenever the config changes it, and what the scope of
-//! an ended command in the slice recorded.
+//! on this machine, and on Linux the cap of the work slice, as
+//! `docs/design/protection.md` describes.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::protocol::{ScopeMemory, WorkMemoryLimit};
 

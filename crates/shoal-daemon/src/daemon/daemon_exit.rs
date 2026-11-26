@@ -1,10 +1,5 @@
-//! What becomes of tracked work as the daemon exits: a restart or an update
-//! leaves it running, `shoal daemon stop` stops it as `shoal stop --all` does
-//! but leaves queued launches to the next daemon and stops CI jobs' runners
-//! after cancelling their runs, and a signal stops it saved first, since it
-//! may come from a shutdown, but leaves CI jobs running, as a restart does:
-//! a job's wrapper has the daemon cancel its run when a shutdown's signal
-//! reaches it.
+//! What becomes of tracked work as the daemon exits, which
+//! `docs/design/daemon.md` decides for each kind of exit.
 use super::{
     executions::{Save, StopRequest},
     manager::Manager,
@@ -62,9 +57,8 @@ impl Manager {
         }
     }
 
-    /// Stop what still runs as [`Manager::stop_for_shutdown`] does, and
-    /// count the spaces of what it stopped, which could not reattach, among
-    /// those `stopped`.
+    /// Stop what still runs as a shutdown does, and count the spaces of what
+    /// it stopped, which could not reattach, among those `stopped`.
     pub(crate) async fn stop_remaining_work(&self, stopped: &mut StoppedSpaces) {
         let cut_off = self.agents.stop_for_shutdown().await;
         self.count_stopped(stopped, cut_off).await;

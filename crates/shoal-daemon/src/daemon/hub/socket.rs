@@ -1,7 +1,5 @@
-//! Answering what another machine forwarded here on this daemon's own
-//! socket, as the daemon answers its own callers' requests: collecting the
-//! frames of an answer, or writing one that goes on to the hub's stream as
-//! it comes and passing what the caller writes back the other way.
+//! Answering what another machine forwarded here as this daemon answers
+//! its own callers, with the frames written to the hub's stream.
 use std::path::Path;
 
 use anyhow::{Context as _, Result};

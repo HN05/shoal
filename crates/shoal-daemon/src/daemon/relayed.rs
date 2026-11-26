@@ -1,7 +1,5 @@
-//! Answering a request with the frames another daemon writes as they come
-//! on a stream of the hub link, as that daemon's socket would answer it,
-//! under the request's own ID, or on a duplex stream with the connection's
-//! bytes both ways after the answer.
+//! Answering a request with the frames another daemon writes on a stream
+//! of the hub link, as they come, under the request's own ID.
 use anyhow::Result;
 use shoal_protocol::{
     protocol::{self, Body, ErrorCode, Response},

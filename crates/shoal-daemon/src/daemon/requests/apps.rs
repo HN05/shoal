@@ -1,7 +1,4 @@
-//! The daemon's answers to [`AppMethod`] requests, and who may send them:
-//! a scoped caller reads the config of its own repository and of the
-//! spaces its scope reaches, and the app store's entries, which belong to
-//! no space, like any caller.
+//! The daemon's answers to [`AppMethod`] requests, and who may send them.
 use std::sync::Arc;
 
 use anyhow::Result;

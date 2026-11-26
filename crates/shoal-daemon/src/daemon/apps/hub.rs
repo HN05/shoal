@@ -1,10 +1,6 @@
-//! The app store across the hub. The hub keeps the entries the user's
-//! machines and devices share, and each paired device's own, and answers a
-//! member's request of them on a stream of its link with the frames its
-//! socket would answer its own callers with. A machine that joined the hub
-//! keeps its own entries and sends its callers' requests of shared ones to
-//! the hub, relaying the answer; the shared entries it held before it
-//! joined stay in its store, out of reach while it is a member.
+//! The app store across the hub, as `docs/design/apps.md` describes it. The
+//! hub answers a member's request on a stream of its link with the frames
+//! its own socket would write.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};

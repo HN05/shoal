@@ -1,6 +1,4 @@
-//! What the runner's claims need of the daemon's workspaces and leases: a
-//! job's workspace recorded, checked out, moved and removed, its settings,
-//! and a permit from a pool.
+//! What the runner's claims need of the daemon's workspaces and leases.
 
 use anyhow::{Result, bail};
 use futures_util::future::BoxFuture;

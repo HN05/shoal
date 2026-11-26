@@ -1,6 +1,5 @@
 //! What leases need of the rest of the daemon, which [`Manager`] gives
-//! them: the spaces they belong to, their repositories' settings and hooks,
-//! the agents that acquire them and the approval requests that gate them.
+//! them.
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;

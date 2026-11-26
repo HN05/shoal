@@ -1,10 +1,6 @@
 //! Terminals the daemon makes for viewers on other machines, or devices,
-//! to see a place here: a terminal of the viewer's size and `TERM`, on
-//! which the daemon runs one of Shoal's workers as the user, such as the
-//! attach to an agent's session, then carries what that terminal shows to
-//! the viewer and the viewer's keys and size to it, until the worker ends
-//! or the viewer goes, which hangs up the terminal and leaves the place
-//! running.
+//! to see a place here, which run one of Shoal's workers. The viewer
+//! leaving hangs up the terminal and leaves the place running.
 mod attaching;
 mod pty;
 

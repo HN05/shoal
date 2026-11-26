@@ -1,6 +1,5 @@
 //! Put idle agents to sleep within seconds of their wait for the user
-//! ending, which the cleanup sweep's pace would stretch. Its passes report
-//! failures and stalls as cleanup's do.
+//! ending, which the cleanup sweep's pace would stretch.
 use std::{sync::Arc, time::Duration};
 
 use super::{

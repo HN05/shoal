@@ -1,9 +1,5 @@
 //! What the hub needs of the rest of the daemon, which [`Manager`] gives
-//! it: the spaces it reports, routes to and tells about, their
-//! permissions, the messages that reach their agents, the approvals and
-//! threads that pass between machines, the app store a member asks of
-//! the hub, and the global config the hub's copies of the shared files
-//! change.
+//! it.
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

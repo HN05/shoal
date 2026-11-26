@@ -1,5 +1,4 @@
-//! The per-user daemon: owns shared state, serves protocol requests over a
-//! Unix socket, and runs background cleanup.
+//! The per-user daemon, which `docs/design/daemon.md` describes.
 #[cfg(target_os = "linux")]
 pub(crate) use shoal_agents::oom_scores;
 pub(crate) use shoal_agents::{capacity, overload, queue as agent_queue, queued_starts};
