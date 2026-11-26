@@ -49,9 +49,13 @@ impl Dates {
         }
     }
 
-    /// `text` as the value of the input `key`, refused unless it has the
-    /// input's form and lies within its bounds.
+    /// `text` as the value of the input `key`, refused unless it is empty,
+    /// unset, or has the input's form and lies within its bounds.
     pub(super) fn accept(&self, key: &str, text: &str) -> Result<Value> {
+        // An unset date is empty, as the input starts.
+        if text.is_empty() {
+            return Ok(Value::String(String::new()));
+        }
         let moment = Moment::parse(text);
         ensure!(
             moment.is_some_and(|moment| self.form == DateForm::Any || moment.form() == self.form),

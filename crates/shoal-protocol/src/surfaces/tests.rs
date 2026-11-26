@@ -809,3 +809,11 @@ fn a_list_input_bound_absolutely_keeps_its_item_s_bounds() {
     assert!(answer("book#2", "2026-12-05").is_err());
     answer("book#1", "2026-12-05").unwrap();
 }
+
+#[test]
+fn a_date_answer_may_be_unset() {
+    let unset = booking()
+        .resolve("book#2", values(&[("day", json!(""))]))
+        .unwrap();
+    assert_eq!(unset["day"], json!(""));
+}
