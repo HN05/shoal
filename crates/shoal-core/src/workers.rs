@@ -1,6 +1,5 @@
-//! The command lines that start Shoal's workers: the hidden `internal`
-//! commands the daemon, the execution wrapper and the CLI run in their own
-//! processes.
+//! The command lines that start Shoal's workers, the hidden `internal`
+//! commands Shoal runs in processes of their own.
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::executions::TrackedAgent;
@@ -97,7 +96,6 @@ pub enum Worker<'a> {
         agent: &'a TrackedAgent,
         records: &'a [PathBuf],
         command: &'a [OsString],
-        /// The host that opened the place.
         host: HostName,
         close_in: Option<HostName>,
         /// The user restores the agent by hand, which counts as their

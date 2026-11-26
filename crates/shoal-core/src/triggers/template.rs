@@ -37,7 +37,6 @@ impl fmt::Display for Missing {
 impl std::error::Error for Missing {}
 
 impl Template {
-    /// The text as written.
     pub fn as_str(&self) -> &str {
         &self.text
     }

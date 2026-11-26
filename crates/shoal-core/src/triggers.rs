@@ -120,7 +120,6 @@ states!(
     }
 );
 
-/// Every trigger of a layer, by name.
 pub type Triggers = BTreeMap<String, Trigger>;
 
 /// Refuse a trigger name `shoal trigger` could not take.

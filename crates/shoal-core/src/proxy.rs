@@ -1,7 +1,6 @@
-//! Shoal's retrying proxy between agents and their API upstream, from the
-//! global `[machine.proxies.<name>]` tables an `[machine.agents.<name>]` entry names. The
-//! `shoal-proxy` crate forwards and retries; Shoal configures one per agent
-//! launch, which the wrapper in `shoal-workers` runs.
+//! Shoal's retrying proxy between agents and their API upstream, configured
+//! for each agent launch from the `[machine.proxies.<name>]` table its agent
+//! names.
 pub use crate::config::proxies::Proxy;
 
 /// The header an agent names its proxy's key in, which the proxy checks.

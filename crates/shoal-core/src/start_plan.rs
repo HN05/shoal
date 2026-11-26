@@ -1,8 +1,6 @@
 //! The plan of a queued agent start, which everything that queues one and
 //! the `queue-start` worker that carries it out agree on. The queue keeps it
-//! as JSON in [`QueueRequest::plan`] until the worker runs; the protocol
-//! calls live in `shoal-client`'s `queue`, the worker in `shoal-workers`'
-//! `queued_starts` and the daemon's runner in `daemon::queued_starts`.
+//! as JSON in [`QueueRequest::plan`] until the worker runs.
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::path::PathBuf;
 
@@ -94,7 +92,6 @@ pub struct Opening {
     pub path: Option<PathBuf>,
     pub git_profile: Option<String>,
     pub options: CreationOptions,
-    /// The PR it links.
     pub pr: Option<crate::forge::items::reference::ItemInput>,
     /// The commit keeping the unsaved files its new branch starts with.
     pub files: Option<shoal_refs::CommitId>,

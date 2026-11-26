@@ -1,6 +1,5 @@
 //! The mode the labels of the issue or PR a launch names call for, among
-//! the modes that start the spaces its arguments other than the mode fit,
-//! which the daemon decides for a launch that names no mode.
+//! the modes that start the spaces its arguments other than the mode fit.
 use anyhow::Result;
 use shoal_protocol::launches::{LabelledMode, Launch, SeveralModes};
 

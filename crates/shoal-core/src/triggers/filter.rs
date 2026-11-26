@@ -45,7 +45,6 @@ impl Condition {
         Ok(())
     }
 
-    /// Whether it holds for `input`.
     pub fn holds(&self, input: &Value) -> bool {
         let values = self.path.values(input);
         let any = |test: &dyn Fn(&Value) -> bool| values.iter().any(|value| test(value));

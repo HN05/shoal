@@ -25,7 +25,6 @@ pub trait Subvolumes {
     fn destroy(&self, path: &Path) -> io::Result<()>;
 }
 
-/// The kernel's btrfs subvolumes.
 pub struct Btrfs;
 
 /// Delete the tree at `path`, if there is one. The subvolumes at `outputs`

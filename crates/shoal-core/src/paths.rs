@@ -16,7 +16,6 @@ pub use shoal_protocol::paths::{Paths, SESSION_LOG};
 /// The files and directories the daemon and the `shoal` command keep in the
 /// state directory, which apps never read.
 pub trait StateFiles {
-    /// The state directory.
     fn state(&self) -> &Path;
 
     /// Lock held by the running daemon; never unlinked so waiters share one inode.

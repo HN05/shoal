@@ -74,7 +74,6 @@ impl Launch {
         })
     }
 
-    /// The environment secrets, each with its value.
     pub fn environment(&self) -> impl Iterator<Item = (String, OsString)> + '_ {
         self.environment.iter().cloned()
     }

@@ -42,7 +42,6 @@ impl Layout {
         }
     }
 
-    /// The repository's temporary directories.
     pub fn of(repo: &Repository) -> Self {
         Self {
             dir: ShoalDir::of(repo, Contents::TmpDirs),

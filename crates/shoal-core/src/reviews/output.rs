@@ -72,7 +72,6 @@ pub static CODEX: ResultFormat = ResultFormat {
 
 /// What a reviewer's run left to read.
 pub struct Run<'a> {
-    /// Whether it exited successfully.
     pub success: bool,
     /// Its result, from the output file or standard output; `None` when it
     /// could not be read.

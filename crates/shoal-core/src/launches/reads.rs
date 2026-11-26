@@ -1,5 +1,5 @@
 //! What resolving a launch reads of Shoal's state, which its caller reads
-//! first: the CLI asks the daemon, which reads its own.
+//! first.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 
@@ -8,7 +8,6 @@ use crate::model::{Repository, Workspace};
 /// What resolving a launch reads of Shoal's state, for its caller.
 #[derive(Debug, Clone)]
 pub struct LaunchState {
-    /// The registered repositories.
     pub repositories: Vec<Repository>,
     /// The workspaces the caller sees.
     pub workspaces: Vec<Workspace>,

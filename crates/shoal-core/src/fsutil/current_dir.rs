@@ -1,4 +1,3 @@
-//! The directory a process runs in.
 use std::{io, path::PathBuf};
 
 /// The current directory with its links resolved, or none when it no

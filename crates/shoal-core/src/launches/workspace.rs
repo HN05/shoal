@@ -1,7 +1,5 @@
-//! What a launch that creates or reopens a workspace starts on, as far as
-//! the CLI and the daemon both settle it from the workspaces they read: a
-//! PR's head, the workspace that owns a branch, and the branch an issue
-//! names.
+//! What a launch that creates or reopens a workspace starts on: a PR's head,
+//! the workspace that owns a branch, and the branch an issue names.
 use anyhow::{Context as _, Result, ensure};
 use shoal_refs::BranchName;
 
@@ -179,7 +177,6 @@ pub async fn owning_workspace(
     Ok(super::on_branch(&workspaces, name, remote.as_ref()).cloned())
 }
 
-/// The ones of `workspaces` in `repo`.
 pub fn repository_workspaces(workspaces: &[Workspace], repo: &Repository) -> Vec<Workspace> {
     (workspaces.iter())
         .filter(|workspace| workspace.repository() == &repo.id)

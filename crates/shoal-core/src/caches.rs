@@ -38,7 +38,6 @@ impl Layout {
         }
     }
 
-    /// The repository's caches.
     pub fn of(repo: &Repository) -> Self {
         Self {
             dir: ShoalDir::of(repo, Contents::Caches),

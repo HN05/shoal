@@ -1,4 +1,3 @@
-//! Atomic file writes.
 use std::{
     fs,
     io::{self, Write},

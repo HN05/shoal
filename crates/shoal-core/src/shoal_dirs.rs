@@ -123,7 +123,6 @@ impl ShoalDir {
         Self::marked(root_dir, state.display().to_string(), contents)
     }
 
-    /// The repository's directory of `contents`.
     pub fn of(repo: &Repository, contents: Contents) -> Self {
         Self::new(&repo.workspaces_dir, &repo.id, contents)
     }

@@ -24,7 +24,6 @@ const CREDENTIAL_NAMES: &[&str] = &[
     "credential",
 ];
 
-/// One firing's input.
 #[derive(Debug, Clone, Default)]
 pub struct Input {
     pub document: Value,

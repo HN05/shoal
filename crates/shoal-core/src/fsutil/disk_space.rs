@@ -1,4 +1,3 @@
-//! Free disk space.
 use std::{io, path::Path};
 
 /// Space unprivileged processes may still write on the filesystem holding `path`.

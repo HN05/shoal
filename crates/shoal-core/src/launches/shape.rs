@@ -1,7 +1,6 @@
 //! The kind of space a launch starts in, and whether it has a repository,
 //! from what the launch names and the modes the settings that apply to it
-//! define, which the CLI's start and the daemon's launch decide alike from
-//! what they read first.
+//! define.
 use anyhow::Result;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::launches::{Launch, Setup, SpaceChoice};

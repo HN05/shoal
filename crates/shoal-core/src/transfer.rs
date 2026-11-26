@@ -228,7 +228,6 @@ pub trait ManifestExt: Sized {
     /// without its session files.
     async fn of(repo: Option<&Repository>, removed: RemovedSpace) -> Result<Self>;
 
-    /// The space's name.
     fn name(&self) -> &SpaceName;
 
     /// The agents to import on `machine`, without their sessions on
@@ -451,7 +450,6 @@ fn write_new(
     Ok(())
 }
 
-/// The directory the export file `path` goes to.
 pub fn directory(path: &Path) -> &Path {
     match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,

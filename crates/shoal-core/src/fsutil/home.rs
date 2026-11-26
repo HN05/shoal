@@ -1,4 +1,3 @@
-//! The user's home directory.
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},

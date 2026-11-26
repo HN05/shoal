@@ -19,7 +19,6 @@ use crate::{config::span::Span, time::UnixTime};
 /// a day to spare for a time a daylight-saving change moves.
 const SEARCH_DAYS: usize = 8;
 
-/// What a timer trigger fires on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Timer {
     pub schedule: Schedule,

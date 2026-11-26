@@ -2,7 +2,6 @@
 //! after an upgrade changes the daemon protocol.
 use std::ffi::OsString;
 
-/// This command's arguments.
 pub fn arguments() -> Vec<OsString> {
     std::env::args_os().skip(1).collect()
 }
