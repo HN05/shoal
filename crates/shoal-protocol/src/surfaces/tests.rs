@@ -504,3 +504,19 @@ fn a_relative_binding_reads_from_the_root_of_the_data() {
         json!({"count": 3, "note": "draft"})
     );
 }
+
+#[test]
+fn images_a_text_function_takes_are_checked_too() {
+    let formatted = |value: &str| {
+        surface(
+            json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+                "args": {"value": value}}}]),
+            json!({}),
+        )
+    };
+    let whole = formatted("![chart](https://example.com/chart.png)");
+    assert!(refusal(whole.clone(), &[]).contains("image https://example.com/chart.png"));
+    whole.checked(&["https://example.com/chart.png"]).unwrap();
+    let split = formatted("![chart](${/url}");
+    assert!(refusal(split, &[]).contains("part of an image"));
+}

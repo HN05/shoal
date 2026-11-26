@@ -155,6 +155,14 @@ impl Surface {
                  by its file name",
                 component.id
             );
+            if let Some(part) = image_part(component) {
+                bail!(
+                    "component {} builds its text from {}, part of an image; write each \
+                     image whole in one text so Shoal can check its file",
+                    component.id,
+                    serde_json::to_string(part)?
+                );
+            }
             if let Some(image) = images(component).into_iter().find(unattached) {
                 bail!(
                     "component {} shows the image {image}, which names no file attached to the \
@@ -260,23 +268,41 @@ fn other_catalog(value: &Value) -> Option<&str> {
     }
 }
 
-/// The targets of the Markdown images in every text of `data`, which a
-/// `Text` may bind.
-fn data_images(data: &Value) -> Vec<&str> {
-    match data {
-        Value::String(text) => targets(text),
-        Value::Array(values) => values.iter().flat_map(data_images).collect(),
-        Value::Object(fields) => fields.values().flat_map(data_images).collect(),
+/// The targets of the Markdown images in every text `value` holds, such
+/// as the data a `Text` may bind.
+fn data_images(value: &Value) -> Vec<&str> {
+    strings(value).into_iter().flat_map(targets).collect()
+}
+
+/// The images `component` shows by name: an `Image`'s URL, or the targets
+/// of the Markdown images in a `Text`'s text, its literal or any text a
+/// function that builds it takes.
+fn images(component: Component<'_>) -> Vec<&str> {
+    match component.kind {
+        "Image" => component.literal("url").into_iter().collect(),
+        "Text" => component.get("text").map_or_else(Vec::new, data_images),
         _ => Vec::new(),
     }
 }
 
-/// The images `component` shows by a literal name: an `Image`'s URL, or
-/// the targets of the Markdown images of a `Text`.
-fn images(component: Component<'_>) -> Vec<&str> {
-    match component.kind {
-        "Image" => component.literal("url").into_iter().collect(),
-        "Text" => component.literal("text").map_or_else(Vec::new, targets),
+/// The text a function building `component`'s text takes that holds part
+/// of a Markdown image, which the function could join into one Shoal
+/// cannot check.
+fn image_part(component: Component<'_>) -> Option<&str> {
+    let text = component
+        .get("text")
+        .filter(|text| text.get("@call").is_some())?;
+    strings(text).into_iter().find(|text| {
+        (text.contains("![") || text.contains("](")) && markdown::images(text).is_empty()
+    })
+}
+
+/// Every text `value` holds, however deep.
+fn strings(value: &Value) -> Vec<&str> {
+    match value {
+        Value::String(text) => vec![text.as_str()],
+        Value::Array(values) => values.iter().flat_map(strings).collect(),
+        Value::Object(fields) => fields.values().flat_map(strings).collect(),
         _ => Vec::new(),
     }
 }
