@@ -1,10 +1,5 @@
-//! One removal path for every space, explicit or by cleanup: [`policy`]
-//! decides what each removal checks, [`candidacy`] what keeps a space from
-//! cleanup, [`remove`] carries removal out, which [`background`] lets a
-//! request leave running and [`abandoned`] fails when it stops before it
-//! finishes, and [`worktree`] adds the steps only a space with a worktree
-//! takes; [`conversion`] removes the worktree of a workspace that becomes a
-//! chat along the same path.
+//! The one removal path every space takes, explicit or by cleanup. See
+//! `docs/design/cleanup.md`.
 pub mod abandoned;
 pub mod background;
 mod candidacy;

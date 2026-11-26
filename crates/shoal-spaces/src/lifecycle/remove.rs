@@ -24,9 +24,8 @@ use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 use shoal_refs::CommitId;
 use std::collections::BTreeMap;
 
-/// Refuse to remove any of `children`, those the removal of the space named
-/// `parent` takes first, when the user confirmed `removal` without one of
-/// them.
+/// Refuses when the user confirmed `removal` without one of the spaces the
+/// removal takes first.
 fn ensure_confirmed(parent: &str, children: &[SpaceRef], removal: Removal<'_>) -> Result<()> {
     let Some(confirmed) = removal.confirmed_children() else {
         return Ok(());
@@ -40,24 +39,20 @@ fn ensure_confirmed(parent: &str, children: &[SpaceRef], removal: Removal<'_>) -
     )
 }
 
-/// What removing a space did.
 pub struct SpaceRemoval {
-    /// The spaces below it the removal took first, each after those below
-    /// it.
+    /// Each after those below it.
     pub children: Vec<SpaceName>,
-    /// What removing its worktree did; none for a space without one.
+    /// None for a space without a worktree.
     pub worktree: Option<WorktreeRemoval>,
 }
 
 impl SpaceRemoval {
-    /// The protocol's result of removing a workspace.
     pub(super) fn workspace_result(self) -> Result<RemovalResult> {
         let worktree = self.worktree.context("the space has no worktree")?;
         Ok(worktree.with_children(self.children))
     }
 
-    /// The protocol's result of removing a space: its worktree's, or for a
-    /// space without one, a removal that had no branch to delete.
+    /// A space without a worktree had no branch to delete.
     pub fn result(self) -> RemovalResult {
         match self.worktree {
             Some(worktree) => worktree.with_children(self.children),
@@ -73,8 +68,7 @@ impl SpaceRemoval {
 }
 
 impl Spaces {
-    /// Remove the space `selector` names at a request, stopping its agent,
-    /// first the spaces below it, deleting only the `unsaved` work the
+    /// Takes the spaces below first, and deletes only the `unsaved` work the
     /// caller saw.
     pub async fn remove_selected(
         &self,
@@ -95,10 +89,9 @@ impl Spaces {
         self.remove_requested(daemon, selector, removal).await
     }
 
-    /// End the space here as [`Self::remove_selected`] removes it, where it
-    /// lives on on another machine, taking only the spaces `taking` names
-    /// before it: one that appears in it or below it meanwhile retains them
-    /// all. Ending a move, it refuses at its last
+    /// Ends a space that lives on on another machine. Takes only the spaces
+    /// `taking` names before it: one that appears in it or below it
+    /// meanwhile retains them all. Ending a move, it refuses at its last
     /// check, after the removal hooks, once a workspace differs from its
     /// checkpoint in `moved`, which the other machine imported.
     pub async fn remove_selected_taking(
@@ -122,8 +115,7 @@ impl Spaces {
         self.remove_requested(daemon, selector, removal).await
     }
 
-    /// Remove the workspace `id` and its unsaved work for its repository's
-    /// removal, which holds the repository's Git gate and waited for the
+    /// The repository's removal holds its Git gate and waited for the
     /// creations under way to end.
     pub async fn remove_for_repository(
         &self,
@@ -142,8 +134,8 @@ impl Spaces {
         Ok(self.remove_space(daemon, id, removal).await?.result())
     }
 
-    /// Remove the space as [`Self::remove_selected`] does, refusing it
-    /// while it has holds, which are the user's and host apps'.
+    /// Refuses while the space has holds, which are the user's and host
+    /// apps'.
     pub async fn remove_unheld(
         &self,
         daemon: &dyn Daemon,
@@ -163,9 +155,8 @@ impl Spaces {
         self.remove_requested(daemon, selector, removal).await
     }
 
-    /// What removing the space `selector` names at a request would do: the
-    /// spaces it takes first, deepest first, and what removing its worktree,
-    /// where it has one, would discard, with the changed files when
+    /// The spaces it takes first, deepest first, and what removing its
+    /// worktree would discard, with the changed files when
     /// `include_changes`.
     pub async fn check_manual_removal(
         &self,
@@ -195,7 +186,6 @@ impl Spaces {
         })
     }
 
-    /// The IDs of the disposable workspaces among `spaces`.
     async fn disposable_among(&self, spaces: &[SpaceRef]) -> Result<Vec<SpaceId>> {
         let mut disposable = Vec::new();
         for space in spaces {
@@ -208,11 +198,10 @@ impl Spaces {
         Ok(disposable)
     }
 
-    /// Remove the space `selector` names as the child of a removal of
-    /// `cause` of the space above it on another machine, as a removal here
-    /// takes a child: leaving the user's holds when `refuse_holds`, and
-    /// taking only the spaces below it that `confirmed` names, when it
-    /// names them.
+    /// Removes the space as the child of a removal of the space above it on
+    /// another machine. Leaves the user's holds when `refuse_holds`, and
+    /// takes only the spaces below it that `confirmed` names, when it names
+    /// them.
     pub async fn remove_as_child(
         &self,
         daemon: &dyn Daemon,
@@ -243,9 +232,8 @@ impl Spaces {
             .result())
     }
 
-    /// Remove `space`, which idle or merged cleanup found unchanged as
-    /// `snapshot`, for `cause`, once its grace period ends, which disk space
-    /// and the user's request do not wait for; `Ok(false)` while it runs.
+    /// Waits for the grace period, which disk space and the user's request
+    /// do not wait for. `Ok(false)` while it runs.
     pub async fn remove_unused(
         &self,
         daemon: &dyn Daemon,
@@ -276,8 +264,7 @@ impl Spaces {
         .await
     }
 
-    /// Remove `space` for its `completion` with cleanup, which `cause`
-    /// recorded, once its grace period ends; `Ok(false)` while it runs.
+    /// Waits for the grace period. `Ok(false)` while it runs.
     pub async fn remove_completed(
         &self,
         daemon: &dyn Daemon,
@@ -293,29 +280,26 @@ impl Spaces {
         self.remove_after_grace(daemon, space, removal).await
     }
 
-    /// Remove `space` below `ancestor`, whose completion with cleanup
-    /// stands, once its grace period ends; `Ok(false)` while it runs.
+    /// Waits for the grace period. `Ok(false)` while it runs.
     pub async fn remove_under_completed(
         &self,
         daemon: &dyn Daemon,
         space: &Space,
         ancestor: &CompletedAncestor,
     ) -> Result<bool> {
-        // The sweep holds the PR gates of the space and the ancestor; the
-        // ancestor's own spaces are held too, since a chat's workspaces
-        // could leave it, and the space with them, after the rechecks found
-        // it below the ancestor.
+        // The sweep holds the PR gates of the space and the ancestor. Hold
+        // the ancestor's own spaces too: a chat's workspaces could leave it,
+        // and the space with them, after the rechecks found it below the
+        // ancestor.
         let _held = self.completed_owners.reserve(&ancestor.id)?;
         self.remove_after_grace(daemon, space, Removal::UnderCompleted { ancestor })
             .await
     }
 
-    /// Forget a workspace whose directory was deleted outside Shoal.
     pub async fn remove_deleted(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<SpaceRemoval> {
         self.remove_space(daemon, id, Removal::Deleted).await
     }
 
-    /// Remove `space` for `removal` unless its grace period still runs.
     async fn remove_after_grace(
         &self,
         daemon: &dyn Daemon,
@@ -360,9 +344,8 @@ impl Spaces {
         Ok(crate::time::UnixTime::now() < cleanup_at)
     }
 
-    /// Remove the space `id` for `removal`: reserve it, so nothing restores
-    /// or changes it meanwhile, carry the removal out, and on failure give
-    /// the reservation up.
+    /// Reserves the space so nothing restores or changes it meanwhile, and
+    /// gives the reservation up on failure.
     pub async fn remove_space(
         &self,
         daemon: &dyn Daemon,
@@ -373,10 +356,9 @@ impl Spaces {
             .await
     }
 
-    /// Remove the space `id` as [`Self::remove_space`] does, calling
-    /// `checked` with the reserved space once it passes removal's first
-    /// checks, before the removal changes anything; its failure fails the
-    /// removal.
+    /// Calls `checked` with the reserved space once it passes removal's
+    /// first checks, before the removal changes anything. Its failure fails
+    /// the removal.
     pub(super) async fn remove_space_checked(
         &self,
         daemon: &dyn Daemon,
@@ -392,8 +374,8 @@ impl Spaces {
             .await
         {
             Ok((children, worktree)) => {
-                // The chat a conversion makes keeps the space's places, where
-                // its agent carries on, its temporary directory and its
+                // The chat a conversion makes keeps the space's places,
+                // where its agent carries on, its temporary directory and its
                 // attached files.
                 if !removal.converts() {
                     self.discard_removed_space(daemon, &space).await;
@@ -423,14 +405,13 @@ impl Spaces {
         }
     }
 
-    /// Carry out `removal` of the reserved `space`: check it, stop its agent
-    /// and commands, check it again, remove the spaces below it, here and on
-    /// other machines, then its
-    /// worktree where it has one, once a last check passes, and delete its
-    /// record, or for a conversion replace it with the chat's. Checked again
-    /// after the reservation, so a space restored meanwhile cannot go by an
-    /// unattended removal; `checked` learns that the first checks passed.
-    /// `replaced` is the lifecycle state the reservation replaced.
+    /// Checks, stops the agent and commands, checks again, removes the spaces
+    /// below, here and on other machines, then the worktree once a last
+    /// check passes, and deletes the record, or for a conversion replaces it
+    /// with the chat's. Checking again after the reservation keeps a space
+    /// restored meanwhile from going by an unattended removal. `checked`
+    /// learns that the first checks passed. `replaced` is the lifecycle
+    /// state the reservation replaced.
     async fn remove_reserved(
         &self,
         daemon: &dyn Daemon,
@@ -467,7 +448,7 @@ impl Spaces {
         checked(space)?;
         // Stopping cancels the restores of idle agents that wrappers wait to
         // carry out, which exit on their own, and the others go with the
-        // space; the removal record keeps the agents.
+        // space. The removal record keeps the agents.
         let cancelled = initial.map(|check| check.idle_restores).unwrap_or_default();
         self.stop_for_removal(daemon, space, removal, worktree.as_ref())
             .await?;
@@ -490,8 +471,8 @@ impl Spaces {
         if let Some(worktree) = &worktree {
             self.run_removal_hooks(daemon, worktree).await?;
         }
-        // After the hooks, so the final inspection and the checkpoint include
-        // the files these processes write as they stop.
+        // After the hooks, so the final inspection and the checkpoint
+        // include the files these processes write as they stop.
         let ties = (worktree.as_ref()).map_or(WorktreeTies::None, |stage| stage.ties(removal));
         let common_dir = worktree.as_ref().and_then(WorktreeStage::common_dir);
         self.stop_removed_processes(daemon, space, ties, common_dir)
@@ -519,10 +500,8 @@ impl Spaces {
         Ok((children, worktree))
     }
 
-    /// End the record of `space` once `removal` removed what it had: delete
-    /// it for `cause`, keeping a chat's removal record first, since a
-    /// workspace's went with its checkpoint, or for a conversion replace it
-    /// with the chat's.
+    /// Keeps a chat's removal record first, since a workspace's went with
+    /// its checkpoint. A conversion replaces the record with the chat's.
     async fn end_space_record(
         &self,
         daemon: &dyn Daemon,
@@ -549,8 +528,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// The spaces `removal` of the space `id` takes first: those below it,
-    /// or for a conversion, which keeps them, the chats in its worktree.
+    /// Those below it, or for a conversion, which keeps them, the chats in
+    /// its worktree.
     async fn taken_with(&self, id: &SpaceId, removal: Removal<'_>) -> Result<Vec<SpaceRef>> {
         match removal.converts() {
             true => self.chats_in(id).await,
@@ -558,9 +537,8 @@ impl Spaces {
         }
     }
 
-    /// Stop the agent of `space` and its commands for `removal`, with what
-    /// else runs in its worktree, keeping a chat's agent for its removal
-    /// record as an existing worktree's.
+    /// Also stops what else runs in its worktree. Keeps a chat's agent, as an
+    /// existing worktree's, for its removal record.
     async fn stop_for_removal(
         &self,
         daemon: &dyn Daemon,
@@ -578,9 +556,8 @@ impl Spaces {
         (self.stop_space_agent(daemon, space, removal.stop_policy(), &request)).await
     }
 
-    /// Apply every check `removal` needs at `stage` of the space `id`, then
-    /// of its `worktree`, after stopping the `cancelled` restores, returning
-    /// the worktree's inspection removal proceeds with.
+    /// Stops the `cancelled` restores first. Returns the worktree's
+    /// inspection the removal proceeds with.
     async fn check_space_and_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -600,14 +577,13 @@ impl Spaces {
         }
     }
 
-    /// Refuse `removal` of the space `id` as it is now at `stage`: an
-    /// unattended one while something keeps it; any while processes of its
-    /// stopped agent run on, or, first, while a space below it is in a
-    /// stalled directory a sweep skips; automatic cleanup once it changed
-    /// from its snapshot; completion cleanup once the completion changed;
-    /// and an ancestor's completion while spaces remain below it, which go
-    /// first under the same completion, or once that completion no longer
-    /// takes it.
+    /// Refuses an unattended removal while something keeps the space. Refuses
+    /// any while processes of its stopped agent run on, or, first, while a
+    /// space below it is in a stalled directory a sweep skips. Refuses
+    /// automatic cleanup once the space changed from its snapshot,
+    /// completion cleanup once the completion changed, and an ancestor's
+    /// completion while spaces remain below, which go first under the same
+    /// completion, or once that completion no longer takes it.
     async fn check_space_removal(
         &self,
         daemon: &dyn Daemon,
@@ -643,8 +619,8 @@ impl Spaces {
         };
         let changed = || format!("{} changed {when}", space.kind());
         match (removal, stage) {
-            // Later stages compare against the sweep's snapshot, so they also
-            // cover changes made before removal started.
+            // Later stages compare against the sweep's snapshot, so they
+            // also cover changes made before removal started.
             (Removal::Automatic { .. }, Stage::Initial) => {}
             (Removal::Automatic { snapshot, .. }, Stage::AfterStop) => {
                 let users = DirectoryUsers::default();
@@ -695,10 +671,10 @@ impl Spaces {
         Ok(())
     }
 
-    /// Refuse a removal that [skips stalled](Removal::skips_stalled) spaces
-    /// while one of the `children` of the space it removes, or one below
-    /// them, has a worktree in a directory whose file access stalled. The
-    /// sweep's own pass of that space rechecks it.
+    /// Only for a removal that [skips stalled](Removal::skips_stalled)
+    /// spaces: refuses while a space below has a worktree in a directory
+    /// whose file access stalled. The sweep's own pass of that space
+    /// rechecks it.
     async fn ensure_none_stalled_below(
         &self,
         children: Vec<SpaceRef>,
@@ -721,12 +697,11 @@ impl Spaces {
         Ok(())
     }
 
-    /// Remove `children`, the spaces the removal of the space named `parent`
-    /// takes first, for `removal` of it, each after those below it,
-    /// returning their names in that order. The first that fails stops the
-    /// rest and retains the parent, so no space outlives its parent. Each
-    /// reservation refuses children below its space and chats in its
-    /// worktree, so none appears in one whose children were listed.
+    /// Removes each after those below it and returns their names in that
+    /// order. The first that fails stops the rest and retains the parent, so
+    /// no space outlives its parent. Each reservation refuses children below
+    /// its space and chats in its worktree, so none appears in one whose
+    /// children were listed.
     async fn remove_children(
         &self,
         daemon: &dyn Daemon,
