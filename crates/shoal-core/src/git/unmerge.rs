@@ -258,12 +258,8 @@ pub async fn holds_commits_of(
     if output.status.code() == Some(1) && output.stdout.is_empty() {
         return Ok(false);
     }
-    ensure!(
-        output.status.success(),
-        "git merge-base failed: {}",
-        String::from_utf8_lossy(&output.stderr).trim()
-    );
-    for base in String::from_utf8_lossy(&output.stdout).lines() {
+    let bases = crate::subprocess::checked_output(git::PROGRAM, Ok(output))?;
+    for base in bases.lines() {
         if !git::is_ancestor(repo, base, previous, git::isolated_command).await? {
             return Ok(true);
         }

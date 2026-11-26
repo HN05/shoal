@@ -596,7 +596,6 @@ async fn restore_workspace(
     origin: Option<&Origin>,
     fake: bool,
 ) -> Result<()> {
-    use anyhow::Context as _;
     use std::process::Stdio;
 
     #[cfg(any(test, feature = "test-support"))]
@@ -617,13 +616,8 @@ async fn restore_workspace(
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .output()
-        .await
-        .context("run shoal resume")?;
-    anyhow::ensure!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr).trim()
-    );
+        .await;
+    shoal_subprocess::checked_output("shoal resume", output)?;
     Ok(())
 }
 

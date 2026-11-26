@@ -10,7 +10,7 @@ use std::{
     process::Stdio,
 };
 
-use anyhow::{Context as _, Result, ensure};
+use anyhow::{Context as _, Result};
 use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::{
     hub::Member,
@@ -161,12 +161,9 @@ impl Spaces {
         let mut stdin = child.stdin.take().context("the placing takes no input")?;
         stdin.write_all(&serde_json::to_vec(carried)?).await?;
         drop(stdin);
-        let output = child.wait_with_output().await?;
-        ensure!(
-            output.status.success(),
-            "cannot place the files of the forked session: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
+        let program = argv[0].to_string_lossy();
+        shoal_subprocess::checked_output(&program, child.wait_with_output().await)
+            .context("place the files of the forked session")?;
         Ok(())
     }
 }

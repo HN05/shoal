@@ -1,6 +1,6 @@
 //! Subprocess calls to the per-user service manager.
 use crate::{protocol::timing, tools::Tool};
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use std::{process::Output, time::Duration};
 use tokio::process::Command;
 
@@ -40,19 +40,12 @@ async fn run(tool: Tool, args: &[&str], check: bool, limit: Duration) -> Result<
     let program = tool.program();
     let mut command = Command::new(program);
     command.args(args);
-    let output = crate::subprocess::Run::new(command)
-        .timeout(limit)
-        .capture()
-        .await
-        .with_context(|| format!("run {program}; a working per-user service manager is required (use `shoal daemon run` otherwise)"))?;
-    if check && !output.status.success() {
-        bail!(
-            "{program} {} failed: {}",
-            args.join(" "),
-            crate::subprocess::diagnostic(&output.stderr).trim()
-        );
-    }
-    Ok(output)
+    let run = crate::subprocess::Run::new(command).timeout(limit);
+    let output = match check {
+        true => run.checked().await,
+        false => run.capture().await.map_err(Into::into),
+    };
+    output.with_context(|| format!("{program} {}; a working per-user service manager is required (use `shoal daemon run` otherwise)", args.join(" ")))
 }
 
 pub(super) fn domain() -> String {

@@ -230,6 +230,7 @@ dependencies = [
     "shoal-refs",
     "shoal-schedule",
     "shoal-store",
+    "shoal-subprocess",
 ]
 
 [shoal-states]

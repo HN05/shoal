@@ -201,18 +201,10 @@ pub async fn run_detached<P: Part>(
     configured_env: &BTreeMap<String, OsString>,
 ) -> Result<()> {
     let command = command(hook, space, executable, paths, configured_env)?;
-    let output = crate::subprocess::Run::new(command)
+    crate::subprocess::Run::new(command)
         .timeout(DETACHED_TIMEOUT)
-        .capture()
+        .checked()
         .await
         .with_context(|| format!("run {} {}", hook.kind().key(), executable.display()))?;
-    let diagnostic = crate::subprocess::diagnostic(&output.stderr);
-    ensure!(
-        output.status.success(),
-        "{} exited with {}: {}",
-        hook.kind().key(),
-        crate::execution::exit_code(output.status),
-        diagnostic.trim()
-    );
     Ok(())
 }

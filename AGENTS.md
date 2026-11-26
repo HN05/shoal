@@ -31,6 +31,10 @@ tell decisions apart from proposals.
 - Give each closed set of values, such as lifecycle states, resource scopes and
   approval targets, a type that rejects unknown values.
 - Invoke external tools with argument arrays.
+- Run a tool whose failure you only report through `shoal_subprocess`
+  (`Run::checked`, `checked_output`), which bounds its diagnostics. Keep
+  `Command::new` for interactive and long-running children, and for those
+  whose exit status means something besides failure.
 - Keep integration logic for a particular caller, such as Superlogical or
   Macraft, outside Shoal's core. Integrations such as agent tools, terminal
   hosts and apps implement callbacks for what they do differently. State,
