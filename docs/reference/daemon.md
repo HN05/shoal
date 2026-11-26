@@ -277,14 +277,15 @@ Every process a leftover started is a leftover too, wherever it runs. So what
 an agent's command left in its scope stays the space's leftover after the agent
 exits, until `shoal stop` or the space's removal stops it.
 
+A process whose parent still runs elsewhere, such as a shell the user opened in
+the worktree, is no leftover.
+
 These are never untracked processes:
 
 - the processes of tracked executions and chat agents, and those that started
   them;
 - terminal session servers, such as zmx, tmux or Zellij;
-- the process that asks;
-- a process whose parent still runs elsewhere, such as a shell the user opened
-  in the worktree.
+- the process that asks.
 
 ### Find leftovers
 
