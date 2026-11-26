@@ -165,12 +165,22 @@ Manual and automatic cleanup share one removal path:
 6. Remove the worktree.
 7. Release the leases with the record.
 
-A failure keeps what a retry needs. Removal decides about the branch from its
-last inspection, after the hooks, so a hook that commits keeps the branch when
-only that branch has the new commits.
+A failure keeps what a retry needs. Removal checks ownership and its policy
+again after the hooks. It decides about the branch from that last inspection,
+so a hook that commits keeps the branch when only that branch has the new
+commits.
 
 Manual removal asks only before it deletes uncommitted or untracked files, or
 commits on a detached HEAD, since no branch keeps those.
+
+### Manual removal in the background
+
+Manual removal answers its request once it has reserved the space and passed
+the checks it makes before it changes anything. The rest goes on in the
+background, unless the caller waits for it, so the caller does not wait for
+stops, hooks and the worktree's deletion. A daemon update waits for that work.
+A later failure keeps the space and reaches the agent that asked, or else the
+user as an alert.
 
 ### What Git leaves behind
 

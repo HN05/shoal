@@ -1,63 +1,114 @@
 # Setup and hooks
 
-This file covers workspace setup and the lifecycle hooks repository config
-names.
+This file covers workspace setup and the lifecycle hooks that repository config
+names. [Setup and hooks](../reference/setup.md) says what each step and hook
+does, and the
+[configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hooks)
+describes each option.
 
-Repository config may name setup and lifecycle hook executables:
-single executable paths run directly without shell parsing or PATH lookup.
-Hooks that run with a worktree resolve paths against it and use it as their
-working directory. Setup runs through
-the tracked wrapper with workspace scope; the daemon owns readiness and execution
-records, and `start` keeps the workspace preparing until setup exits cleanly with no
-survivors; manual removal also takes a preparing workspace with no execution, whose
-setup an interrupted command never started. Failures preserve files, branches, and leases; process-verification
-failures retain the workspace and report the command's exit status and the
-blocking evidence. Other failures let interactive callers choose retry, delete,
-ignore (which repairs verified state first), or keep; a setup that never
-started offers only retry or keep. JSON callers get a nonzero exit.
-`setup` reruns setup explicitly, and `resume` refuses a workspace whose setup
-failed, naming it, since a setup is not an agent; nothing retries
-automatically.
-The agent a start launches in a workspace whose setup fails waits in the
-queue for that setup instead of holding its slot, queued with the workspace's
-record for a start the daemon carries out, or by the preparation, which
-carries the agent a CLI would run itself, so no follower is needed; one that
-starts now starts once the setup releases it, regardless of the limits. A start whose preparation ended without queuing it, such
-as when its worker died, goes back to the queue as a new entry, which no hold
-on the old one keeps back, with its plan opening the workspace. A persisted
-dependency that only a preparation getting past its post-setup hook releases
-holds it, so a retried setup starts it without the user restating its mode,
-task or permissions, and a failed hook keeps it waiting.
-While the daemon registers an execution it sends the wrapper keepalives, and
-the wrapper's limit bounds the daemon's silence rather than the whole wait, so
-setups queued behind each other's Git gate never fail for being slow; a
-registration whose wrapper left is forgotten rather than recorded as a failed
-setup.
-Tracked setup starts by copying the repository checkout's ignored files unless
-`setup.copy_ignored = false`, so local files like `.env` arrive without a setup
-script and failures gate readiness; `.worktreeinclude`, a convention other worktree
-tools share, selects what to copy, and `setup.copy_ignored_exclude` leaves entries
-out. The copy is Shoal's own, ported from Worktrunk's `wt step copy-ignored`.
+## Executables
 
-They use global defaults below repository config. The pre-setup hook runs in the
-daemon after ownership and execution checks, with a time limit, while
-preparation excludes lifecycle and permit changes; failure marks setup failed.
-It may be configured without a setup command. The post-setup hook runs in
-setup's operation, without a terminal, once the workspace is ready, after its PR
-is linked and before any agent; failure keeps the ready workspace. The
-pre-remove hook runs in the daemon inside the single removal path for manual,
-repository, and automatic removal, after checks pass and commands stop, bounded
-in time; failure retains the workspace. Ownership and removal policy are
-rechecked after all removal hooks, with branch deletion derived from the final
-inspection. A manual removal answers its request once the workspace is reserved
-and passes the checks removal makes before changing anything, and goes on in the
-background, under the gate a daemon update waits for, unless the caller waits
-for it; a later failure retains the workspace and reaches the requesting agent,
-or else the user as an alert. Chat removal stays synchronous.
+Setup and each hook are one executable path. Shoal runs it without shell
+parsing or `PATH` lookup, so arguments and shell logic stay in the script. A
+hook that runs while the worktree exists uses it as its working directory.
 
-Post-remove runs after ownership is released, from the repository checkout with
-its copy of the executable, retaining the old workspace path in the environment.
-Its command is selected before removal. It is best-effort: failure is a warning
-and alert, never a failed removal or restored ownership. Cleanup of deleted
-worktrees tolerates missing ancestors and skips hooks; post-remove events are
-not durably queued or replayed.
+Hooks run untracked, as the user's own processes, as
+[Process identity](execution.md#process-identity) says.
+
+## Setup
+
+### Readiness
+
+Setup runs through the tracked execution wrapper, with workspace scope. The
+daemon owns the readiness and execution records. A workspace stays `preparing`
+until setup exits 0 and leaves no process running. What should outlive setup
+belongs in a hook or a demo, as
+[Proof that processes ended](daemon.md#proof-that-processes-ended) says.
+
+### The copy of ignored files
+
+Setup starts by copying the repository checkout's ignored files. Local files,
+such as `.env`, thus arrive without a setup script. The copy is a step of
+setup, so its failure keeps the workspace from ready.
+
+A `.worktreeinclude` selects what the copy takes. Other worktree tools read the
+same file, so one file serves them all. Shoal copies with its own code and
+needs no such tool.
+
+### Failed setup
+
+A failed setup keeps the workspace with its files, branch and leases, so the
+user can see what went wrong. A setup that left a process running fails too,
+with the command's exit status and the processes that blocked it.
+
+Nothing retries a setup on its own. `shoal setup` reruns it. `shoal resume`
+refuses the workspace and names `shoal setup`, since a setup is no agent to
+resume.
+
+### The agent that waits for setup
+
+The agent that a start launches in a new workspace waits in the agent queue
+for setup. It holds no slot meanwhile, since a setup can take minutes.
+
+The daemon queues the agent with the workspace's record. For an agent that a
+CLI runs itself, the preparation carries it instead. No process has to stay to
+start the agent once setup ends.
+
+A start whose preparation ended without queuing its agent, such as when its
+worker died, goes back to the queue as a new entry. No hold on the old entry
+keeps it back, and it opens the workspace when it starts.
+
+The queued agent depends on a persisted record that only a preparation past
+the post-setup hook releases. A retried setup thus starts the agent without
+the user restating its mode, task or permissions. A failed post-setup hook
+keeps it waiting.
+
+### Registration
+
+While the daemon registers setup's execution, it sends the wrapper keepalives.
+The wrapper's time limit bounds the daemon's silence, not the whole wait. So
+setups queued behind each other's Git gate never fail for being slow.
+
+A registration whose wrapper left is forgotten, not recorded as a failed
+setup, as [Executions that never started](agent-lifecycle.md#executions-that-never-started)
+says.
+
+## Setup hooks
+
+### The pre-setup hook
+
+`hooks.pre_setup` runs in the daemon, after the ownership and execution checks.
+It runs with a time limit. Preparation refuses lifecycle and permit changes
+while it runs. Its failure marks setup failed. It runs without a
+`setup.command` too.
+
+### The post-setup hook
+
+`hooks.post_setup` runs in setup's operation, without a terminal. It runs once
+the workspace is ready, after its PR is linked and before any agent starts. It
+thus sees the PR and can change how the agent launches. Its failure keeps the
+ready workspace and starts no agent.
+
+## Removal hooks
+
+### The pre-remove hook
+
+`hooks.pre_remove` runs in the daemon on
+[the removal path](cleanup.md#the-removal-path) that manual, repository and
+automatic removal share. It runs after the checks pass and the commands stop,
+with a time limit. Its failure keeps the workspace, so a teardown that must
+finish belongs in this hook.
+
+### The post-remove hook
+
+`hooks.post_remove` runs after removal has released the workspace's ownership.
+It runs from the repository checkout, with the checkout's copy of the
+executable, since the worktree is gone. Its environment still names the old
+worktree path. Shoal selects its command and environment before removal, while
+the workspace's record and config still exist.
+
+The hook is best-effort, since nothing can undo the deletion. Its failure is a
+warning and an alert, never a failed removal or restored ownership. Shoal does
+not queue or replay it across a daemon restart.
+
+A worktree the user already deleted runs neither removal hook.
