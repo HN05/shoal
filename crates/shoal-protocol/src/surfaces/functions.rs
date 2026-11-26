@@ -2,7 +2,7 @@
 //! them: those whose result follows from the surface's data alone. A call
 //! whose result depends on the renderer, such as on its locale or clock,
 //! stays as written.
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{Surface, scoped};
 
@@ -16,9 +16,10 @@ impl Surface {
 
     /// What `call`, placed in `scope`, gives where Shoal runs it: a call
     /// of `@index` or `formatString` as [`Self::indexed`] and
-    /// [`Self::formatted`] give it, and a check's or logical function's
-    /// boolean, false where a check's value is known but of the wrong kind,
-    /// such as text no number spells; none for a call only a renderer runs,
+    /// [`Self::formatted`] give it, a check's validation result, invalid
+    /// where its value is known but of the wrong kind,
+    /// such as text no number spells, and a logical function's boolean;
+    /// none for a call only a renderer runs,
     /// a value that is no call, or calls nested deeper than
     /// [`MAX_NESTED_CALLS`], which Shoal leaves to a renderer too.
     pub(super) fn called(&self, call: &Value, scope: &str) -> Option<Value> {
@@ -29,11 +30,11 @@ impl Surface {
         let given = |name: &str| self.known(arg(name)?, scope);
         let number = |name: &str| arg(name).and_then(Value::as_f64);
         let text = |name: &str| given(name).map(|value| value.as_str().map(str::to_owned));
-        let check = |passes: Option<bool>| Some(Value::Bool(passes.unwrap_or(false)));
+        let check = |passes: Option<bool>| Some(validation(passes.unwrap_or(false)));
         match call.get("@call").and_then(Value::as_str)? {
             "@index" => self.indexed(call, scope),
             "formatString" => self.formatted(call, scope).map(Value::String),
-            "required" => Some(Value::Bool(filled(&given("value")?))),
+            "required" => Some(validation(filled(&given("value")?))),
             "length" => {
                 check(text("value")?.map(|value| {
                     within(value.chars().count() as f64, number("min"), number("max"))
@@ -134,6 +135,12 @@ pub(super) fn truth(value: &Value) -> Option<bool> {
         Value::Null => Some(false),
         _ => None,
     }
+}
+
+/// The validation result a check gives, as the catalog's check
+/// functions return it.
+fn validation(valid: bool) -> Value {
+    json!({ "valid": valid })
 }
 
 /// Whether `value` is set and not empty, as `required` checks.

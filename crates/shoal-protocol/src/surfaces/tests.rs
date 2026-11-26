@@ -724,7 +724,9 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
                  "@checks": [{"condition": {"@call": "regex",
                      "args": {"value": code, "pattern": pattern}}}]},
                 {"id": "go", "component": "Button", "child": "go-label",
-                 "action": {"event": {"name": "go", "context": {"code": code}}}},
+                 "action": {"event": {"name": "go", "context": {
+                     "code": code,
+                     "known": {"@call": "required", "args": {"value": code}}}}}},
                 {"id": "go-label", "component": "Text", "text": "Go"},
             ]),
             json!({"code": ""}),
@@ -734,7 +736,9 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
         |surface: &Surface, value: &str| surface.resolve("go", values(&[("code", json!(value))]));
     let digits = pattern(r"^\d+$");
     assert!(answer(&digits, "١٢").is_err());
-    answer(&digits, "12").unwrap();
+    // A context records a check's validation result as the catalog returns it.
+    let resolved = answer(&digits, "12").unwrap();
+    assert_eq!(resolved["known"], json!({"valid": true}));
     assert!(answer(&pattern(r"^\w+$"), "é").is_err());
     assert!(answer(&pattern(r"^a.b$"), "a\u{2028}b").is_err());
     answer(&pattern(r"^[\d_]+$"), "1_2").unwrap();
