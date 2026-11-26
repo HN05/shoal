@@ -9,10 +9,10 @@ use crate::{
 };
 use shoal_protocol::{
     events::{
-        AbsorbEvent, AgentEvent, AlertEvent, BlockerEvent, EventDetails, EventSpace, FileEventKind,
-        GateEvent, HandoffEvent, ItemActivityEvent, ItemEvent, JobEndedEvent, LinkEvent,
-        MergeEvent, ReviewEvent, ShoalEventDetails, ShoalEventKind, SimulatorEvent, SpaceEvent,
-        ThreadEvent,
+        AbsorbEvent, AgentEvent, AlertEvent, BlockerEvent, CommandRanEvent, EventDetails,
+        EventSpace, FileEventKind, GateEvent, HandoffEvent, ItemActivityEvent, ItemEvent,
+        JobEndedEvent, LinkEvent, MergeEvent, ReviewEvent, ShoalEventDetails, ShoalEventKind,
+        SimulatorEvent, SpaceEvent, ThreadEvent,
     },
     log::LogEntry,
     progress::Progress,
@@ -126,6 +126,7 @@ fn event_line(details: &EventDetails) -> (String, String) {
         SpaceEvent::ChildCreated { child: created } => fixed("Child created", child(created)),
         SpaceEvent::ChildRemoved { child: removed } => fixed("Child removed", child(removed)),
         SpaceEvent::JobEnded { job: ended } => fixed("CI job ended", job(ended)),
+        SpaceEvent::CommandRan { command: ran } => fixed("Command ran", command(ran)),
         SpaceEvent::NoMergeRuns { merge: merged } => fixed("No CI run of the merge", merge(merged)),
         SpaceEvent::BlockerAdded { blocker: added } => fixed("Blocker added", blocker(added)),
         SpaceEvent::BlockerRemoved { blocker: removed } => {
@@ -438,6 +439,24 @@ fn job(job: &JobEndedEvent) -> String {
         stopped.push(format!("{} more", job.omitted));
     }
     format!("{ended}; stopped {}", stopped.join(", "))
+}
+
+/// A `shoal run` command's run, as `test: peak 7.2 GiB in 3m 12s,
+/// stopped`.
+fn command(ran: &CommandRanEvent) -> String {
+    let took = std::time::Duration::from_millis(ran.duration_ms);
+    let mut text = format!(
+        "{}: peak {} in {}",
+        ran.command,
+        crate::cli::ui::size_label(ran.peak),
+        crate::cli::ui::duration_label(took)
+    );
+    if ran.oom_killed {
+        text += ", the OOM killer killed a process of it";
+    } else if !ran.whole {
+        text += ", stopped";
+    }
+    text
 }
 
 /// The merged PR and its merge commit, as `#12 at 0a1b2c3`, or the

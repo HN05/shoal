@@ -77,7 +77,7 @@ impl LogEntry {
 }
 
 /// The events of spaces the log shows, apart from forge activity.
-const ENTRY_KINDS: [EventKind; 34] = [
+const ENTRY_KINDS: [EventKind; 35] = [
     EventKind::Created,
     EventKind::Renamed,
     EventKind::RemovalStarted,
@@ -108,6 +108,7 @@ const ENTRY_KINDS: [EventKind; 34] = [
     EventKind::Absorbed,
     EventKind::AbsorbedSpace,
     EventKind::JobEnded,
+    EventKind::CommandRan,
     EventKind::NoMergeRuns,
     EventKind::BlockerAdded,
     EventKind::BlockerRemoved,

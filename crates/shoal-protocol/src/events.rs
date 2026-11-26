@@ -162,6 +162,9 @@ states!(EventKind {
     /// ended it, or the kernel's OOM killer killed processes of it, as its
     /// `reason` says.
     JobEnded => "job_ended",
+    /// A `shoal run` command in the workspace ended, with the most memory
+    /// it held.
+    CommandRan => "command_ran",
     /// No CI run of the default branch started for the merge commit of a
     /// PR the space watched merge within the time Shoal looked for one.
     NoMergeRuns => "no_merge_runs",
@@ -345,6 +348,9 @@ pub enum SpaceEvent {
     JobEnded {
         job: Box<JobEndedEvent>,
     },
+    CommandRan {
+        command: Box<CommandRanEvent>,
+    },
     NoMergeRuns {
         merge: Box<MergeEvent>,
     },
@@ -398,6 +404,7 @@ impl SpaceEvent {
             Self::AbsorbedSpace { .. } => EventKind::AbsorbedSpace,
             Self::Converted { .. } => EventKind::Converted,
             Self::JobEnded { .. } => EventKind::JobEnded,
+            Self::CommandRan { .. } => EventKind::CommandRan,
             Self::NoMergeRuns { .. } => EventKind::NoMergeRuns,
         }
     }
@@ -633,6 +640,22 @@ pub struct JobEndedEvent {
     /// How many more it stopped.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub omitted: usize,
+}
+
+/// A `shoal run` command's run, as its estimate keeps it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandRanEvent {
+    /// The command, by its configured name or its arguments.
+    pub command: crate::runs::CommandKey,
+    /// The most memory it held, in bytes.
+    pub peak: u64,
+    pub duration_ms: u64,
+    /// Whether it ran to its own end, rather than being stopped or
+    /// interrupted.
+    pub whole: bool,
+    /// Whether the kernel's OOM killer killed a process of it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub oom_killed: bool,
 }
 
 fn is_zero<T: Default + PartialEq>(count: &T) -> bool {

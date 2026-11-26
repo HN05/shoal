@@ -508,6 +508,16 @@ pub async fn record_job_ended(store: &Store, id: &SpaceId, job: JobEndedEvent) {
     }
 }
 
+/// Record that the `shoal run` command of `ran` ended in the space `id`.
+pub fn record_command_ran(
+    db: &Connection,
+    id: &SpaceId,
+    ran: &shoal_protocol::events::CommandRanEvent,
+) -> Result<()> {
+    let command = Box::new(ran.clone());
+    journal::append(db, id, SpaceEvent::CommandRan { command })
+}
+
 /// The ID of the journal's newest event.
 pub async fn latest_id(store: &Store) -> Result<EventCursor> {
     store
