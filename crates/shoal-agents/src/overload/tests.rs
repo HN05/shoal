@@ -319,3 +319,28 @@ async fn job_admission_reads_the_cpu_only_while_it_applies() {
         None
     );
 }
+
+/// Hand `stop_work` one stop while the latest sample found `pressing`,
+/// returning whether it stopped anything.
+async fn stop_handed_over(fixture: &Fixture, pressing: Option<Pressure>) -> bool {
+    let (stops_in, stops) = mpsc::channel(1);
+    let (_pressing_in, pressing) = watch::channel(pressing);
+    let (outcomes, outcome) = std::sync::mpsc::channel();
+    stops_in.send(Pressure::Memory).await.unwrap();
+    drop(stops_in);
+    stop_work(&fixture.agents, &*fixture.daemon, stops, pressing, outcomes).await;
+    outcome.recv().unwrap()
+}
+
+#[tokio::test]
+async fn a_stop_no_later_sample_holds_stops_nothing() {
+    use std::sync::atomic::Ordering;
+    let fixture = Fixture::new().await;
+    // An asleep agent's running lease is what memory pressure stops here.
+    let leases = &fixture.daemon.asleep_leases;
+    leases.store(1, Ordering::SeqCst);
+    assert!(!stop_handed_over(&fixture, None).await);
+    assert_eq!(leases.load(Ordering::SeqCst), 1);
+    assert!(stop_handed_over(&fixture, Some(Pressure::Memory)).await);
+    assert_eq!(leases.load(Ordering::SeqCst), 0);
+}

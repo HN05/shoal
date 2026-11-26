@@ -6,7 +6,10 @@ mod sampler;
 pub mod stops;
 
 use std::{sync::Arc, time::Duration};
-use tokio::{sync::mpsc, time::Instant};
+use tokio::{
+    sync::{mpsc, watch},
+    time::Instant,
+};
 
 use crate::process::load::{self, MemoryPressure};
 
@@ -200,7 +203,13 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
     let (thread, handoff) = sampler::spawn(agents.clone(), daemon.clone())
         .expect("start the overload monitor's thread");
     tokio::join!(
-        stop_work(&agents, &*daemon, handoff.stops, handoff.outcomes),
+        stop_work(
+            &agents,
+            &*daemon,
+            handoff.stops,
+            handoff.pressing,
+            handoff.outcomes
+        ),
         warn_agents(&agents, handoff.warnings),
     );
     // The handoff ends only once the thread has, which it does only by
@@ -210,18 +219,25 @@ pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
     }
 }
 
-/// Stop work for each pressure the sampling thread hands over, telling it
-/// whether anything stopped.
+/// Stop work for each stop the sampling thread hands over, telling it
+/// whether anything stopped. A stop waits for the runtime and the operation
+/// gate, so it acts on the pressure the latest sample found, and stops
+/// nothing once a sample found none, as after protection was disabled.
 async fn stop_work(
     agents: &Agents,
     daemon: &dyn Daemon,
     mut stops: mpsc::Receiver<Pressure>,
+    pressing: watch::Receiver<Option<Pressure>>,
     outcomes: std::sync::mpsc::Sender<bool>,
 ) {
-    while let Some(pressure) = stops.recv().await {
+    while stops.recv().await.is_some() {
         let stopped = {
             let _operation = agents.gates.operation().await;
-            agents.stop_for_overload(daemon, pressure).await
+            let pressure = *pressing.borrow();
+            match pressure {
+                Some(pressure) => agents.stop_for_overload(daemon, pressure).await,
+                None => false,
+            }
         };
         if outcomes.send(stopped).is_err() {
             return;

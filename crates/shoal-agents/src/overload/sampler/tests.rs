@@ -224,3 +224,37 @@ async fn samples_keep_coming_while_the_runtime_is_blocked() {
     drop(handoff);
     thread.join().unwrap();
 }
+
+#[tokio::test]
+async fn calm_readings_and_disabled_protection_withdraw_the_pressure() {
+    let fixture = Fixture::new().await;
+    fixture
+        .agents
+        .config
+        .publish(crate::config::Config::default());
+    let (mut sampler, handoff) = Sampler::new(fixture.agents.clone(), fixture.daemon.clone());
+    let readings = |pressure| Readings {
+        memory: Some(MemoryReading {
+            memory: load::Memory {
+                total: 100,
+                available: 1,
+            },
+            stall: None,
+            work: None,
+            pressure,
+        }),
+        limited: false,
+        cpu: Ok(load::CpuTicks::default()),
+        disk_safe: true,
+    };
+    let start = Instant::now();
+    let second = Duration::from_secs(1);
+    sampler.decide(start, readings(CRITICAL));
+    assert_eq!(*handoff.pressing.borrow(), Some(Pressure::Memory));
+    sampler.decide(start + second, readings(CALM));
+    assert_eq!(*handoff.pressing.borrow(), None);
+    sampler.decide(start + second * 2, readings(CRITICAL));
+    fixture.configure(PROTECTIONS_OFF);
+    sampler.sample(start + second * 3);
+    assert_eq!(*handoff.pressing.borrow(), None);
+}

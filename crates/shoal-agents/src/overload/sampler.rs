@@ -6,7 +6,10 @@ use std::{
     thread::JoinHandle,
     time::Duration,
 };
-use tokio::{sync::mpsc, time::Instant};
+use tokio::{
+    sync::{mpsc, watch},
+    time::Instant,
+};
 
 use super::{
     Monitor, Pressure, Recovery, pressure_log::PressureLog, protection_changed, publish_busy_cpu,
@@ -28,6 +31,9 @@ pub(super) struct Handoff {
     pub(super) warnings: mpsc::Receiver<Warned>,
     /// The pressure to stop work for, one stop at a time.
     pub(super) stops: mpsc::Receiver<Pressure>,
+    /// The pressure the latest sample found, which a stop handed over
+    /// earlier must still find before it stops anything.
+    pub(super) pressing: watch::Receiver<Option<Pressure>>,
     /// Whether each stop stopped anything.
     pub(super) outcomes: std_mpsc::Sender<bool>,
 }
@@ -71,6 +77,7 @@ pub(super) struct Sampler {
     pressure_log: PressureLog,
     warnings: mpsc::Sender<Warned>,
     stops: mpsc::Sender<Pressure>,
+    pressing: watch::Sender<Option<Pressure>>,
     outcomes: std_mpsc::Receiver<bool>,
     /// A stop handed over awaits its outcome, so no other is handed over.
     stopping: bool,
@@ -83,6 +90,7 @@ impl Sampler {
         // nothing a later sample does not bring.
         let (warnings, warnings_out) = mpsc::channel(1);
         let (stops, stops_out) = mpsc::channel(1);
+        let (pressing, pressing_out) = watch::channel(None);
         let (outcomes_in, outcomes) = std_mpsc::channel();
         let sampler = Self {
             config: agents.config.current(),
@@ -92,12 +100,14 @@ impl Sampler {
             pressure_log: PressureLog::default(),
             warnings,
             stops,
+            pressing,
             outcomes,
             stopping: false,
         };
         let handoff = Handoff {
             warnings: warnings_out,
             stops: stops_out,
+            pressing: pressing_out,
             outcomes: outcomes_in,
         };
         (sampler, handoff)
@@ -124,6 +134,7 @@ impl Sampler {
             return None;
         }
         if self.stopped() {
+            self.pressing.send_replace(None);
             let cooldown = self.config.machine.overload.cooldown_seconds;
             return Some(Duration::from_secs(cooldown));
         }
@@ -135,6 +146,7 @@ impl Sampler {
         self.config = current;
         if changed {
             self.monitor = Monitor::default();
+            self.pressing.send_replace(None);
         } else {
             let readings = Readings::take(&self.config, &self.agents, &*self.daemon);
             self.decide(now, readings);
@@ -195,8 +207,8 @@ impl Sampler {
         }
     }
 
-    /// Hand the async side this sample's `warnings`, and a stop for
-    /// `pressure` unless one awaits its outcome.
+    /// Hand the async side this sample's `warnings` and `pressure`, and a
+    /// stop for it unless one awaits its outcome.
     fn hand_over(
         &mut self,
         now: Instant,
@@ -206,6 +218,7 @@ impl Sampler {
         if !warnings.is_empty() {
             let _ = self.warnings.try_send((now, warnings));
         }
+        self.pressing.send_replace(pressure);
         if let Some(pressure) = pressure
             && !self.stopping
         {
