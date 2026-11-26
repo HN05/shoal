@@ -132,8 +132,9 @@ number.
 The chat's record names the session it runs in. `shoal attach` thus finds the
 chat there, not by a session name that zmx may have suffixed. The chat labels
 the session with its ID, so the chat's removal closes a session Shoal created,
-and no workspace's removal does. [Terminal hosts](terminals.md) says how labels
-carry ownership.
+and no workspace's removal does.
+[Labels prove ownership of zmx sessions](terminals.md#labels-prove-ownership-of-zmx-sessions)
+says how labels carry ownership.
 
 ### Happy chats
 

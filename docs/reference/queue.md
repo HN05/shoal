@@ -242,7 +242,8 @@ end, and when it lifts.
 ### Where an admitted agent runs
 
 An entry queued from another host's pane, block or tab opens a background tab
-or window where it was queued. Otherwise it runs where
+or window where it was queued, as [Queued starts](terminals.md#queued-starts)
+says. Otherwise it runs where
 `terminal.default_host` puts it: by default, a detached zmx session that
 `shoal attach` reaches.
 
