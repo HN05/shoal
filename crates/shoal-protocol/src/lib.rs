@@ -45,6 +45,7 @@ pub mod removal;
 pub mod repository;
 pub mod resources;
 pub mod reviews;
+pub mod runs;
 pub mod saved;
 pub mod scope_tokens;
 pub mod secrets;

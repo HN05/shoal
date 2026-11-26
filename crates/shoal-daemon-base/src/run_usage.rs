@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
+use shoal_protocol::runs::CommandKey;
 
 use crate::time::UnixTime;
 
@@ -28,6 +29,10 @@ const KEPT_FOR: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 pub enum RunKey {
     /// A CI job, by its workflow and job name.
     CiJob { workflow: String, name: String },
+    /// A `shoal run` command.
+    Command(CommandKey),
+    /// The repository's seed build.
+    SeedBuild,
 }
 
 impl RunKey {
@@ -35,6 +40,8 @@ impl RunKey {
     fn kind(&self) -> &'static str {
         match self {
             Self::CiJob { .. } => "ci_job",
+            Self::Command(_) => "command",
+            Self::SeedBuild => "seed_build",
         }
     }
 
@@ -42,6 +49,8 @@ impl RunKey {
     fn text(&self) -> String {
         match self {
             Self::CiJob { workflow, name } => serde_json::json!([workflow, name]).to_string(),
+            Self::Command(key) => serde_json::to_string(key).expect("a command key serializes"),
+            Self::SeedBuild => serde_json::json!("seed").to_string(),
         }
     }
 }

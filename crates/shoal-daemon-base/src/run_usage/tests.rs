@@ -118,3 +118,17 @@ fn a_key_that_has_not_run_for_the_kept_period_is_forgotten() {
     assert_eq!(estimate(&db), None);
     assert_eq!(kept_runs(&db), 1);
 }
+
+#[test]
+fn a_command_by_name_and_one_by_arguments_keep_their_own_estimates() {
+    let db = database();
+    let named = RunKey::Command(CommandKey::Named("test".into()));
+    let argv = RunKey::Command(CommandKey::Argv(vec!["test".into()]));
+    record_run(&db, &repository(), &named, &run(1, 8 * GIB)).unwrap();
+    record_run(&db, &repository(), &argv, &run(2, GIB)).unwrap();
+    record_run(&db, &repository(), &RunKey::SeedBuild, &run(3, 12 * GIB)).unwrap();
+    let estimate = |key| expected_memory(&db, &repository(), key).unwrap();
+    assert_eq!(estimate(&named), Some(8 * GIB));
+    assert_eq!(estimate(&argv), Some(GIB));
+    assert_eq!(estimate(&RunKey::SeedBuild), Some(12 * GIB));
+}

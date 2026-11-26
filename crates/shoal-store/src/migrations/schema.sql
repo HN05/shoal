@@ -1121,9 +1121,9 @@ CREATE TABLE agent_handoffs (
     record TEXT NOT NULL
 );
 
-CREATE TABLE run_usage (
+CREATE TABLE "run_usage" (
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL CHECK(kind IN ('ci_job','command')),
+    kind TEXT NOT NULL CHECK(kind IN ('ci_job','command','seed_build')),
     key TEXT NOT NULL,
     ended_at INTEGER NOT NULL,
     peak_memory INTEGER NOT NULL,
