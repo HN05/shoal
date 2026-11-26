@@ -576,6 +576,14 @@ fn images_a_text_function_takes_are_checked_too() {
             "suffix": "[x](https://example.com/x.png)"}),
     );
     assert!(refusal(templated, &[]).contains("part of an image"));
+    // An image whose file a function interpolates is one too, whatever is
+    // attached.
+    let interpolated = surface(
+        json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
+            "args": {"value": "![chart](${url})"}}}]),
+        json!({"url": "https://example.com/x.png"}),
+    );
+    assert!(refusal(interpolated, &["${url}"]).contains("part of an image"));
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": {"@call": "formatString",
             "args": {"value": "Hello ${/name}"}}}]),

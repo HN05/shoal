@@ -377,11 +377,15 @@ fn fragments<'a>(surface: &'a Surface, component: Component<'a>) -> Vec<&'a str>
     fragments
 }
 
-/// A fragment that holds a bracket outside its whole images: part of an
-/// image a function could join with other fragments into one.
+/// A fragment that holds a bracket outside its whole images, or an image
+/// whose file a `${...}` interpolates: part of an image a function could
+/// join with other fragments into one.
 fn image_part(fragment: &str) -> bool {
     let mut rest = fragment.to_owned();
     for image in markdown::images(fragment) {
+        if image.target.contains("${") {
+            return true;
+        }
         rest = rest.replace(image.source, "");
     }
     rest.contains(['[', ']'])
