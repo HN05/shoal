@@ -2,6 +2,7 @@
 //! terminal, read it, and reply when it waits for the user; or print them.
 use anyhow::{Context as _, Result};
 use shoal_protocol::{
+    item_numbers::ItemNumber,
     space_names::SpaceSelector,
     surfaces::SurfaceAction,
     threads::{Answer, NewPost, Thread, ThreadNumber, ThreadState},
@@ -129,16 +130,37 @@ fn answerable(thread: &Thread) -> Option<(i64, String, Vec<SurfaceAction>)> {
     let post = thread.surface_from(other)?;
     let surface = post.post.ui.as_ref()?;
     let actions = surface.actions();
-    let asked = std::iter::once(format!("{}: {}", post.author(), post.post.text))
-        .chain(
-            surface
-                .text_lines(None)
-                .into_iter()
-                .map(|line| format!("  {line}")),
-        )
-        .collect::<Vec<_>>()
-        .join("\n");
+    let lines = std::iter::once(format!("{}: {}", post.author(), post.post.text)).chain(
+        surface
+            .text_lines(None)
+            .into_iter()
+            .map(|line| format!("  {line}")),
+    );
+    let asked = header(lines, thread.number);
     (!actions.is_empty()).then_some((post.id, asked, actions))
+}
+
+/// Most bytes the picker's header takes, which fzf receives as one
+/// argument the system limits.
+const MAX_HEADER_BYTES: usize = 8 * 1024;
+
+/// `lines` as the header of the picker that answers the thread `number`:
+/// as many whole lines as fit [`MAX_HEADER_BYTES`], then where to read the
+/// rest.
+pub(super) fn header(lines: impl Iterator<Item = String>, number: ItemNumber) -> String {
+    let rest = format!("… (shoal view thread {number} shows the rest)");
+    let mut shown = Vec::new();
+    let mut used = 0;
+    for line in lines {
+        let line = shoal_protocol::validate::shorten(line, MAX_HEADER_BYTES / 2);
+        if used + line.len() + 1 + rest.len() > MAX_HEADER_BYTES {
+            shown.push(rest);
+            return shown.join("\n");
+        }
+        used += line.len() + 1;
+        shown.push(line);
+    }
+    shown.join("\n")
 }
 
 /// Post `text` in the thread `number` as the user.

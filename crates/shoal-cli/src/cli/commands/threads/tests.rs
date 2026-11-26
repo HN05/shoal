@@ -93,3 +93,17 @@ fn a_post_shows_its_code_where_it_is_now() {
         ]
     );
 }
+
+#[test]
+fn the_answer_picker_s_header_stays_within_its_bytes() {
+    let number: shoal_protocol::item_numbers::ItemNumber = "3.2".parse().unwrap();
+    let lines = (0..200).map(|_| "label ".repeat(200));
+    let header = listing::header(lines, number);
+    assert!(header.len() <= 8 * 1024, "{}", header.len());
+    assert!(
+        header.ends_with("(shoal view thread 3.2 shows the rest)"),
+        "{header}"
+    );
+    let short = listing::header(["Which?".to_owned()].into_iter(), number);
+    assert_eq!(short, "Which?");
+}
