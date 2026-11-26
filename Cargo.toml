@@ -55,6 +55,13 @@ toml = "1.1.6"
 toml_edit = "0.25"
 uuid = "1.26.1"
 
+[workspace.lints.clippy]
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+
 [package]
 name = "shoal"
 version.workspace = true
@@ -62,6 +69,9 @@ description = "Local workspaces and resource allocation for coding agents"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+
+[lints]
+workspace = true
 
 [dependencies]
 shoal-cli.workspace = true

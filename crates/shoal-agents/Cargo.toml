@@ -7,6 +7,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # What the daemon's tests drive of the service directly: the clock alerts
 # settle by.

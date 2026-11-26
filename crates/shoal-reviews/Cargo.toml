@@ -7,6 +7,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # What the daemon's tests use to wait for a review's run to end and to wake
 # the gate.

@@ -8,6 +8,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive", "env", "string"] }

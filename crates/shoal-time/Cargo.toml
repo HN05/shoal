@@ -7,6 +7,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [features]
 # Store times in SQLite columns.
 rusqlite = ["dep:rusqlite"]
