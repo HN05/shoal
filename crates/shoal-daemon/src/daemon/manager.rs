@@ -11,37 +11,24 @@ use std::sync::Arc;
 pub struct Manager {
     pub store: Store,
     pub gates: Arc<super::gates::Gates>,
-    /// The triggers and the CI jobs this machine runs.
     pub runner: Arc<shoal_runner::Runner>,
     pub config_state: Arc<super::config_state::ConfigState>,
     pub notifications: Arc<super::notifications::Notifications>,
-    /// The leases workspaces hold.
     pub leases: shoal_leases::Leases,
     pub paths: Paths,
     pub(crate) operations: Arc<Operations>,
-    /// The alerts, threads, approvals, permissions and scope between spaces.
     pub coordination: shoal_coordination::Coordination,
-    /// The workspaces and chats: their records and tree, lifecycle, removal
-    /// and cleanup.
     pub spaces: shoal_spaces::Spaces,
     pub(crate) signals: Arc<super::signals::Signals>,
-    /// The agents.
     pub agents: Arc<shoal_agents::Agents>,
-    /// The registered repositories.
     pub repositories: Arc<shoal_repositories::Repositories>,
-    /// The issues, PRs and CI runs the spaces link.
     pub links: Arc<shoal_links::Links>,
-    /// The local reviews of workspaces.
     pub reviews: Arc<shoal_reviews::Reviews>,
     /// Directories whose file access stalls, shared with startup's status answer.
     pub(crate) file_access: Arc<crate::daemon::file_access::FileAccess>,
-    /// The hub role, or this machine's membership of a hub.
     pub hub: Arc<shoal_hub::Hub>,
-    /// What apps keep in Shoal.
     pub apps: shoal_apps::Apps,
-    /// The demos executions run.
     pub demos: shoal_demos::Demos,
-    /// The accounts and forge hosts the daemon reaches the forges with.
     pub forges: Arc<ForgeAccess>,
 }
 

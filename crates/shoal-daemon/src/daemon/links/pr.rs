@@ -1,4 +1,4 @@
-//! Persisted opt-in PR watches and manual merge acknowledgements.
+//! The PR watches spaces opt into, and the merges the user acknowledged.
 use anyhow::{Context, Result, ensure};
 use shoal_daemon_base::forge_access::ForgeHosts;
 use shoal_ids::space_ids::SpaceId;
@@ -45,10 +45,11 @@ impl Manager {
         }
     }
 
-    /// Whether the PR sweep skips `listed`, as [`Manager::sweep_skips`]
-    /// tells of it or of a workspace stacked on it, where restacking runs
-    /// Git and may be in another directory. One the sweep removed since the
-    /// listing is passed over.
+    /// Whether the PR sweep skips `listed`, as
+    /// [`crate::daemon::file_access::FileAccess::sweep_skips`] tells of it or
+    /// of a workspace stacked on it: restacking runs Git there, which may be
+    /// in another directory. One the sweep removed since the listing is
+    /// passed over.
     async fn pr_sweep_skips(&self, listed: &Workspace) -> Result<bool> {
         if self
             .file_access
