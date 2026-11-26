@@ -4,12 +4,12 @@ use super::*;
 
 #[test]
 fn rewrites_send_pushes_through_the_helper() {
-    let urls = git::RemoteUrls {
+    let urls = crate::git::RemoteUrls {
         fetch: vec!["git@forge:o/r.git".into(), "https://forge/o/fork".into()],
         push: vec!["ssh://forge/o/r".into()],
     };
     assert_eq!(
-        rewrites(&urls).unwrap(),
+        rewrites_of(&urls).unwrap(),
         [
             (
                 "url.shoal::git@forge:o/r.git.pushInsteadOf".to_owned(),
@@ -31,11 +31,11 @@ fn rewrites_send_pushes_through_the_helper() {
 fn a_push_url_that_starts_a_fetch_url_cannot_be_held() {
     // Git rewrites every URL that starts with an insteadOf value.
     for fetch in ["git@forge:o/r", "git@forge:o/r.git"] {
-        let urls = git::RemoteUrls {
+        let urls = crate::git::RemoteUrls {
             fetch: vec![fetch.into()],
             push: vec!["git@forge:o/r".into()],
         };
-        assert!(rewrites(&urls).is_err(), "{fetch}");
+        assert!(rewrites_of(&urls).is_err(), "{fetch}");
     }
 }
 

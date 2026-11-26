@@ -7,6 +7,7 @@ use std::ffi::OsStr;
 use anyhow::Result;
 
 use crate::{
+    git::config_env,
     paths::Paths,
     workers::{GIT_CREDENTIAL, GROUP, Worker, internal_command},
 };
@@ -45,12 +46,12 @@ pub(crate) fn settings<'a>(
 /// proactive logins after, from the Git settings `command` passes on, for a
 /// push that goes out as the user.
 pub fn strip(command: &mut tokio::process::Command) {
-    let contexts: Vec<String> = super::passed_on(command)
+    let contexts: Vec<String> = config_env::passed_on(command)
         .into_iter()
         .filter(|(_, value)| is_helper(value))
         .filter_map(|(key, _)| helper_context(&key.to_string_lossy()).map(str::to_owned))
         .collect();
-    super::retain(command, |(key, value)| {
+    config_env::retain(command, |(key, value)| {
         let key = key.to_string_lossy();
         !contexts.iter().any(|context| {
             let helper = key == helper_key(context) && (value.is_empty() || is_helper(value));

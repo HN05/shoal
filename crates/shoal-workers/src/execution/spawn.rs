@@ -103,7 +103,7 @@ impl AgentLaunch {
     /// launched with.
     pub(super) fn regate(&mut self, gate: shoal_core::agent_git::push_gate::Launch) {
         self.git
-            .retain(|key| !shoal_core::agent_git::push_gate::is_rewrite(key.as_ref()));
+            .retain(|key| !crate::git::push_gate::is_rewrite(key.as_ref()));
         self.git.add(gate.settings());
         self.push_gate = gate;
     }
@@ -354,7 +354,7 @@ pub(super) fn spawn(
     // Shoal authorized these pushes itself, so an enclosing agent's push
     // rewrites would only ask again.
     if matches!(mode, Mode::Publish | Mode::Merge { .. }) {
-        shoal_core::agent_git::push_gate::strip(&mut process);
+        crate::git::push_gate::strip(&mut process);
     }
     // A merge pushes the default branch as the user, not as an enclosing
     // agent's account.

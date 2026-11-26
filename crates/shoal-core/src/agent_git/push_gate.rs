@@ -2,15 +2,13 @@
 //! `push` permission says. Fetches keep their URLs. See
 //! `docs/design/permissions.md`.
 use crate::paths::PathsExt;
-use std::{ffi::OsStr, os::unix::fs::PermissionsExt, path::Path};
+use std::{os::unix::fs::PermissionsExt, path::Path};
 
 use anyhow::{Context, Result};
 
 use crate::{env, git, paths::Paths};
 
-/// The transport the rewritten URLs name: Git runs `git-remote-shoal` for
-/// a URL that starts with `shoal::`.
-const PREFIX: &str = "url.shoal::";
+/// The remote helper the rewritten URLs reach.
 const HELPER: &str = "git-remote-shoal";
 
 /// The push URL rewrites an agent launch adds to the agent's Git settings,
@@ -25,7 +23,7 @@ impl Launch {
     /// The rewrites for the remotes of the repository at `worktree`, and
     /// the helper they reach.
     pub async fn prepare(paths: &Paths, worktree: &Path) -> Result<Self> {
-        let settings = rewrites(&git::remote_urls(worktree).await?)?;
+        let settings = git::push_gate::rewrites(worktree).await?;
         if settings.is_empty() {
             return Ok(Self::default());
         }
@@ -45,34 +43,6 @@ impl Launch {
             env::prepend_path(command, helper.path().as_os_str());
         }
     }
-}
-
-/// Settings that send pushes to `urls` through the helper. A remote's URL
-/// is rewritten for pushes only. An explicit push URL ignores push
-/// rewrites, so it is rewritten for every use, which Git applies to every
-/// URL that starts with it. That fails for a fetch URL: the helper only
-/// pushes, so the agent does not start.
-fn rewrites(urls: &git::RemoteUrls) -> Result<Vec<(String, String)>> {
-    for url in &urls.push {
-        if let Some(fetch) = urls
-            .fetch
-            .iter()
-            .find(|fetch| fetch.starts_with(url.as_str()))
-        {
-            anyhow::bail!(
-                "the push URL {url} would also rewrite fetches from {fetch}, so Shoal cannot gate pushes to it; change or remove that pushurl, or give the agent a push permission of \"direct\""
-            );
-        }
-    }
-    let fetched = urls
-        .fetch
-        .iter()
-        .map(|url| (format!("{PREFIX}{url}.pushInsteadOf"), url.clone()));
-    let pushed = urls
-        .push
-        .iter()
-        .map(|url| (format!("{PREFIX}{url}.insteadOf"), url.clone()));
-    Ok(fetched.chain(pushed).collect())
 }
 
 /// The helper: a launcher that hands Git's arguments to this binary.
@@ -97,29 +67,3 @@ fn write_helper(paths: &Paths) -> Result<tempfile::TempDir> {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))?;
     Ok(directory)
 }
-
-/// Remove the rewrites from the Git settings `command` passes on, for a
-/// push Shoal already authorized or the helper runs itself.
-pub fn strip(command: &mut tokio::process::Command) {
-    super::retain(command, |(key, _)| !is_rewrite(key));
-}
-
-/// Whether the Git setting `key` is one of the rewrites; Git compares the
-/// section and variable names without case.
-pub fn is_rewrite(key: &OsStr) -> bool {
-    let key = key.to_string_lossy();
-    let Some(rest) = key
-        .get(..PREFIX.len())
-        .filter(|start| start.eq_ignore_ascii_case(PREFIX))
-        .map(|_| &key[PREFIX.len()..])
-    else {
-        return false;
-    };
-    let variable = rest.rsplit_once('.').map(|(_, variable)| variable);
-    variable.is_some_and(|variable| {
-        variable.eq_ignore_ascii_case("pushInsteadOf") || variable.eq_ignore_ascii_case("insteadOf")
-    })
-}
-
-#[cfg(test)]
-mod tests;

@@ -7,6 +7,7 @@ pub mod bundle;
 pub mod clone_base;
 pub mod code_versions;
 pub(crate) mod config;
+pub mod config_env;
 pub mod conflicts;
 pub mod copy;
 pub mod default_branch;

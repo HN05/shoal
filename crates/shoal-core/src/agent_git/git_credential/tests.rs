@@ -116,7 +116,7 @@ fn strip_drops_shoal_s_helpers_with_their_resets_and_proactive_logins_and_keeps_
 
     strip(&mut command);
 
-    let kept: Vec<_> = crate::agent_git::passed_on(&command)
+    let kept: Vec<_> = crate::git::config_env::passed_on(&command)
         .into_iter()
         .map(|(key, value)| {
             (
