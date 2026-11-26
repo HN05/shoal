@@ -1,39 +1,27 @@
-//! The link between a member and the hub, over the hub's listener or over a
-//! command relaying the hub daemon's socket. The member opens it with a
-//! [`Hello`], as the first message over the listener's WebSocket or as the
-//! method of the first request on the socket; then each side sends
+//! The wire format of the link between a member and the hub. `docs/design/hub.md`
+//! says what the link does and why it is sealed.
+//!
+//! The member opens the link with a [`Hello`]; then each side sends
 //! [`Frame`]s, one per WebSocket message or line. The hub answers a hello
-//! with a [`Frame::Challenge`] or a [`Frame::Refused`]; once the member's
-//! [`Frame::Proof`] checks, a [`Frame::Welcome`], after which calls go both
-//! ways.
+//! with a [`Frame::Challenge`] or a [`Frame::Refused`], and a checked
+//! [`Frame::Proof`] with a [`Frame::Welcome`]. Both sides sign the
+//! [`Transcript`] of the handshake. A joiner's proof also carries the
+//! HMAC-SHA256 of what it signs, keyed with its pairing code's text.
 //!
-//! Both sides sign the [`Transcript`] of the handshake: the member's hello,
-//! with who it claims to be, and each side's nonce and ephemeral X25519 key. A joiner with a pairing code
-//! proves it holds the code without sending it: its proof carries the
-//! HMAC-SHA256, keyed with the code's text, of what it signs. From the
-//! proof on, each side sends every frame [`Sealed`]: numbered from 0 in
-//! each direction and encrypted with ChaCha20-Poly1305, whose 12-byte nonce
-//! is 4 zero bytes and then the number, big-endian, under a key HKDF-SHA256
-//! derives from the X25519 shared secret, with the member's nonce then the
-//! hub's as salt and [`MEMBER_TO_HUB`] or [`HUB_TO_MEMBER`] as info.
-//! A call or reply too large for one frame goes as [`Frame::Piece`]s of its
-//! JSON, which the other side puts back together before reading it.
+//! From the proof on, every frame is [`Sealed`]: numbered from 0 in each
+//! direction and encrypted with ChaCha20-Poly1305. Its 12-byte nonce is 4
+//! zero bytes, then the number, big-endian. HKDF-SHA256 derives its key from
+//! the X25519 shared secret, with the member's nonce then the hub's as salt
+//! and [`MEMBER_TO_HUB`] or [`HUB_TO_MEMBER`] as info. A message too large
+//! for one frame goes as [`Frame::Piece`]s of its JSON.
 //!
-//! Byte streams run beside the calls, many at once. The side that opens
-//! one names it in the call that asks for it, by a number of its own, and
-//! reads it: the other side writes it as [`Frame::Data`] and ends it with
-//! [`Frame::End`]. The writer sends at most [`STREAM_WINDOW`] bytes before
-//! the reader's first [`Frame::Credit`], and from then on no more than the
-//! credit the reader granted in all; a reader that stops reading sends
-//! [`Frame::Close`]. So a stream whose reader stalls holds up neither the
-//! calls nor the other streams. A duplex stream, as a demo's, also carries
-//! the opener's bytes to the other side under the same rules, each
-//! direction with credit of its own: the frames about those bytes say
-//! `up`, and still name the stream by the opener's number.
-//! Whatever ends TLS between them can then neither pose as a side, read a
-//! frame, such as a pairing code the hub issues, nor change, add, drop or
-//! replay one unnoticed; only a refusal the hub sends before it can seal
-//! comes as it is, and the member takes no such refusal as final.
+//! The side that opens a byte stream names it by a number of its own and
+//! reads it. The writer sends [`Frame::Data`] and ends with [`Frame::End`].
+//! It sends at most [`STREAM_WINDOW`] bytes before the reader's first
+//! [`Frame::Credit`], and from then on no more than the credit granted in
+//! all. A reader that stops reading sends [`Frame::Close`]. A duplex stream
+//! carries the opener's bytes too, with credit of its own; frames about
+//! them say `up` and still name the stream by the opener's number.
 use serde::{Deserialize, Serialize};
 use shoal_ids::{
     member_ids::MemberId,
@@ -320,13 +308,9 @@ pub enum Call {
     /// Install the latest release on the hub. Answered with
     /// [`Reply::Updated`].
     Update,
-    /// A machine's report of its spaces and repositories, with every
-    /// number it holds without a space, as for a removed space's issue
-    /// proposals, which no other space may take, every removed space whose
-    /// record or files it keeps, its capacity, which the hub places new spaces by,
-    /// once it measured it, and how it is powered, where it has a battery.
-    /// Answered with [`Reply::Reported`] and the numbers the hub keeps for
-    /// the machine.
+    /// A machine's report of its spaces, repositories, held numbers,
+    /// removed spaces it keeps, capacity and power. Answered with
+    /// [`Reply::Reported`] and the numbers the hub keeps for the machine.
     Report {
         report: Report,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -348,10 +332,9 @@ pub enum Call {
         /// carries the report's times over to its own by.
         sent_at: UnixTime,
     },
-    /// A machine's report of the alerts it keeps: the numbers the hub kept
-    /// for it that it has not used, those its alerts took without the hub,
-    /// and the user's alerts it keeps, which the hub keeps a copy of. Answered with [`Reply::AlertsReported`] and the numbers the hub
-    /// keeps for the machine.
+    /// A machine's report of the alerts it keeps and the alert numbers it
+    /// holds. Answered with [`Reply::AlertsReported`] and the numbers the
+    /// hub keeps for the machine.
     ReportAlerts { report: AlertsReport },
     /// The other machines' alerts to the user, which the hub writes on the
     /// stream `stream` the member opened as
@@ -377,15 +360,12 @@ pub enum Call {
     /// The hub's call to a machine whose availability changed. Answered
     /// with [`Reply::Delivered`].
     Availability { availability: Classified },
-    /// The latest package of the space `space`, which a machine built at
-    /// `built_at` and writes up the duplex stream `stream` it opened, for
-    /// the hub to keep in place of the one before, with what continues the
-    /// space from it elsewhere: `start`, the start its agent would make,
-    /// which the hub places a takeover by, none where the machine could
-    /// not tell it, and for a chat in a workspace's worktree, that
-    /// workspace `within`. The hub ends its side of the stream once it
-    /// kept the package whole, with an error when it did not. Answered with
-    /// [`Reply::Streaming`].
+    /// The latest package of `space`, which a machine built at `built_at`
+    /// and writes up the duplex stream `stream`, for the hub to keep in
+    /// place of the one before. `start` is the start its agent would make,
+    /// which places a takeover, and `within` the workspace a chat runs in.
+    /// The hub ends its side of the stream once it kept the package whole,
+    /// with an error when it did not. Answered with [`Reply::Streaming`].
     Keep {
         space: SpaceId,
         built_at: UnixTime,
@@ -395,12 +375,9 @@ pub enum Call {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         within: Option<SpaceId>,
     },
-    /// A machine's notice that it goes to sleep now, sent before any
-    /// package it sends for the sleep: the spaces whose packages the hub
-    /// keeps lack changes, each with since when. The hub takes the
-    /// machine's spaces with work over once it stays away long enough, and
-    /// forgets the sleep once its link opens again. Answered with
-    /// [`Reply::Delivered`].
+    /// A machine's notice that it goes to sleep now, sent before any package
+    /// it sends for the sleep, with the spaces whose kept packages lack
+    /// changes. Answered with [`Reply::Delivered`].
     Sleeping {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         lagging: Vec<super::sleep::Lagging>,
@@ -435,19 +412,13 @@ pub enum Call {
     /// other machines took over from it meanwhile, which it ends here.
     /// Answered with [`Reply::Retired`].
     Retire { spaces: Vec<SpaceId> },
-    /// The final package of the space `space`, which a machine shutting
-    /// down built at `built_at` once its work stopped and writes up the
-    /// duplex stream `stream` it opened, for the hub to keep and continue
-    /// where its placement puts `start`, the space's agent as a start
-    /// would place it, among the other connected machines, the hub's own
-    /// as the caller's, or for a chat in the worktree of the workspace
-    /// `within`, where it placed that workspace, after that workspace. The
-    /// hub writes that placement on its side, as an optional
-    /// [`Decision`](super::placement::Decision) in JSON, none where no
-    /// machine can take the space, then ends it, with an error once it did
-    /// not keep the package whole, and continues the space once the
-    /// machine leaves it with [`Call::Release`]. Answered with
-    /// [`Reply::Streaming`].
+    /// The final package of `space` from a machine shutting down, written
+    /// up the duplex stream `stream` as for [`Call::Keep`]. The hub places
+    /// `start` among the other connected machines, a chat after the
+    /// workspace `within`, and writes the placement on its side as an
+    /// optional [`Decision`](super::placement::Decision) in JSON. It
+    /// continues the space once the machine leaves it with
+    /// [`Call::Release`]. Answered with [`Reply::Streaming`].
     HandOver {
         space: SpaceId,
         built_at: UnixTime,
@@ -490,14 +461,12 @@ pub enum Call {
     Place {
         request: shoal_schedule::placement::snapshot::Request,
     },
-    /// A machine's claim of the space `space`, which it imports as another
-    /// machine moves it here: its report of the space takes the ID over.
-    /// One that carries the `ticket` of a move through the hub is refused
-    /// once that move's source settled it unclaimed, and one that takes the
-    /// space over, as `takeover` says, from the package the hub keeps of it
-    /// is refused once the space's machine is connected again. Answered
-    /// with [`Reply::Claimed`] and the number the space keeps, if the hub
-    /// lists it.
+    /// A machine's claim of `space`, which it imports, so that its report
+    /// of the space takes the ID over. A claim with a move's `ticket` is
+    /// refused once that move's source settled it unclaimed. A `takeover` is
+    /// refused once the space's machine is connected again. Answered with
+    /// [`Reply::Claimed`] and the number the space keeps, if the hub lists
+    /// it.
     Claim {
         space: SpaceId,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -551,13 +520,10 @@ pub enum Call {
     /// Answered with [`Reply::Delivered`].
     Expired { expired: Expired },
     /// A request of an app's entries, which the hub answers from its own
-    /// app store as it answers its own callers', a device's own entries
-    /// being the calling member's, by writing the frames its socket would
-    /// answer with on the stream `stream` the caller opened. A write
-    /// carries its bytes in `data`, in unpadded base64url, and is answered
-    /// on the stream with the entry alone; one without them is only
-    /// checked, answered with `ok` once the hub would take it. Answered
-    /// with [`Reply::Streaming`].
+    /// app store, writing the frames its socket would answer with on the
+    /// stream `stream`. A write carries its bytes in `data`, in unpadded
+    /// base64url; one without them is only checked. Answered with
+    /// [`Reply::Streaming`].
     App {
         method: crate::protocol::AppMethod,
         #[serde(default, skip_serializing_if = "Option::is_none")]

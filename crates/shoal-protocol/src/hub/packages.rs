@@ -1,7 +1,5 @@
-//! The packages the hub keeps of an intermittent machine's spaces, from
-//! which another machine takes a space over while its own is gone, and
-//! where a machine shutting down, or whose user walked away, hands its
-//! spaces over to.
+//! The packages the hub keeps of a machine's spaces, from which another
+//! machine takes a space over while its own is gone.
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};

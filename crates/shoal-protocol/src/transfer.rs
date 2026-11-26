@@ -1,4 +1,5 @@
-//! Packages of spaces `shoal move` carries between machines: what one holds.
+//! What a package of spaces that `shoal move` carries between machines
+//! holds.
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},

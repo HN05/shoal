@@ -1,7 +1,6 @@
-//! What joined machines share through the hub, item by item, each kind of
-//! item under keys of its own: a machine sends the hub its edits; the hub
-//! keeps the last edit of each item that reached it, under a revision that
-//! orders its copies, and sends it to every machine.
+//! What joined machines share through the hub, item by item. The hub keeps
+//! the last edit of each item that reached it, under a revision that orders
+//! its copies.
 use serde::{Deserialize, Serialize};
 
 use super::{shared_config, shared_repositories};

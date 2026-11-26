@@ -1,12 +1,5 @@
-//! The alerts a hub's machines keep. Their numbers come from one sequence
-//! across them, which the hub holds and never gives twice, so a stale number
-//! never names another alert: the hub keeps spare numbers for each machine,
-//! which numbers its new alerts from them without asking, and once none is
-//! left, as while it cannot reach the hub, above the highest number it
-//! knows; the hub gives a new number to an alert whose number another
-//! machine took first. The user's alerts show on every machine: each
-//! machine reports those it keeps, the hub keeps a copy of every machine's,
-//! and each member follows the other machines' copies.
+//! The alerts a hub's machines keep, and the one sequence their numbers
+//! come from. `docs/design/hub.md` says how the hub numbers and copies them.
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
 

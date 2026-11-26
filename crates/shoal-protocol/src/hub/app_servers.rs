@@ -1,11 +1,8 @@
-//! The hub forwards each HTTP request under a path prefix of
-//! `[machine.hub] forward` to the local address it names, such as an app's
-//! own server, once the request proves it comes from a paired member: it
-//! names the member and carries the time it was signed at, a nonce no
-//! earlier request used, and the member's signature of [`signed`] over
-//! them, its method and its target, in the headers below. The hub keeps
-//! the member's header, whose member it verified, and drops the others
-//! before it forwards the request. The signature covers no body.
+//! The headers that prove an HTTP request the hub forwards to an app's
+//! server comes from a paired member. They name the member, the time of
+//! signing and an unused nonce, and carry the member's signature of
+//! [`signed`] over them, the method and the target. The signature covers no
+//! body. The hub forwards only the member's header.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Result, ensure};

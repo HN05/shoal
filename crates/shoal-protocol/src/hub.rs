@@ -1,8 +1,5 @@
-//! The hub: the daemon that takes the hub role, the machines and devices
-//! paired with it, and the link each keeps to it. Every member and the hub
-//! hold a key pair of their own: pairing exchanges the public keys, and each
-//! link opens with both sides signing what the other sent, so a proxy or
-//! tunnel between them can pose as neither.
+//! The hub role, its members and the keys they pair with. See
+//! `docs/design/hub.md`.
 use std::{fmt, net::SocketAddr, str::FromStr};
 
 use anyhow::{Context as _, Result, bail, ensure};

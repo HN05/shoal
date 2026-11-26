@@ -1,7 +1,4 @@
-//! One sequence of space numbers across a hub's machines. The hub keeps a
-//! few spare numbers for each machine, which numbers its new spaces from
-//! them without asking, and renumbers a machine's space whose number
-//! another machine's space held first.
+//! The one sequence of space numbers across a hub's machines.
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 

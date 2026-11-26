@@ -1,7 +1,5 @@
-//! The hub's directory of every joined machine's spaces. Each machine owns
-//! its spaces' records and reports a summary of each to the hub, which
-//! keeps them and serves them as one view; the hub lists each space ID
-//! under one machine, the first to report it.
+//! The hub's directory of every joined machine's spaces. It lists each space
+//! ID under one machine, the first to report it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::{
     member_ids::MemberId,

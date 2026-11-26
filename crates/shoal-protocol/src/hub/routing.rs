@@ -1,6 +1,5 @@
 //! What one joined machine sends another through the hub: a request for a
-//! space the other owns, which the owner decides as it decides its own
-//! callers', and an event a space passes to the space above it there.
+//! space the other owns, and an event a space passes to the space above it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 
@@ -111,12 +110,11 @@ pub struct Queued {
     pub expires_at: UnixTime,
 }
 
-/// An event a space passes up the tree to a space on another machine:
-/// what its coordinator receives, which the machine of `above` delivers to
-/// the nearest space from `above` up with an agent, passing it on to the
-/// next machine where the tree goes on there, or to the user at the top.
-/// Without `about`, it is a message for `above` itself, such as an approval
-/// request routed to it.
+/// An event a space passes up the tree to a space on another machine. The
+/// machine of `above` delivers it to the nearest space from `above` up with
+/// an agent, passing it on where the tree goes on elsewhere. Without
+/// `about`, it is a message for `above` itself, such as an approval request
+/// routed to it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Told {
     /// The space whose coordinator receives it, or the nearest above it.

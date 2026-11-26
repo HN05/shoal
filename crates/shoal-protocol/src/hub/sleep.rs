@@ -1,6 +1,4 @@
-//! What a machine tells the hub of its sleep: how it is powered, with its
-//! reports, and the notice it sends as it goes to sleep, after which the
-//! hub may take its spaces over once it has stayed away long enough.
+//! What a machine tells the hub of its power and its sleep.
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 

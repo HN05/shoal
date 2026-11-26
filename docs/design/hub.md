@@ -21,8 +21,10 @@ by both sides signing a transcript of the other's nonce and an X25519 exchange
 on every link, whose keys then encrypt and authenticate each numbered frame, and
 a joiner proves its pairing code by an HMAC of that transcript instead of
 sending it, so whoever ends TLS can neither pose as a side, use a code, nor
-read, change or replay a frame. A revocation counts only when it comes sealed,
-and the hub admits a member and revokes one under one lock. The same link runs
+read, change or replay a frame. Only a refusal the hub sends before it can seal
+arrives unauthenticated, so a member never takes one as final. A revocation
+counts only when it comes sealed, and the hub admits a member and revokes one
+under one lock. The same link runs
 over any command's standard input and output through `shoal daemon connect`,
 which relays them to the daemon's socket; running commands there as the user
 proves more than a pairing code, so a join that way needs none. Link frames are
