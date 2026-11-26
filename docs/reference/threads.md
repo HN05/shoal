@@ -140,7 +140,9 @@ below the buttons.
 
 ### Answers
 
-An action is the event a button dispatches. Its id is the event's `name`. It
+An action is the event a button dispatches. Its id is the event's `name`. A
+button a list repeats for each item is an action for each, `name#N` for item
+`N` from 1, which reads its relative bindings in that item's data. It
 takes a value for each key of its `context` that binds an input's data: a text
 field's text, a checkbox's `true` or `false`, a slider's number or a choice
 picker's option values.

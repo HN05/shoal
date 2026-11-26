@@ -74,17 +74,38 @@ impl Surface {
     }
 
     /// Its components in the order they render: from the root, depth
-    /// first, each once, a list's template once.
-    fn rendered(&self) -> Vec<Component<'_>> {
+    /// first, a list's template once for each item of its data, each once
+    /// in a scope, and at most [`MAX_PLACED`] of them.
+    fn placed(&self) -> Vec<Placed<'_>> {
         let mut order = Vec::new();
         let mut seen = BTreeSet::new();
-        let mut next = vec!["root"];
-        while let Some(id) = next.pop() {
-            let Some(component) = self.component(id).filter(|_| seen.insert(id)) else {
+        let mut next = vec![("root", String::new(), None)];
+        while let Some((id, scope, item)) = next.pop() {
+            let Some(component) = self.component(id) else {
                 continue;
             };
-            next.extend(component.references().into_iter().rev());
-            order.push(component);
+            if order.len() >= MAX_PLACED || !seen.insert((id, scope.clone())) {
+                continue;
+            }
+            let mut below: Vec<(&str, String, Option<usize>)> = (component.references())
+                .into_iter()
+                .filter(|child| Some(*child) != component.template().map(|(id, _)| id))
+                .map(|child| (child, scope.clone(), item))
+                .collect();
+            if let Some((template, path)) = component.template() {
+                let items = scoped(&scope, path);
+                let count = self
+                    .data(&items)
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
+                below.extend((0..count).map(|n| (template, format!("{items}/{n}"), Some(n))));
+            }
+            next.extend(below.into_iter().rev());
+            order.push(Placed {
+                component,
+                scope,
+                item,
+            });
         }
         order
     }
@@ -120,6 +141,19 @@ impl Surface {
             _ => model.pointer(&scoped("", path)),
         }
     }
+}
+
+/// Most components [`Surface::placed`] places. A component may be named
+/// more than once, and a list repeats its template for each item, so
+/// without a bound a small surface could place without end.
+const MAX_PLACED: usize = 2000;
+
+/// A component where it renders: under `scope`, the data path its relative
+/// bindings read under, in the list item `item` when a list repeats it.
+struct Placed<'a> {
+    component: Component<'a>,
+    scope: String,
+    item: Option<usize>,
 }
 
 /// A component of a surface: its id, its type and its other properties.
@@ -174,6 +208,14 @@ impl<'a> Component<'a> {
             .flatten()
             .filter_map(|tab| tab.get("child")?.as_str());
         single.chain(children).chain(tabs).collect()
+    }
+
+    /// The template a list repeats for each item of its data: its id and
+    /// the path of the data.
+    fn template(&self) -> Option<(&'a str, &'a str)> {
+        let template = self.get("children")?.as_object()?;
+        let id = template.get("componentId")?.as_str()?;
+        Some((id, template.get("path")?.as_str()?))
     }
 
     /// The agent event its action dispatches, for a button whose action is

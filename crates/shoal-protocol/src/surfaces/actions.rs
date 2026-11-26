@@ -4,14 +4,19 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::{Map, Value};
 
-use super::{Component, Surface, binding, dates::Dates};
+use super::{Component, Placed, Surface, binding, dates::Dates, scoped};
 
 /// An action a surface offers.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceAction {
-    /// Its id: the name of the event its button dispatches, which an
-    /// answer names.
+    /// Its id, which an answer names: the name of the event its button
+    /// dispatches, and in a list's item, `#` and the item's number from 1.
     pub id: String,
+    /// The name of the event its button dispatches.
+    pub event: String,
+    /// The data path its context's relative bindings read under: its list
+    /// item's, or the root's.
+    pub scope: String,
     /// What its button says.
     pub label: String,
     /// Whether the surface recommends it, as its primary button.
@@ -51,8 +56,8 @@ pub enum InputKind {
 impl Surface {
     /// Its actions, in the order its components render from the root.
     pub fn actions(&self) -> Vec<SurfaceAction> {
-        (self.rendered().into_iter())
-            .filter_map(|component| self.action_of(component))
+        (self.placed().iter())
+            .filter_map(|placed| self.action_of(placed))
             .collect()
     }
 
@@ -96,10 +101,12 @@ impl Surface {
             }
         }
         let mut resolved = Map::new();
-        for (key, entry) in self.context(id) {
+        for (key, entry) in self.context(&action.event) {
             let value = match (binding(entry), values.remove(key)) {
                 (Some(_), Some(given)) => action.input(key).kind.accept(key, given)?,
-                (Some(path), None) => self.data(path).cloned().unwrap_or(Value::Null),
+                (Some(path), None) => {
+                    (self.data(&scoped(&action.scope, path)).cloned()).unwrap_or(Value::Null)
+                }
                 (None, _) => entry.clone(),
             };
             resolved.insert(key.clone(), value);
@@ -107,18 +114,23 @@ impl Surface {
         Ok(resolved)
     }
 
-    /// The action of `component`, a button that dispatches an agent event.
-    fn action_of(&self, component: Component<'_>) -> Option<SurfaceAction> {
-        let event = component.event()?;
-        let id = event.get("name")?.as_str()?.to_owned();
-        let inputs = self.inputs(&id);
+    /// The action of `placed`, a button that dispatches an agent event.
+    fn action_of(&self, placed: &Placed<'_>) -> Option<SurfaceAction> {
+        let component = placed.component;
+        let event = component.event()?.get("name")?.as_str()?.to_owned();
+        let id = match placed.item {
+            Some(item) => format!("{event}#{}", item + 1),
+            None => event.clone(),
+        };
         Some(SurfaceAction {
             label: (component.literal("child"))
-                .and_then(|child| self.label(child, ""))
+                .and_then(|child| self.label(child, &placed.scope))
                 .unwrap_or_else(|| id.clone()),
             recommended: component.literal("variant") == Some("primary"),
+            inputs: self.inputs(&event, &placed.scope),
             id,
-            inputs,
+            event,
+            scope: placed.scope.clone(),
         })
     }
 
@@ -134,20 +146,20 @@ impl Surface {
         .collect()
     }
 
-    /// The inputs of the action `id`: the keys of its context that bind
-    /// data an input component enters, in the order those components
-    /// render. A key that binds data no component enters takes the data as
-    /// it is.
-    fn inputs(&self, id: &str) -> Vec<Input> {
-        let rendered = self.rendered();
-        let mut entered: Vec<(usize, Input)> = (self.context(id).into_iter())
+    /// The inputs of the event `event` dispatched in `scope`: the keys of
+    /// its context that bind data an input component enters, in the order
+    /// those components render. A key that binds data no component enters
+    /// takes the data as it is.
+    fn inputs(&self, event: &str, scope: &str) -> Vec<Input> {
+        let placed = self.placed();
+        let mut entered: Vec<(usize, Input)> = (self.context(event).into_iter())
             .filter_map(|(key, value)| {
-                let path = binding(value)?;
-                let at = (rendered.iter()).position(|component| entering(*component, path))?;
+                let path = scoped(scope, binding(value)?);
+                let at = (placed.iter()).position(|placed| entering(placed, &path))?;
                 let input = Input {
                     key: key.clone(),
-                    kind: self.entry(rendered[at])?,
-                    initial: self.data(path).cloned(),
+                    kind: self.entry(placed[at].component)?,
+                    initial: self.data(&path).cloned(),
                 };
                 Some((at, input))
             })
@@ -196,9 +208,11 @@ const INPUTS: &[&str] = &[
     "ChoicePicker",
 ];
 
-/// Whether `component` is an input that enters the data at `path`.
-fn entering(component: Component<'_>, path: &str) -> bool {
-    let binds = |bound: &str| super::scoped("", bound) == super::scoped("", path);
+/// Whether `placed` is an input that enters the data at `path`, an
+/// absolute one.
+fn entering(placed: &Placed<'_>, path: &str) -> bool {
+    let component = placed.component;
+    let binds = |bound: &str| scoped(&placed.scope, bound) == path;
     component.binding("value").is_some_and(binds) && INPUTS.contains(&component.kind)
 }
 

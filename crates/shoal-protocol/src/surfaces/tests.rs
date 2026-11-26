@@ -520,3 +520,28 @@ fn images_a_text_function_takes_are_checked_too() {
     let split = formatted("![chart](${/url}");
     assert!(refusal(split, &[]).contains("part of an image"));
 }
+
+#[test]
+fn a_list_item_s_button_is_an_action_of_its_own_reading_its_item() {
+    let listed = surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "row", "path": "/tasks"}},
+            {"id": "row", "component": "Button", "child": "row-label",
+             "action": {"event": {"name": "done", "context": {"task": {"@path": "id"}}}}},
+            {"id": "row-label", "component": "Text", "text": {"@path": "title"}},
+        ]),
+        json!({"tasks": [{"id": 7, "title": "Write"}, {"id": 9, "title": "Ship"}]}),
+    );
+    let actions: Vec<(String, String)> = (listed.actions().into_iter())
+        .map(|action| (action.id, action.label))
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            ("done#1".into(), "Write".into()),
+            ("done#2".into(), "Ship".into())
+        ]
+    );
+    let resolved = listed.resolve("done#2", serde_json::Map::new()).unwrap();
+    assert_eq!(Value::Object(resolved), json!({"task": 9}));
+}
