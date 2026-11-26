@@ -25,8 +25,8 @@ active lifecycle operations and hooks. Each hold records who placed it: the user
 or an app hosting an external session, or an agent. Scoped callers hold and
 release the workspaces below their own directly; holding their own is an approval
 request, which approval carries out, so a coordinator keeps what its children
-need. Agents release only the holds agents placed; the user's and host apps'
-stay theirs. A hold never keeps a parent or survives its removal. Removal of a
+need. Agents release the holds agents placed, and the user's and host apps' as
+their `user_holds` permission allows. A hold never keeps a parent or survives its removal. Removal of a
 workspace that is not disposable is reversible through checkpoints, so an agent otherwise has no way to keep a
 workspace: one that needs the user asks, and a thread it opened that waits, like a hold, keeps the
 workspace from every unattended removal, completion and PR cleanup included. So
@@ -54,7 +54,7 @@ an explicit done signal completes an assignment; issue closure and merges do
 not, and merged cleanup removes unused merged workspaces from their state
 instead. Agent instructions make `done` the last step of every assignment.
 Completion is persisted separately from lifecycle readiness, binds to HEAD, and
-notifies the user; it does not assert that work was merged. A `done` that would
+notifies the space's coordinator, or else the user; it does not assert that work was merged. A `done` that would
 change nothing and an `undone` without a completion fail, so a misplaced signal
 is reported instead of passing silently. An assignment that ends with a finding
 rather than something to merge hands back files with its completion. They are
@@ -71,8 +71,7 @@ The alert or post names them by their records rather than by path, so a file
 and a coordinating agent that receives the alert or post instead receives their
 paths as the message's attached files. A chat's `done` records its completion on
 the chat as a workspace's does, with cleanup by the same setting and override,
-but no branch another could integrate and no parent to tell, so it notifies the
-user and its agent keeps running until completion cleanup removes the chat after
+but no branch another could integrate, and its agent keeps running until completion cleanup removes the chat after
 the grace period, with the done state shown until `--undo` withdraws it.
 
 Own-workspace withdrawal removes a recorded completion and preserves
@@ -179,7 +178,8 @@ restore opens it under beside the chat. It goes below its recorded parent while
 that takes it, else at the top level with a warning, and alone: the spaces
 removed with it keep their records. `shoal restore` reopens the branch through
 the existing-branch path, creating it at the removed HEAD when deleted and
-refusing one that no longer contains it, then applies the snapshot's files
+taking a branch named after the short commit when it no longer contains that
+HEAD, then applies the snapshot's files
 without staging them, links what the record names and saves its agents' recovery
 records, which the same `shoal resume` then restores as a stopped space's, since
 reopening is a step on the way back to the work; once the files are back, one
@@ -246,7 +246,8 @@ cleanup` is the one command for what Shoal left behind: the candidates of both
 rules, without their idle periods and including where they are disabled, kept
 branches, and shared caches. It lists them with nothing selected, since deleting
 a kept branch loses its commits, and removes what the user picks; naming a kind
-acts on that kind alone. It is unavailable to scoped callers. `repo rm` deletes
+acts on that kind alone. Scoped callers run it as their `admin` permission
+allows. `repo rm` deletes
 the checkout and every workspace through that path, refuses external worktrees
 and dangerous paths, persists progress, and blocks new workspaces until an
 interrupted removal is retried. PR cleanup is separately enabled by default;
