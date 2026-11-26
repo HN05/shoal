@@ -35,3 +35,14 @@ fn several_options_start_selected_as_the_surface_holds_them() {
     assert_eq!(ids(&entries), ["option:0", "option:1", "option:2", "none"]);
     assert_eq!(selected, ["option:0", "option:2"]);
 }
+
+#[test]
+fn picking_none_clears_a_selection() {
+    let picked = ["option:0".to_owned(), "none".to_owned()];
+    assert_eq!(picked_values(&picked, &sizes()), serde_json::json!([]));
+    let picked = ["option:0".to_owned(), "option:2".to_owned()];
+    assert_eq!(
+        picked_values(&picked, &sizes()),
+        serde_json::json!(["small", "large"])
+    );
+}

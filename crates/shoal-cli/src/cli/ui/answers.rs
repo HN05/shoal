@@ -85,7 +85,8 @@ fn value(ctx: &Context, input: &Input) -> Result<Value> {
 }
 
 /// The values of the options picked among `options`, by their labels,
-/// several when `multiple`, or none, starting from those `input` holds.
+/// several when `multiple`, or none, starting from those `input` holds;
+/// picking none clears the rest.
 fn picked(
     ctx: &Context,
     prompt: &str,
@@ -99,13 +100,22 @@ fn picked(
         true => pick_many_selected(ctx, &prompt, entries, &selected)?,
         false => vec![pick(ctx, &prompt, entries)?],
     };
+    Ok(picked_values(&picked, options))
+}
+
+/// The values of the options the picker rows `picked` name; none where
+/// they pick no option, whatever else they select.
+fn picked_values(picked: &[String], options: &[(String, String)]) -> Value {
+    if picked.iter().any(|id| id == NO_OPTION) {
+        return Value::Array(Vec::new());
+    }
     let places = (picked.iter()).filter_map(|id| id.strip_prefix(OPTION)?.parse::<usize>().ok());
     let values = places.filter_map(|place| options.get(place));
-    Ok(Value::Array(
+    Value::Array(
         values
             .map(|(value, _)| Value::String(value.clone()))
             .collect(),
-    ))
+    )
 }
 
 /// The rows offering `options` and none, and the ids of those to start
