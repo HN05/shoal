@@ -1,8 +1,6 @@
-//! Where a launch's new workspace goes: its target, what it starts on,
-//! settled with the steps of [`crate::launches::workspace`], its issue and
-//! what holds its agent; or, where it names the branch of an existing
-//! workspace, that workspace's own agent, and without a branch or issue a
-//! chat whose agent makes it a workspace once it knows the work.
+//! Where a launch's new workspace goes, what it starts on, and what holds
+//! its agent. A branch an existing workspace has starts that workspace's
+//! own agent, and a launch without a branch or issue begins as a chat.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_protocol::launches::{Launch, SpaceChoice};
@@ -28,8 +26,7 @@ pub mod check;
 mod copy;
 mod target;
 
-/// What a launch's new workspace settles on before anything is created:
-/// its repository, what it creates, the issue it starts on, read, and the
+/// Its repository, what it creates, the issue it starts on, read, and the
 /// blockers it names.
 pub(super) struct Settled {
     pub repo: Repository,
@@ -38,17 +35,16 @@ pub(super) struct Settled {
     pub blockers: Vec<Blocker>,
 }
 
-/// Where a launch's settling leaves it: a new workspace, or the existing
-/// one that has the branch it names, which the start goes into.
+/// A new workspace, or the existing one that has the branch the launch
+/// names.
 pub(super) enum Settling {
     New(Box<Settled>),
     Existing(Box<Workspace>),
 }
 
 impl Spaces {
-    /// Where the new workspace `launch` starts in `shape` goes for
-    /// `caller`, or what it starts instead, its agent held by what blocks
-    /// its issue unless it `creates` the workspace alone.
+    /// The agent is held by what blocks its issue unless the launch
+    /// `creates` the workspace alone.
     pub(super) async fn workspace_placement(
         &self,
         daemon: &dyn Daemon,
@@ -90,11 +86,9 @@ impl Spaces {
         }))
     }
 
-    /// Settle the new workspace `launch` names for `caller` as far as
-    /// anything is created, fetching a PR's branches only where it
-    /// `fetches`: the existing workspace that has the branch it names,
-    /// refusing what only a new one takes, else what the new one starts
-    /// on.
+    /// Fetches a PR's branches only where it `fetches`. Refuses what only a
+    /// new workspace takes when the branch an existing workspace has is
+    /// named.
     pub(super) async fn settle_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -144,8 +138,7 @@ impl Spaces {
         })))
     }
 
-    /// `creation` on the branch `issue`, read with its title, settles in
-    /// `repo` when nothing else names one, among `workspaces`.
+    /// Used when nothing else names a branch.
     async fn issue_creation(
         &self,
         workspaces: &[Workspace],
@@ -157,7 +150,6 @@ impl Spaces {
         branch::issue_settled(workspaces, repo, creation, titled).await
     }
 
-    /// The issues the forge records as blocking `issue` of `repo`.
     async fn issue_forge_blockers(
         &self,
         daemon: &dyn Daemon,
@@ -169,8 +161,7 @@ impl Spaces {
         self.forge_blockers(daemon, &repo.id, &input, caller).await
     }
 
-    /// What `launch` creates as it names it, a copy of the workspace it
-    /// copies, if any, whose repository comes with it.
+    /// A copy's repository comes with it.
     async fn launch_creation(
         &self,
         daemon: &dyn Daemon,
@@ -190,8 +181,7 @@ impl Spaces {
     }
 }
 
-/// What `launch` creates as it names it, a copy of `copy` when it copies
-/// one, before its target settles the rest.
+/// Its target settles the rest.
 fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>) -> Creation {
     Creation {
         path: launch.path.clone(),
@@ -210,9 +200,9 @@ fn named_creation(launch: &Launch, copy: Option<crate::start_plan::CopyCreation>
     }
 }
 
-/// The first flag of a start that only the new workspace of `creation` takes,
-/// with an issue of its own when `issue` and below a parent it names when
-/// `parent`, which a start into the workspace that has its branch refuses.
+/// The first flag only a new workspace takes, which a start into the
+/// workspace that has its branch refuses. `issue` and `parent` say whether
+/// the launch names its own issue and a parent.
 fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'static str> {
     // A copy carried from another machine names its base itself.
     let new_space = [
@@ -236,8 +226,8 @@ fn new_space_flag(creation: &Creation, issue: bool, parent: bool) -> Option<&'st
         .map(|(flag, _)| flag)
 }
 
-/// Refuse what only the new workspace of `creation` takes for `launch`,
-/// which goes into the existing `workspace` that has the branch it names.
+/// The launch goes into the existing `workspace` that has the branch it
+/// names.
 fn ensure_takes_existing(
     launch: &Launch,
     creation: &Creation,
@@ -259,8 +249,7 @@ fn ensure_takes_existing(
     )
 }
 
-/// The worker `launch` starts in `workspace`, which already has the branch
-/// it names, as `--in` starts it.
+/// As `--in` starts it.
 fn on_branch(launch: &Launch, workspace: &Workspace) -> Launch {
     Launch {
         target: None,
@@ -273,9 +262,8 @@ fn on_branch(launch: &Launch, workspace: &Workspace) -> Launch {
     }
 }
 
-/// The chat `launch`, which names no branch, issue, PR or copy, begins as
-/// in `repo`, in its mode of `shape`, whose agent makes it a workspace once
-/// it knows the work, refusing what only a new workspace takes.
+/// The chat's agent makes it a workspace once it knows the work. Refuses
+/// what only a new workspace takes.
 fn as_chat(launch: &Launch, shape: &Shape, repo: &Repository) -> Result<Placed> {
     fits::ensure_begins_as_chat(launch)?;
     let chat = Launch {

@@ -1,13 +1,8 @@
-//! Launches on another joined machine, which `shoal start --machine` names:
-//! this machine forwards the launch through the hub to that machine's
-//! daemon, which starts it as its own caller's, so the new space's queue,
-//! admission, cleanup and leases are that machine's. What this machine
-//! reads for the launch goes along in a form the other machine reads
-//! alike: the space the new one goes below by its ID, the scoped caller's
-//! own when it names none, the repository by the URL of its origin, which
-//! that machine clones where it has none of it, and the base as a branch
-//! or commit of that origin, or else as the commit this machine carries
-//! there, with the history only it has.
+//! Launches on another joined machine, which `shoal start --machine` names.
+//! What this machine reads for the launch goes along in a form the other
+//! machine reads alike: the parent by its ID, the repository by the URL of
+//! its origin, and the base as a branch or commit of that origin, or as a
+//! commit this machine carries there. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail, ensure};
@@ -23,8 +18,8 @@ use crate::{git::clone_base::CloneBase, model::Repository, scope::Caller};
 use shoal_core::launches;
 
 impl Spaces {
-    /// Start `launch` for `caller` on the other joined machine it names;
-    /// none when it names no machine, or this one, where it starts here.
+    /// None when the launch names no machine, or this one, where it starts
+    /// here.
     pub(super) async fn launch_on_machine(
         &self,
         daemon: &dyn Daemon,
@@ -55,13 +50,12 @@ impl Spaces {
         Ok(Some(launched))
     }
 
-    /// Turn the copy `launch` asks for `caller` into what another machine
-    /// starts it from: a new branch, the one it names or else one named
-    /// after the copied workspace's, at that workspace's HEAD as its base,
-    /// with a commit that keeps the files the copy starts with, which go
-    /// there with the base's history; the copied workspace, if any, whose
-    /// agent's session a fork of the copy starts from. A scoped caller
-    /// copies only what it copies here.
+    /// Another machine starts a copy from a new branch, the one it names or
+    /// else one named after the copied workspace's, at that workspace's HEAD
+    /// as its base, with a commit that keeps the files the copy starts with.
+    /// Those go there with the base's history. Also returns the copied
+    /// workspace, whose agent's session a fork of the copy starts from. A
+    /// scoped caller copies only what it copies here.
     async fn copy_as_carried(
         &self,
         daemon: &dyn Daemon,
@@ -86,10 +80,9 @@ impl Spaces {
         Ok(Some(copied.creation.source.workspace))
     }
 
-    /// Carry `session`, which `launch` forks, to `machine` for `caller`'s
-    /// start there in the repository whose origin's URL is `origin`, or in
-    /// none: the session of the agent of the `copied` workspace, else of
-    /// the space it goes below, as a fork here takes it.
+    /// `origin` is the URL of the repository the start goes in, if any. The
+    /// session is that of the agent of the `copied` workspace, else of the
+    /// space the launch goes below, as a fork here takes it.
     async fn carry_forked(
         &self,
         daemon: &dyn Daemon,
@@ -105,10 +98,9 @@ impl Spaces {
         (self.carry_session(daemon, machine, (forked, session), origin, caller)).await
     }
 
-    /// The modes `launch` may start in for `caller` as `machine`, which it
-    /// starts on, defines them where it would start, through the hub, with
-    /// the repository it starts in carried by its origin's URL and the
-    /// config it tracks, which that machine reads it by where it has none.
+    /// Asks `machine` through the hub. The repository the launch starts in
+    /// goes along by its origin's URL and the config it tracks, which that
+    /// machine reads where it has none.
     pub(super) async fn modes_on_machine(
         &self,
         daemon: &dyn Daemon,
@@ -135,9 +127,8 @@ impl Spaces {
         ModeShapes::try_from(body)
     }
 
-    /// The spaces `launch`, which goes to another machine, names by ID, and
-    /// for `caller` the space it goes below, its own when it names none,
-    /// once the hub lists that space for the other machine to find.
+    /// For `caller`, the space it goes below is its own when it names none.
+    /// Waits until the hub lists that space for the other machine to find.
     async fn forwarded_spaces(
         &self,
         daemon: &dyn Daemon,
@@ -154,9 +145,8 @@ impl Spaces {
         self.parent_listed(daemon, launch.parent.as_ref()).await
     }
 
-    /// Wait until the hub lists `parent`, the space a launch on another
-    /// machine goes below, where this machine has it: one created here just
-    /// before is listed only once this machine's report of it settles.
+    /// A space created here just before is listed only once this machine's
+    /// report of it settles.
     async fn parent_listed(
         &self,
         daemon: &dyn Daemon,
@@ -171,8 +161,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// The other joined machine `launch` names to start on; none when it
-    /// names none, or this one.
+    /// None when the launch names none, or this one.
     pub(super) async fn machine_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -185,7 +174,6 @@ impl Spaces {
         Ok((!own).then_some(machine))
     }
 
-    /// Whether `launch` names another joined machine to start on.
     pub(super) async fn launches_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -194,7 +182,6 @@ impl Spaces {
         Ok(self.machine_elsewhere(daemon, launch).await?.is_some())
     }
 
-    /// What `machine` answers `launch` from `caller` with, through the hub.
     async fn forward_launch(
         &self,
         daemon: &dyn Daemon,
@@ -209,10 +196,9 @@ impl Spaces {
         Launched::try_from(body)
     }
 
-    /// Name in `launch`, which another joined machine forwarded here to
-    /// read its modes, the repository its origin names where this machine
-    /// has registered it, which it reads without cloning; else the config
-    /// that repository tracks, which the modes are read under instead.
+    /// Names the repository its origin names where this machine registered
+    /// it, which it reads without cloning; else the config that repository
+    /// tracks, which the modes are read under instead.
     pub(super) async fn read_carried(
         &self,
         daemon: &dyn Daemon,
@@ -233,10 +219,9 @@ impl Spaces {
         Ok(None)
     }
 
-    /// Take what `launch`, which another joined machine forwarded here,
-    /// carries: the repository its origin names, registered as a URL clone
-    /// where this machine has none of it, which the launch then starts in,
-    /// with the origin's branch that holds its base fetched.
+    /// Registers the repository its origin names as a URL clone where this
+    /// machine has none, and fetches the origin's branch that holds the
+    /// base. The launch then starts there.
     pub(super) async fn take_carried(
         &self,
         daemon: &dyn Daemon,
@@ -259,12 +244,11 @@ impl Spaces {
         Ok(())
     }
 
-    /// Register the repository of the space `launch` goes below, which
-    /// another machine runs in a repository this one has not registered,
-    /// as a clone of the origin that machine reports, where the launch
-    /// names no repository and starts in one; it then starts there. A
-    /// parent outside `caller`'s scope is refused before anything is
-    /// cloned, as is what the launch would refuse there.
+    /// Only where the launch names no repository and starts in one: the
+    /// parent runs on another machine in a repository this one has not
+    /// registered, so this clones the origin that machine reports. A parent
+    /// outside `caller`'s scope is refused before anything is cloned, as is
+    /// what the launch would refuse there.
     pub(super) async fn take_parent_repository(
         &self,
         daemon: &dyn Daemon,
@@ -301,10 +285,9 @@ impl Spaces {
         Ok(())
     }
 
-    /// The config that the repository of the space `launch` goes below
-    /// tracks, as that space's machine reads it for `caller`, where the
-    /// launch names no repository and that space runs on another machine
-    /// in a repository this one has not registered.
+    /// As the parent's machine reads it for `caller`, where the launch names
+    /// no repository and the parent runs on another machine in a repository
+    /// this one has not registered.
     pub(super) async fn inherited_tracked_config(
         &self,
         daemon: &dyn Daemon,
@@ -327,11 +310,10 @@ impl Spaces {
         )?))
     }
 
-    /// Refuse the agent `launch` starts, the one it names or else
-    /// `agent.default`, and the model it asks of it, where the settings of
-    /// the repository it takes from the space it goes below, read from the
-    /// config that repository tracks, cannot start them, before this
-    /// machine clones it.
+    /// Refuses the agent the launch starts, the one it names or else
+    /// `agent.default`, and its model, where the settings read from the
+    /// config the parent's repository tracks cannot start them. Runs before
+    /// this machine clones the repository.
     async fn ensure_inherited_agent(
         &self,
         daemon: &dyn Daemon,
@@ -350,11 +332,9 @@ impl Spaces {
         crate::agents::check_model(&settings, &agent, &model)
     }
 
-    /// What `launch` carries to another machine of the repository it takes
-    /// from the space it goes below, which a third machine runs in a
-    /// repository this one has not registered: the URL of its origin and
-    /// the config it tracks, which this machine reads for `caller`, since
-    /// that machine never asks a third one for a caller it only vouches for.
+    /// The URL of its origin and the config it tracks, which this machine
+    /// reads for `caller`: that machine never asks a third one for a caller
+    /// it only vouches for.
     async fn inherited_carried(
         &self,
         daemon: &dyn Daemon,
@@ -380,9 +360,6 @@ impl Spaces {
         }))
     }
 
-    /// Whether `launch`, which names no repository, takes that of the space
-    /// it goes below, which another machine runs in a repository this one
-    /// has not registered.
     async fn inherits_unregistered(&self, daemon: &dyn Daemon, launch: &Launch) -> Result<bool> {
         Ok(
             !launches::names_repository(launch)?
@@ -390,14 +367,13 @@ impl Spaces {
         )
     }
 
-    /// What `launch` carries to `machine` for `caller`: the URL of the
-    /// origin of the repository it starts in, which then names that
-    /// repository in place of how this machine names it, and its base as
-    /// that machine fetches it, or with the commits it carries there; a
-    /// parent that takes no space of that repository refuses it first.
-    /// Nothing for a launch whose mode, as that machine defines it, starts
-    /// it without a repository, and for one that takes a repository this
-    /// machine has not registered, what [`Self::inherited_carried`] says.
+    /// The URL of the origin of the repository it starts in, which then names
+    /// that repository, and its base as that machine fetches it, or with the
+    /// commits it carries there. A parent that takes no space of that
+    /// repository refuses it first. Nothing for a launch whose mode, as that
+    /// machine defines it, starts it without a repository. For one that takes
+    /// a repository this machine has not registered, what
+    /// [`Self::inherited_carried`] says.
     async fn carried(
         &self,
         daemon: &dyn Daemon,
@@ -411,7 +387,8 @@ impl Spaces {
         let Some(repository) = self.found_repository(daemon, launch, caller).await? else {
             return Ok((self.inherited_carried(daemon, launch, caller).await?).unwrap_or_default());
         };
-        // Refused before anything goes there, as that machine would refuse it.
+        // Refuse before anything goes there, as that machine would refuse
+        // it.
         let parent = (launch.parent.as_ref()).and_then(SpaceSelector::given_id);
         let selector = (&repository.id).into();
         self.ensure_parent_takes(daemon, Some(&selector), parent)
@@ -447,11 +424,10 @@ impl Spaces {
         })
     }
 
-    /// `base`, a ref of `repository`, whose origin's URL is `origin`, as a
-    /// clone of that origin on `machine` fetches it, or else, where only
-    /// this machine has its commits, its commit, which this machine
-    /// carries there for `caller` with the history the origin's default
-    /// branch lacks, and which it returns as carried.
+    /// `base` as a clone of the origin on `machine` fetches it, or else,
+    /// where only this machine has its commits, its commit, which this
+    /// machine carries there for `caller` with the history the origin's
+    /// default branch lacks. Returns it as carried.
     async fn clone_base(
         &self,
         daemon: &dyn Daemon,
@@ -476,9 +452,8 @@ impl Spaces {
         Ok((base, Some(commit)))
     }
 
-    /// Carry the commit `files` of `repository`, whose origin's URL is
-    /// `origin`, to `machine` for `caller`, with the history the origin's
-    /// default branch lacks, as a copy's files go there.
+    /// Carries the history the origin's default branch lacks, as a copy's
+    /// files go there.
     async fn carry_files(
         &self,
         daemon: &dyn Daemon,
@@ -492,10 +467,9 @@ impl Spaces {
         (self.carry_commit(daemon, machine, (repository, origin), carried, caller)).await
     }
 
-    /// The registered repository `launch` would start in for `caller`: the
-    /// one it names, refused when this machine has not registered it, else
-    /// the one an item it names, its parent or its directory belongs to;
-    /// none that this machine finds none for, as for a parent elsewhere in
+    /// The one it names, refused when this machine has not registered it,
+    /// else the one an item it names, its parent or its directory belongs
+    /// to. None where this machine finds none, as for a parent elsewhere in
     /// a repository it has not registered, which the other machine finds on
     /// its own.
     pub(super) async fn found_repository(
@@ -518,8 +492,6 @@ impl Spaces {
         launches::shape::launch_repository(&state, launch).await
     }
 
-    /// Whether the space `launch` goes below runs on another machine in a
-    /// repository this machine has not registered.
     async fn parent_unregistered(&self, daemon: &dyn Daemon, launch: &Launch) -> Result<bool> {
         let Some(parent) = &launch.parent else {
             return Ok(false);
@@ -529,8 +501,7 @@ impl Spaces {
     }
 }
 
-/// The repository `launch` names, with `--repo` or as its positional
-/// argument.
+/// With `--repo` or as its positional argument.
 fn named_repository(launch: &Launch) -> Option<&str> {
     let positional = match &launch.target {
         Some(StartTarget::Repository(named)) => Some(named.as_str()),
@@ -539,8 +510,7 @@ fn named_repository(launch: &Launch) -> Option<&str> {
     launch.repository.as_deref().or(positional)
 }
 
-/// `launch` naming no repository, which a URL then names for another
-/// machine.
+/// A URL then names the repository for another machine.
 fn unname_repository(launch: &mut Launch) {
     if matches!(launch.target, Some(StartTarget::Repository(_))) {
         launch.target = None;
@@ -548,9 +518,8 @@ fn unname_repository(launch: &mut Launch) {
     launch.repository = None;
 }
 
-/// Refuse what `launch` asks of this machine that the machine `machine`
-/// starts it without: this terminal, or the existing workspace `--in`
-/// names, whose own machine starts its agents.
+/// Refuses what `machine` starts the launch without: this terminal, or the
+/// existing workspace `--in` names, whose own machine starts its agents.
 pub fn ensure_carried(launch: &Launch, machine: &str) -> Result<()> {
     let local = [
         ("--here", launch.here, "it runs the agent in this terminal"),

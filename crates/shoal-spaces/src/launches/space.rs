@@ -1,10 +1,6 @@
 //! A launch that starts its agent in a new space: the place its kind
-//! decides, a chat's checkout, worktree or `root_dir`, or a workspace's
-//! target and branch, then the one sequence every new space's start takes,
-//! from the launch's name, agent, mode and issue. Where a workspace's
-//! launch names a branch an existing workspace has, it starts that
-//! workspace's own agent, and where it names no branch or issue it begins
-//! as a chat.
+//! decides, then the one sequence every new space's start takes. See
+//! `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::OpenIssue;
@@ -31,42 +27,35 @@ use crate::{
 };
 use shoal_core::launches;
 
-/// Where a launch's new space goes, with what only that place decides: the
-/// issue it starts on, read, and what holds its agent.
+/// The issue it starts on, read, and what holds its agent.
 pub(super) struct Placement {
     pub home: PlacedHome,
     pub issue: Option<StartIssue>,
     pub blockers: Vec<Blocker>,
 }
 
-/// The home of a launch's new space: a chat's, or the workspace it opens
-/// in a repository.
 pub(super) enum PlacedHome {
     Chat(Home<'static>),
     Workspace(RepositoryId, crate::start_plan::Opening),
 }
 
-/// What follows a placed space's recording: the agent it queues, if any,
-/// and whether nothing follows its preparation, which may then wait for
-/// disk space.
+/// The agent it queues, if any, and whether nothing follows its
+/// preparation, which may then wait for disk space.
 pub(super) struct Follows {
     pub agent: Option<LaunchRequest>,
     pub unfollowed: bool,
 }
 
-/// What a launch of a new space starts as, once its place is known.
 pub(super) enum Placed {
     New(Placement),
     /// The worker of the existing workspace that has the branch it names.
     Worker(Launch),
-    /// A chat, which a launch of a workspace naming no branch or issue
-    /// begins as, in its own shape.
+    /// A launch of a workspace that names no branch or issue begins as a
+    /// chat in its own shape.
     Chat(Launch, Shape),
 }
 
 impl Spaces {
-    /// Start the agent of `launch`, which `source` made, in the new space
-    /// `shape` says, for `caller`.
     pub(super) async fn launch_space(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -105,8 +94,6 @@ impl Spaces {
         Ok(started.await?.launched())
     }
 
-    /// Record the new space `launch` places as `placement` says for
-    /// `caller`, in its tree, and begin it with what `follows` it.
     pub(super) async fn start_placed(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -125,10 +112,7 @@ impl Spaces {
         self.start_space(daemon, start, caller).await
     }
 
-    /// The start of the new space `launch` places as `placement` says, its
-    /// workspace's Git profile kept in `profile`: named as it names it,
-    /// below the parent it names, with its priority, and what `follows` its
-    /// recording.
+    /// Keeps the workspace's Git profile in `profile`.
     async fn launch_start<'a>(
         &self,
         daemon: &dyn Daemon,
@@ -143,7 +127,8 @@ impl Spaces {
         profile: &'a mut Option<String>,
     ) -> Result<SpaceStart<'a>> {
         let (home, pr, name) = placed_home(home, launch.name.clone(), profile);
-        // A launch that starts now waits for nothing, what it names included.
+        // A launch that starts now waits for nothing, what it names
+        // included.
         if launch.now {
             blockers.clear();
         }
@@ -171,9 +156,8 @@ impl Spaces {
         })
     }
 
-    /// Confine the scoped `caller`'s `start` to its own tree: below its own
-    /// space unless it names a space below it, and for a workspace from a
-    /// copy of one it reaches or reopening one below its own.
+    /// Below its own space unless it names a space below it. A workspace
+    /// copies only one it reaches, and reopens only one below its own.
     async fn confine_launch(
         &self,
         daemon: &dyn Daemon,
@@ -202,13 +186,11 @@ impl Spaces {
         Ok(())
     }
 
-    /// The open issue `input` names in `repository`, which a launch starts
-    /// on, read as `caller` reads it. Where the place takes an unread issue
-    /// `by_url`, as a chat its launch names does, which needs no title from
-    /// it, an issue it cannot read is taken by the URL its number has in
-    /// the repository, which the agent's start reads again; one without
-    /// even that is refused, since nothing could read it, as is a closed
-    /// one.
+    /// Read as `caller` reads it. Where the place takes an unread issue
+    /// `by_url`, as a chat does, which needs no title, an issue it cannot
+    /// read is taken by the URL its number has in the repository, which the
+    /// agent's start reads again. One without even that is refused, since
+    /// nothing could read it, and so is a closed one.
     pub(super) async fn launch_issue(
         &self,
         daemon: &dyn Daemon,
@@ -239,10 +221,10 @@ impl Spaces {
     }
 }
 
-/// The home `placed` names, a workspace's Git profile kept in `profile`,
-/// the PR a workspace it opens links once it is ready, and the name of
-/// the space: the one the launch `named`, or for a workspace on a PR, the
-/// title its placement read.
+/// Keeps a workspace's Git profile in `profile`. Also returns the PR a
+/// workspace links once it is ready, and the name of the space: the one the
+/// launch `named`, or for a workspace on a PR, the title its placement
+/// read.
 fn placed_home(
     placed: PlacedHome,
     named: Option<SpaceName>,
@@ -283,7 +265,6 @@ fn placed_home(
     )
 }
 
-/// The agent `launch` asks for in `mode`, which `source` made.
 pub(super) fn agent_request(
     launch: &Launch,
     mode: &ModeName,
@@ -306,7 +287,6 @@ pub(super) fn agent_request(
     }
 }
 
-/// Whether `error` is the forge's refusal of a closed issue.
 pub fn closed(error: &anyhow::Error) -> bool {
     (error.chain()).any(|cause| cause.is::<shoal_forge::items::issue::ClosedIssue>())
 }

@@ -1,13 +1,10 @@
-//! Placing a launch that names no machine: on a machine joined to a hub,
-//! a launch whose agent starts detached goes where the hub's placement
-//! policy puts it, which it then names as `--machine` would. One whose
-//! agent runs in the caller's terminal stays here, where the user is, as
-//! does one that needs this machine: an existing workspace, one it would
-//! reopen on its branch or issue, a copy, a fork, a worktree path, a
-//! repository setup, blockers, which are its spaces and queue entries, or
-//! a repository this machine has not registered or that has no origin,
-//! since placement never clones one. A hub that cannot be asked leaves it
-//! here too.
+//! Placing a launch that names no machine on a machine of the hub. A launch
+//! stays here when its agent runs in the caller's terminal, when it needs
+//! this machine (an existing workspace, one it would reopen, a copy, a
+//! fork, a worktree path, a repository setup, blockers, or a repository
+//! this machine has not registered or that has no origin, since placement
+//! never clones one), and when the hub cannot be asked. See
+//! `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -23,16 +20,13 @@ use crate::{
     {log, scope::Caller},
 };
 
-/// Where a launch went once placed.
 pub(super) enum Placed {
-    /// Another machine started it.
     Elsewhere(Launched),
-    /// It starts here.
     Here(PlacedHere),
 }
 
-/// What a launch that starts here reports of its placement: the hub's
-/// decision, and why it starts here where the hub placed it elsewhere.
+/// The hub's decision, and why the launch starts here where the hub placed
+/// it elsewhere.
 #[derive(Default)]
 pub(super) struct PlacedHere {
     decision: Option<Decision>,
@@ -40,9 +34,8 @@ pub(super) struct PlacedHere {
 }
 
 impl PlacedHere {
-    /// What a launch reports that starts here instead of on the machine
-    /// `decision` placed it on, which it never reached, as `why` says, and
-    /// the daemon's log records.
+    /// The launch never reached the machine `decision` placed it on, as
+    /// `why` says, which the daemon's log records.
     fn instead(decision: Option<Decision>, why: &str) -> Self {
         let name = (decision.as_ref()).map_or_else(String::new, |decision| decision.name.clone());
         let warning = format!(
@@ -55,8 +48,6 @@ impl PlacedHere {
         }
     }
 
-    /// Give `launched`, which started here, what it reports of its
-    /// placement.
     pub(super) fn report(self, launched: &mut Launched) {
         launched.placement = self.decision;
         launched.warnings.extend(self.warning);
@@ -64,13 +55,11 @@ impl PlacedHere {
 }
 
 impl Spaces {
-    /// Start `launch` for `caller` on the other machine it names, or the
-    /// hub places it on, with the hub's decision; else what it reports of
-    /// its placement as it starts here. A launch placed on a machine that
-    /// is no longer connected, or whose call this machine never sent,
-    /// never reached that machine, so `launch` is as before its placement
-    /// and starts here, saying why; any other failure there fails it,
-    /// since that machine may have started it.
+    /// Otherwise reports its placement as it starts here. A launch placed on
+    /// a machine that is no longer connected, or whose call this machine
+    /// never sent, never reached that machine, so it starts here as before
+    /// its placement, saying why. Any other failure there fails it, since
+    /// that machine may have started it.
     pub(super) async fn launch_where_placed(
         &self,
         daemon: &dyn Daemon,
@@ -103,14 +92,13 @@ impl Spaces {
         }
     }
 
-    /// Whether the other machine `launch` names is connected now.
     async fn reaches_named_machine(&self, daemon: &dyn Daemon, launch: &Launch) -> Result<bool> {
         let machine = self.machine_elsewhere(daemon, launch).await?;
         Ok(machine.is_some_and(|machine| machine.connected))
     }
 
-    /// Name in `launch` for `caller` the machine the hub places it on, and
-    /// return the hub's decision; none for a launch that is not placed.
+    /// Names the machine in `launch` and returns the hub's decision. None for
+    /// a launch that is not placed.
     async fn place_launch(
         &self,
         daemon: &dyn Daemon,
@@ -150,8 +138,8 @@ impl Spaces {
         Ok(decision)
     }
 
-    /// What the hub places `launch` for `caller`, made on the machine
-    /// `this`, by; none where it starts here whatever the policy.
+    /// Made on the machine `this`. None where it starts here whatever the
+    /// policy.
     async fn placement_request(
         &self,
         daemon: &dyn Daemon,
@@ -184,10 +172,9 @@ impl Spaces {
         }))
     }
 
-    /// Whether `launch` goes into a workspace this machine has for
-    /// `caller`: the one on the branch it names, or the one its issue's
-    /// earlier work left, which it reopens. One that check refuses stays
-    /// here too, where its start says why.
+    /// The one on the branch it names, or the one its issue's earlier work
+    /// left, which it reopens. One that check refuses stays here too, where
+    /// its start says why.
     async fn opens_workspace_here(
         &self,
         daemon: &dyn Daemon,
@@ -198,9 +185,8 @@ impl Spaces {
         !matches!(opened, Ok(None))
     }
 
-    /// The origin of the repository `launch` starts in for `caller`, by the
-    /// key machines match repositories by, with the settings it starts
-    /// under: none for a start without a `repository`, under the global
+    /// By the key machines match repositories by, with the settings it starts
+    /// under: none for a start without a repository, under the global
     /// config. Nothing for a repository this machine has not registered or
     /// that has no origin, which keeps the start here.
     async fn placed_repository(
@@ -230,8 +216,7 @@ impl Spaces {
         )))
     }
 
-    /// The machine of the space `launch` goes below for `caller`, its own
-    /// when it names none: `this` machine where it holds that space.
+    /// Its own when it names none. `this` machine where it holds that space.
     async fn parent_machine(
         &self,
         daemon: &dyn Daemon,
@@ -257,9 +242,8 @@ impl Spaces {
     }
 }
 
-/// Whether `launch` may go to another machine than its caller's: it names
-/// none, runs its agent detached, and needs nothing of this machine's, as
-/// blockers, which wait on its spaces and queue entries, do.
+/// It names no machine, runs its agent detached, and needs nothing of this
+/// machine's, as blockers, which wait on its spaces and queue entries, do.
 pub fn placeable(launch: &Launch) -> bool {
     launch.machine.is_none()
         && launch.forwarded.is_none()
@@ -273,7 +257,6 @@ pub fn placeable(launch: &Launch) -> bool {
         && launch.blockers.is_empty()
 }
 
-/// Whether `mode`'s agent holds a heavy slot under `settings`.
 pub fn heavy(settings: &Effective, mode: &crate::config::modes::ModeName) -> bool {
     (settings.modes.get(mode.as_str())).is_none_or(|mode| mode.weight != Weight::Light)
 }

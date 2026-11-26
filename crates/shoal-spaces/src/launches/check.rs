@@ -1,9 +1,7 @@
-//! Checking a launch before a start's pickers ask for the rest: what the
-//! daemon would refuse of it, settled as [`Manager::launch`] settles it
-//! short of recording or fetching anything, whatever kind of space it
-//! starts in. A launch whose kind is decided checks that kind's whole
-//! placement; one whose mode a terminal has yet to pick, such as among the
-//! modes its item's labels call for, checks what every kind shares.
+//! Checking a launch before a start's pickers ask for the rest, as
+//! [`Spaces::launch`] settles it, short of recording or fetching anything.
+//! A launch whose kind is decided checks that kind's whole placement; one
+//! whose mode a terminal has yet to pick checks what every kind shares.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -18,11 +16,10 @@ use crate::{
 use shoal_core::launches;
 
 impl Spaces {
-    /// Refuse what starting `launch` for `caller` would refuse, before
-    /// anything is created, returning instead the existing workspace the
-    /// start goes into: the one it names with `--in`, or that has the
-    /// branch it names. A launch that names another joined machine passes,
-    /// since that machine checks it as it starts it.
+    /// Refuses before anything is created. Returns the existing workspace the
+    /// start goes into: the one `--in` names, or that has the branch it
+    /// names. A launch that names another joined machine passes, since that
+    /// machine checks it as it starts it.
     pub async fn check_launch(
         &self,
         daemon: &dyn Daemon,
@@ -33,10 +30,9 @@ impl Spaces {
             .await
     }
 
-    /// Refuse what creating the workspace `launch` makes for `caller` would
-    /// refuse, as [`Self::check_launch`] checks a worker's start in it,
-    /// except that a creation starts no agent, so the agent of an existing
-    /// workspace it opens refuses nothing.
+    /// As [`Self::check_launch`] checks a worker's start, except that a
+    /// creation starts no agent, so the agent of an existing workspace it
+    /// opens refuses nothing.
     pub async fn check_creation_launch(
         &self,
         daemon: &dyn Daemon,
@@ -47,9 +43,7 @@ impl Spaces {
             .await
     }
 
-    /// Refuse what starting `launch` for `caller` would refuse, as
-    /// [`Self::check_launch`] says, where it `starts` what it says in the
-    /// workspace it goes into.
+    /// `starts` says what it starts in the workspace it goes into.
     async fn check_starting(
         &self,
         daemon: &dyn Daemon,
@@ -88,8 +82,7 @@ impl Spaces {
         }
     }
 
-    /// Refuse what placing `launch` in `shape` for `caller` would refuse,
-    /// as [`Self::launch`] places it, where it `starts` what it says in the
+    /// As [`Self::launch`] places it. `starts` says what it starts in the
     /// existing workspace it goes into.
     async fn check_placement(
         &self,
@@ -119,10 +112,9 @@ impl Spaces {
         }
     }
 
-    /// Refuse what every kind of space `launch` could start in for
-    /// `caller` refuses, in `repository`, if any: the parent it goes below,
-    /// the blockers it names and the issue it starts on, which every kind
-    /// reads; returns the workspace it names with `--in`.
+    /// The parent it goes below, the blockers it names and the issue it
+    /// starts on, which every kind reads. Returns the workspace it names
+    /// with `--in`.
     async fn check_shared(
         &self,
         daemon: &dyn Daemon,
@@ -142,8 +134,8 @@ impl Spaces {
         }
     }
 
-    /// Refuse the issue `launch` starts on in `repository` where neither
-    /// kind of space could read it, as a chat it names reads it by its URL.
+    /// Refuses an issue neither kind of space could read, as a chat reads
+    /// it by its URL.
     async fn check_launch_issue(
         &self,
         daemon: &dyn Daemon,
@@ -161,11 +153,9 @@ impl Spaces {
             .map(drop)
     }
 
-    /// Refuse the parent `launch` names where its new space, in
-    /// `repository` or without one, could not go below it for `caller`: the
-    /// workspace whose worktree it runs in, one outside a scoped caller's
-    /// tree, or one that cannot take it now. A scoped caller's space goes
-    /// below its own space unless it names another.
+    /// Refuses the workspace whose worktree the space runs in, one outside a
+    /// scoped caller's tree, and one that cannot take it now. A scoped
+    /// caller's space goes below its own space unless it names another.
     pub(super) async fn check_launch_parent(
         &self,
         daemon: &dyn Daemon,
@@ -187,10 +177,10 @@ impl Spaces {
         (self.ensure_parent_takes(daemon, repository.as_ref(), parent.as_ref())).await
     }
 
-    /// The registered repository `launch` starts in, as far as it names or
-    /// implies one without a picker: the repository of the workspace it
-    /// names with `--in`, the one it names, refused when none is
-    /// registered, else as [`launches::shape::launch_repository`] finds it.
+    /// As far as the launch names or implies one without a picker: the
+    /// repository of the workspace `--in` names, the one it names, refused
+    /// when none is registered, else as
+    /// [`launches::shape::launch_repository`] finds it.
     pub(super) async fn checked_repository(
         &self,
         daemon: &dyn Daemon,
@@ -220,16 +210,15 @@ impl Spaces {
     }
 }
 
-/// What a checked launch starts in the existing workspace it goes into: a
-/// start its own agent, which an agent of the workspace's own may refuse,
-/// and a creation nothing.
+/// Its own agent for a start, which an agent of the workspace's own may
+/// refuse, and nothing for a creation.
 #[derive(Clone, Copy)]
 enum Starts {
     Agent,
     Nothing,
 }
 
-/// The existing workspace `launch` names with `--in`, once named by ID.
+/// Once named by ID.
 fn named_workspace(launch: &Launch) -> Option<&shoal_protocol::space_names::SpaceSelector> {
     launch.in_workspace.as_ref().and_then(SpaceChoice::named)
 }
