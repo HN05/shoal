@@ -1,4 +1,5 @@
-//! Verify the recorded Git worktree before execution, recovery, or removal.
+//! Verifying that a recorded Git worktree is still the workspace's before
+//! execution, recovery or removal.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::refusal::{Reason, Refusal};
@@ -20,17 +21,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Whether a recorded workspace has a claim on the Git administrative
-/// directory `git_dir`, whose owner marker is `marker`, that refuses
-/// another's: its marker names it, or its record names the directory by any
-/// path. Only the marker proves ownership; a recorded path alone keeps a
-/// directory from passing to another workspace without a reclaim at it.
+/// Whether the workspace's claim on the admin directory refuses another's:
+/// its marker names it, or its record names the directory by any path. Only
+/// the marker proves ownership. A recorded path alone keeps a directory from
+/// passing to another workspace without a reclaim at it.
 pub fn claims_git_dir(workspace: &Workspace, git_dir: &Path, marker: Option<&str>) -> bool {
     marker == Some(workspace.id.as_str()) || records_git_dir(workspace, git_dir)
 }
 
-/// Whether the workspace's record names the admin directory `git_dir`,
-/// comparing real paths where both exist.
+/// Compares real paths where both exist.
 fn records_git_dir(workspace: &Workspace, git_dir: &Path) -> bool {
     let real = fs::canonicalize(git_dir).ok();
     workspace.checkout.git_dir().is_some_and(|recorded| {
@@ -41,8 +40,8 @@ fn records_git_dir(workspace: &Workspace, git_dir: &Path) -> bool {
     })
 }
 
-/// The Git directory every worktree of a repository shares, read from its
-/// checkout when a verification first needs it and kept for the rest of
+/// The Git directory every worktree of a repository shares. It is read from
+/// the checkout when a verification first needs it and kept for the rest of
 /// one operation, which verifies its worktree's own directories afresh each
 /// time.
 pub struct CommonDir {
@@ -58,7 +57,6 @@ impl CommonDir {
         }
     }
 
-    /// The repository checkout it is read from.
     pub fn checkout(&self) -> &Path {
         &self.checkout
     }
@@ -71,16 +69,14 @@ impl CommonDir {
     }
 }
 
-/// A worktree whose ownership verified.
 pub struct VerifiedWorktree {
-    /// Whether recording its admin directory changed it. A failure leaves the
-    /// existing record and marker, which verification just accepted.
+    /// Whether recording its admin directory changed it. A failure leaves
+    /// the existing record and marker, which verification just accepted.
     pub identity: Result<bool>,
 }
 
 impl Spaces {
-    /// Validate and reactivate an owned workspace being reopened by branch or path.
-    /// Reopen the recorded workspace `selector` for a launch in it; a removed
+    /// Validates and reactivates the workspace for a launch in it. A removed
     /// workspace fails rather than being created again.
     pub async fn reopen_workspace(
         &self,
@@ -117,7 +113,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Refuse reopening a workspace that is not ready, no longer its verified
+    /// Refuses a workspace that is not ready, no longer its verified
     /// worktree, or off `expected_branch`, without touching it.
     pub async fn check_reopen(
         &self,
@@ -130,8 +126,7 @@ impl Spaces {
             .await
     }
 
-    /// Refuse a worktree that is no longer the recorded one or is off
-    /// `expected_branch`; `None` expects a detached HEAD.
+    /// `None` expects a detached HEAD.
     pub async fn verify_checkout(
         &self,
         daemon: &dyn Daemon,
@@ -157,8 +152,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// The workspace `selector` names once its worktree verifies, and with
-    /// `on_branch` once it is on its recorded branch.
+    /// With `on_branch`, it must also be on its recorded branch.
     pub async fn verify_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -173,14 +167,12 @@ impl Spaces {
         Ok(workspace)
     }
 
-    /// Verify that the worktree of `workspace` is the one it recorded,
-    /// refusing a workspace whose worktree Git has yet to create.
+    /// Refuses a workspace whose worktree Git has yet to create.
     pub async fn verify_worktree(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<()> {
         self.verified_git_dir(daemon, workspace).await.map(drop)
     }
 
-    /// The admin directory of the worktree of `workspace` once it verifies
-    /// as [`Self::verify_worktree`] does, as the verification read it.
+    /// As the verification read it.
     pub async fn verified_git_dir(
         &self,
         daemon: &dyn Daemon,
@@ -191,9 +183,7 @@ impl Spaces {
         self.verify_worktree_against(workspace, &common_dir).await
     }
 
-    /// The admin directory of the worktree of `workspace` once it verifies
-    /// as [`Self::verify_worktree`] does, as a worktree of the repository
-    /// whose shared Git directory is `common_dir`.
+    /// `common_dir` is the repository's shared Git directory.
     async fn verify_worktree_against(
         &self,
         workspace: &Workspace,
@@ -210,12 +200,11 @@ impl Spaces {
             .map_err(|error| Refusal::wrap(Reason::NotReady, error))
     }
 
-    /// Verify the worktree a removal deletes as [`Self::verify_worktree`]
-    /// does, except what is left of one Git disowned, once the admin
-    /// directory of one a creation cut short left is recorded. What a
-    /// workspace that recorded no admin directory holds at its path
-    /// otherwise is the user's to delete. `common_dir` is the repository's
-    /// shared Git directory.
+    /// Also accepts what is left of a worktree Git disowned, once the admin
+    /// directory a cut-short creation left is recorded. Otherwise what a
+    /// workspace that recorded no admin directory holds at its path is the
+    /// user's to delete. `common_dir` is the repository's shared Git
+    /// directory.
     pub async fn verify_removed_worktree(
         &self,
         workspace: &Workspace,
@@ -238,9 +227,7 @@ impl Spaces {
         })
     }
 
-    /// Verify the worktree a removal deletes as
-    /// [`Self::verify_removed_worktree`] does, against `common_dir` where
-    /// the removal read it, else reading it now.
+    /// Uses `common_dir` where the removal read it, else reads it now.
     pub async fn verify_removed_worktree_with(
         &self,
         daemon: &dyn Daemon,
@@ -256,11 +243,10 @@ impl Spaces {
         }
     }
 
-    /// Delete what a `git worktree add` for the pending `workspace`, without
-    /// an admin directory recorded, left when it was cut short, as Git
-    /// marks it until its checkout finishes, so that its creation adds the
-    /// worktree again. `common_dir` is the repository's shared Git
-    /// directory.
+    /// Git marks an add as under way until its checkout finishes. Deleting
+    /// what a cut-short add left for a workspace without a recorded admin
+    /// directory lets its creation add the worktree again. `common_dir` is
+    /// the repository's shared Git directory.
     pub async fn discard_unfinished_add(
         &self,
         workspace: &Workspace,
@@ -279,17 +265,15 @@ impl Spaces {
         Ok(())
     }
 
-    /// Record the admin directory of the worktree Git created for the
-    /// pending `workspace` that its creation, failed or cut short, did not
-    /// record: the one among those of the repository, whose shared Git
-    /// directory is `common_dir`, that records the workspace's path, once
-    /// it is marked as the workspace's, which refuses one another workspace
-    /// claims. A creation never marks it before recording it, so one marked
-    /// for any other workspace is not its, nor one whose HEAD is not on the
-    /// workspace's branch, or detached for a workspace at a commit, as a
-    /// worktree someone else added at its path may be. Returns the workspace
-    /// as it then stands; one that still has none has no worktree it can
-    /// prove its own.
+    /// Records the admin directory of the worktree Git created for the
+    /// pending workspace when its creation, failed or cut short, did not:
+    /// the one among the repository's that records the workspace's path,
+    /// once it is marked as the workspace's, which refuses one another
+    /// workspace claims. A creation never marks it before recording it, so
+    /// one marked for any other workspace is not its own, nor one whose HEAD
+    /// is not on the workspace's branch, or detached for a workspace at a
+    /// commit, as a worktree someone else added at its path may be. A
+    /// workspace that still has none has no worktree it can prove its own.
     pub async fn recover_git_dir(
         &self,
         workspace: &Workspace,
@@ -310,9 +294,8 @@ impl Spaces {
         self.workspace_by_id(&workspace.id).await
     }
 
-    /// Whether the admin directory `git_dir`, which records the path of the
-    /// pending `workspace`, is the one its creation made: marked for no
-    /// other workspace, with its HEAD where the creation put it.
+    /// Marked for no other workspace, with its HEAD where the creation put
+    /// it.
     async fn created_for(&self, workspace: &Workspace, git_dir: &Path) -> Result<bool> {
         let marked = {
             let git_dir = git_dir.to_owned();
@@ -325,8 +308,7 @@ impl Spaces {
         Ok(branch.as_ref() == workspace.branch())
     }
 
-    /// The admin directory of the worktree of `workspace` once it verifies
-    /// as the one its record and marker name.
+    /// Verifies it as the one its record and marker name.
     async fn verify_worktree_identity(
         &self,
         workspace: &Workspace,
@@ -341,9 +323,9 @@ impl Spaces {
         .await
     }
 
-    /// Verify ownership, then record the worktree's admin directory when
-    /// `record` is set. Recording runs only after verification passes; an error from
-    /// verification means the worktree is not proven to be this workspace's.
+    /// Records the admin directory only after verification passes, and only
+    /// when `record` is set. An error means the worktree is not proven to be
+    /// this workspace's.
     pub async fn verify_and_record_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -359,10 +341,10 @@ impl Spaces {
         Ok(VerifiedWorktree { identity })
     }
 
-    /// Re-establish ownership of the worktree at the recorded path after a human
-    /// confirmed it is this workspace's, whatever made verification fail. It must
-    /// still be a linked worktree of the recorded repository on the recorded
-    /// branch, and no other workspace may own it.
+    /// Re-establishes ownership after a person confirmed the worktree is
+    /// this workspace's, whatever made verification fail. It must still be a
+    /// linked worktree of the recorded repository on the recorded branch,
+    /// and no other workspace may own it.
     pub async fn reclaim_worktree(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<()> {
         let common_dir = self.common_dir(daemon, workspace).await?;
         let git_dir = self.linked_git_dir(workspace, &common_dir).await?;
@@ -391,9 +373,9 @@ impl Spaces {
             .await
     }
 
-    /// Refuse an admin directory another recorded workspace claims, and
-    /// clear a marker naming no recorded workspace: one
-    /// left behind when a record was forgotten or the state directory reset.
+    /// Refuses an admin directory another recorded workspace claims, and
+    /// clears a marker naming no recorded workspace, as one a forgotten
+    /// record or a reset state directory leaves.
     pub(super) async fn release_stale_owner(
         &self,
         git_dir: &Path,
@@ -405,8 +387,7 @@ impl Spaces {
         off_runtime::run(move || release_stale_marker(&git_dir, &workspace_id, &workspaces)).await
     }
 
-    /// The shared Git directory of the repository of `workspace`, read
-    /// when first needed.
+    /// Read when first needed.
     pub async fn common_dir(
         &self,
         daemon: &dyn Daemon,
@@ -418,15 +399,15 @@ impl Spaces {
         Ok(CommonDir::of(&repo.path))
     }
 
-    /// The admin directory of the linked worktree rooted at the recorded path
-    /// that belongs to the recorded repository, whose shared Git directory
-    /// is `common_dir`.
+    /// The admin directory of the linked worktree at the recorded path, of
+    /// the repository whose shared Git directory is `common_dir`.
     async fn linked_git_dir(
         &self,
         workspace: &Workspace,
         common_dir: &CommonDir,
     ) -> Result<PathBuf> {
-        // Verify this is still the checkout Shoal created before any deletion.
+        // Verify this is still the checkout Shoal created before any
+        // deletion.
         let (actual, expected) =
             tokio::join!(git::checkout_dirs(&workspace.path), common_dir.path());
         let actual = actual?;
@@ -446,16 +427,15 @@ impl Spaces {
         Ok(actual.git_dir)
     }
 
-    /// Mark the worktree's admin directory as this workspace's and record its
-    /// location, returning whether anything changed.
+    /// Marks the admin directory as this workspace's and records its
+    /// location. Returns whether anything changed.
     pub async fn record_worktree_identity(&self, workspace: &Workspace) -> Result<bool> {
         let git_dir = git::git_dir(&workspace.path).await?;
         self.record_git_dir(workspace, git_dir).await
     }
 
-    /// Mark `git_dir`, the admin directory of the worktree of `workspace`
-    /// as its caller read it, as this workspace's and record its location,
-    /// returning whether anything changed.
+    /// `git_dir` is the admin directory as the caller read it. Returns
+    /// whether anything changed.
     pub async fn record_git_dir(&self, workspace: &Workspace, git_dir: PathBuf) -> Result<bool> {
         let marked = {
             let (git_dir, id) = (git_dir.clone(), workspace.id.clone());
@@ -476,7 +456,7 @@ impl Spaces {
             .await
     }
 
-    /// Whether Git still lists the (possibly missing) worktree at its recorded path.
+    /// The worktree may be missing.
     pub async fn is_registered_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -498,10 +478,10 @@ impl Spaces {
         .await
     }
 
-    /// Missing worktrees may have been moved outside Shoal, not deleted. Consult
-    /// their recorded admin directory before allowing ownership cleanup; only a
-    /// link to another existing path needs proof that the directory is ours.
-    /// A worktree whose creation is pending was never ready to be moved.
+    /// A missing worktree may have been moved outside Shoal, not deleted.
+    /// Only a link to another existing path needs proof, from the recorded
+    /// admin directory, that the directory is the workspace's. A worktree
+    /// whose creation is pending was never ready to be moved.
     pub async fn missing_worktree(&self, workspace: &Workspace) -> Result<Option<PathBuf>> {
         let Checkout::Created { git_dir, .. } = &workspace.checkout else {
             return Ok(None);
@@ -512,16 +492,13 @@ impl Spaces {
     }
 }
 
-/// Refuse the admin directory `git_dir`, which `workspace` recorded, unless
-/// its owner marker makes it the workspace's own, whatever its worktree
-/// holds.
+/// Refuses unless the owner marker makes the directory the workspace's own,
+/// whatever its worktree holds.
 pub async fn verify_admin_dir_owner(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     let (git_dir, id) = (git_dir.to_owned(), workspace.id.clone());
     off_runtime::run(move || verify_owner(&git_dir, &id)).await
 }
 
-/// Refuse an admin directory that is not the workspace's own, or not the one
-/// it recorded.
 fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     verify_owner(git_dir, &workspace.id)?;
     if let Some(expected) = workspace.checkout.git_dir() {
@@ -533,8 +510,8 @@ fn verify_git_dir(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Refuse an admin directory another of the `workspaces` owns, and clear a
-/// marker naming a workspace other than `workspace_id`, which none of them is.
+/// Refuses an admin directory another of the `workspaces` owns, and clears a
+/// marker naming a workspace other than `workspace_id` that none of them is.
 fn release_stale_marker(
     git_dir: &Path,
     workspace_id: &SpaceId,
@@ -554,8 +531,7 @@ fn release_stale_marker(
     Ok(())
 }
 
-/// Mark the admin directory as `workspace_id`'s unless it already is,
-/// returning whether it already was.
+/// Returns whether it already was.
 fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<bool> {
     let marked = marked_owner(git_dir)?.as_deref() == Some(workspace_id.as_str());
     if !marked {
@@ -564,8 +540,7 @@ fn mark_git_dir(git_dir: &Path, workspace_id: &SpaceId) -> Result<bool> {
     Ok(marked)
 }
 
-/// Where the worktree of the workspace's recorded admin `directory` moved,
-/// if the directory proves it is still the workspace's.
+/// None unless the directory proves it is still the workspace's.
 fn moved_worktree(workspace: &Workspace, directory: &Path) -> Result<Option<PathBuf>> {
     let destination = match fs::read_to_string(directory.join("gitdir")) {
         Ok(destination) => PathBuf::from(destination.trim_end_matches('\n')),

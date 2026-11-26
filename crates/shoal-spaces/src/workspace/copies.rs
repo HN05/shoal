@@ -1,6 +1,6 @@
 //! Copies: workspaces that start from another workspace's current files or
-//! from one of its checkpoints, and record what they started with in a
-//! starting checkpoint of their own.
+//! one of its checkpoints, and record what they started with in a starting
+//! checkpoint of their own.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::repository_ids::RepositoryId;
@@ -32,18 +32,16 @@ use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
 use tokio::sync::OwnedMutexGuard;
 
-/// Where a copy goes.
 #[derive(Debug)]
 pub enum CopyPlace {
-    /// On a new branch, this one or else one named after the copied
+    /// On a new branch: this one, or else one named after the copied
     /// workspace's.
     Branch(Option<String>),
     /// At the copied HEAD, without a branch.
     Commit,
 }
 
-/// What a copy starts from, resolved from its request: a live or removed
-/// workspace's HEAD, diff base and files.
+/// A live or removed workspace's HEAD, diff base and files.
 pub(super) struct Source {
     workspace_id: SpaceId,
     repository_id: RepositoryId,
@@ -57,9 +55,9 @@ pub(super) struct Source {
     files: SourceFiles,
 }
 
-/// When reading a live source checks that its files can be copied: now,
-/// or at the creation of a pending copy's worktree, which copies them as
-/// they are then.
+/// When reading a live source checks that its files can be copied: now, or
+/// when a pending copy's worktree is created, which copies them as they are
+/// then.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FilesCheck {
     Now,
@@ -77,14 +75,13 @@ enum SourceFiles {
 }
 
 impl Source {
-    /// The name of the workspace copied.
     pub(super) fn name(&self) -> &str {
         &self.name
     }
 
-    /// The branch a copy takes when none is given: the copied branch's, or
-    /// for a workspace at a commit its short HEAD, with `-copy` added;
-    /// nothing is built from the copied workspace's name.
+    /// The copied branch's name, or for a workspace at a commit its short
+    /// HEAD, with `-copy` added. Nothing is built from the copied
+    /// workspace's name.
     fn copy_name(&self) -> String {
         let short = self.head.abbreviated(7);
         format!(
@@ -93,7 +90,6 @@ impl Source {
         )
     }
 
-    /// The copied workspace's checkpoint the copy starts from.
     fn checkpoint(&self) -> Option<CheckpointNumber> {
         match self.files {
             SourceFiles::Worktree(_) => None,
@@ -103,8 +99,6 @@ impl Source {
 }
 
 impl Spaces {
-    /// The current files of the live workspace `id`, as a copy starts from
-    /// them.
     pub(super) async fn live_copy_source(
         &self,
         daemon: &dyn Daemon,
@@ -114,8 +108,8 @@ impl Spaces {
         self.files_source(daemon, workspace, FilesCheck::Now).await
     }
 
-    /// Whether `source` still has the HEAD, index and unsaved files the copy
-    /// `copied` started with.
+    /// Whether the source still has the HEAD, index and unsaved files the
+    /// copy started with.
     pub(super) async fn source_unchanged(
         &self,
         source: &Source,
@@ -132,10 +126,9 @@ impl Spaces {
         git::checkpoint::same_files(path, copied.commit.as_str(), now.commit.as_str()).await
     }
 
-    /// Copy the live `source`'s files into the reserved copy `workspace`
-    /// again, in place, at the source's HEAD, after a checkpoint keeps what
-    /// it holds, and record what it now started with. Its branch, if it has
-    /// one, moves to that HEAD.
+    /// Copies in place, at the source's HEAD, after a checkpoint keeps what
+    /// the copy holds, and records what it now started with. The copy's
+    /// branch, if any, moves to that HEAD.
     pub(super) async fn copy_again(
         &self,
         daemon: &dyn Daemon,
@@ -159,8 +152,7 @@ impl Spaces {
         self.record_copy_checkpoint(daemon, workspace, source).await
     }
 
-    /// The name of the removed workspace the copy `id` was made from, while
-    /// its removal record lasts.
+    /// None once the removal record is gone.
     pub(super) async fn removed_source_name(&self, id: &SpaceId) -> Result<Option<String>> {
         let id = id.to_owned();
         self.store
@@ -178,8 +170,7 @@ impl Spaces {
             .await
     }
 
-    /// The workspace `source` copies and its repository: a live one, or
-    /// with a checkpoint a removed one.
+    /// A live workspace, or with a checkpoint a removed one.
     pub async fn copy_origin(&self, source: &CopySource) -> Result<CopyOrigin> {
         // Only a checkpoint is copied from a workspace no space here is.
         if source.checkpoint.is_some() && !self.holds_space(&source.workspace).await? {
@@ -197,11 +188,10 @@ impl Spaces {
         })
     }
 
-    /// Create a copy of `source` in `repository` where `place` says, below
-    /// the space `new` names, and take its starting checkpoint; a pending
-    /// one's worktree waits in its record for its preparation, which checks
-    /// the files it copies then, as creating one now checks them again. It
-    /// runs setup like any workspace unless the caller skips it.
+    /// Takes the copy's starting checkpoint. A pending copy's worktree waits
+    /// in its record for its preparation, which checks the files it copies
+    /// then, as creating one now checks them again. Setup runs as for any
+    /// workspace unless the caller skips it.
     pub async fn create_copy(
         &self,
         daemon: &dyn Daemon,
@@ -234,9 +224,8 @@ impl Spaces {
             .await
     }
 
-    /// Create the worktree of the recorded copy `workspace` with the files
-    /// of the workspace `copied` names as they are now, or give the one an
-    /// earlier try created them again, then settle its creation under the
+    /// Copies the source's files as they are now, or refills the worktree an
+    /// earlier try created, then settles the creation under the
     /// repository's Git gate `git`.
     pub(super) async fn create_pending_copy(
         &self,
@@ -266,9 +255,7 @@ impl Spaces {
             .await
     }
 
-    /// Settle the creation of the copy `workspace` of `source`, whose
-    /// worktree was `materialized`, as [`Self::settle_creation`] does,
-    /// taking its starting checkpoint once the seed build is in.
+    /// Takes the starting checkpoint once the seed build is in.
     async fn settle_copy(
         &self,
         daemon: &dyn Daemon,
@@ -288,10 +275,10 @@ impl Spaces {
         self.record_creation(workspace, started).await
     }
 
-    /// The HEAD of the workspace `request` names, live, or removed when it
-    /// names a checkpoint, with a commit on it that keeps the files a copy
-    /// of it starts with, ignored ones excepted: those it has now, or those
-    /// its checkpoint keeps, as a copy on another machine starts from them.
+    /// The workspace is live, or removed when the request names a checkpoint.
+    /// The commit on its HEAD keeps the files a copy starts with, ignored
+    /// ones excepted: those it has now, or those its checkpoint keeps, as a
+    /// copy on another machine starts from them.
     pub async fn copy_snapshot(
         &self,
         daemon: &dyn Daemon,
@@ -309,8 +296,7 @@ impl Spaces {
         })
     }
 
-    /// The repository of the workspace `request` names, live, or removed
-    /// when it names a checkpoint, as [`Self::copy_source`] reads it.
+    /// Reads it as [`Self::copy_source`] does.
     pub async fn copied_repository(&self, request: &CopySource) -> Result<RepositoryId> {
         match self.workspace(&request.workspace).await {
             Ok(workspace) => Ok(workspace.repository().clone()),
@@ -324,9 +310,8 @@ impl Spaces {
         }
     }
 
-    /// The workspace `request` names, live, or removed when it names a
-    /// checkpoint, as a copy starts from it, checking a live worktree's
-    /// files when `check` says.
+    /// The workspace is live, or removed when the request names a
+    /// checkpoint. Checks a live worktree's files when `check` says.
     async fn copy_source(
         &self,
         daemon: &dyn Daemon,
@@ -345,8 +330,7 @@ impl Spaces {
         }
     }
 
-    /// The current files of `workspace`, which must be ready and verified,
-    /// at its HEAD, checked as copyable when `check` says.
+    /// The workspace must be ready and verified.
     async fn files_source(
         &self,
         daemon: &dyn Daemon,
@@ -368,7 +352,6 @@ impl Spaces {
         Ok(live_source(workspace, head, files))
     }
 
-    /// Checkpoint `number` of the existing `workspace`.
     async fn live_checkpoint_source(
         &self,
         workspace: Workspace,
@@ -384,8 +367,7 @@ impl Spaces {
         Ok(live_source(workspace, checkpoint.head, files))
     }
 
-    /// Checkpoint `number` of the removed workspace `selector` names, with
-    /// the diff base its removal record keeps.
+    /// Takes the diff base its removal record keeps.
     async fn removed_source(
         &self,
         selector: &SpaceSelector,
@@ -416,8 +398,7 @@ impl Spaces {
         })
     }
 
-    /// Checkpoint `number` of workspace `id`, named `name`, refused when it
-    /// could not keep the unsaved files.
+    /// Refused when the checkpoint could not keep the unsaved files.
     async fn copied_checkpoint(
         &self,
         id: &SpaceId,
@@ -441,9 +422,7 @@ impl Spaces {
         Ok(checkpoint)
     }
 
-    /// Record the copy of `source` where `place` says, with the source's
-    /// diff base and how its worktree is created. The caller holds the
-    /// repository's Git gate.
+    /// The caller holds the repository's Git gate.
     async fn record_copy(
         &self,
         daemon: &dyn Daemon,
@@ -504,7 +483,6 @@ impl Spaces {
             .await
     }
 
-    /// Create the copy's worktree with its source's files.
     async fn materialize_copy_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -526,11 +504,10 @@ impl Spaces {
         }
     }
 
-    /// Give the copy's worktree, which an earlier creation of `workspace`
-    /// left, its `source`'s files again, and configure it, once it verifies
-    /// as the one Git created for it, still on its recorded branch or
-    /// detached, and a checkpoint keeps what it holds, refusing a Git
-    /// operation under way there and what a checkpoint cannot keep.
+    /// Refills the worktree an earlier creation left once it verifies as the
+    /// one Git created for it, still on its recorded branch or detached, and
+    /// a checkpoint keeps what it holds. Refuses a Git operation under way
+    /// there and what a checkpoint cannot keep.
     async fn refill_copy_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -552,9 +529,8 @@ impl Spaces {
         }
     }
 
-    /// Take the `seeded` copy's starting checkpoint, which then holds the
-    /// seed's outputs as the copy started with them, and record what it was
-    /// made from, returning whether setup is still needed.
+    /// The checkpoint then holds the seed's outputs as the copy started with
+    /// them. Returns whether setup is still needed.
     async fn record_copy_start(
         &self,
         daemon: &dyn Daemon,
@@ -568,8 +544,6 @@ impl Spaces {
         Ok(needs_setup)
     }
 
-    /// Take the copy `workspace`'s starting checkpoint of what it now holds
-    /// and record it with what it was copied from.
     async fn record_copy_checkpoint(
         &self,
         daemon: &dyn Daemon,
@@ -584,9 +558,9 @@ impl Spaces {
             .await
     }
 
-    /// Give the new worktree the index, worktree config and files of the
-    /// live worktree at `source` at `head`, then `git_profile` when given.
-    /// The source's ignored files take the place of the seed build and
+    /// Gives the new worktree the index, worktree config and files of the
+    /// live source at `head`, then `git_profile` when given. The source's
+    /// ignored files take the place of the seed build and
     /// `setup.copy_ignored`.
     async fn clone_source(
         &self,
@@ -608,8 +582,8 @@ impl Spaces {
         self.configure_clone(daemon, workspace, git_profile).await
     }
 
-    /// Apply `git_profile` to the copy `workspace`, which holds its live
-    /// source's files, ignored ones included, so it takes no seed build.
+    /// The copy holds its live source's files, ignored ones included, so it
+    /// takes no seed build.
     async fn configure_clone(
         &self,
         daemon: &dyn Daemon,
@@ -628,8 +602,7 @@ impl Spaces {
         })
     }
 
-    /// Check out the checkpoint's HEAD and write its `files` into the new
-    /// worktree, configured as any new workspace's.
+    /// Configured as any new workspace.
     async fn check_out_copy(
         &self,
         daemon: &dyn Daemon,
@@ -653,9 +626,9 @@ impl Spaces {
             .await
     }
 
-    /// Record what the copy `id` was made from, its starting checkpoint and
-    /// the tree of the index it started with, and for a copy at a commit the
-    /// source's HEAD as its starting commit.
+    /// Records the starting checkpoint and the tree of the index the copy
+    /// started with, and for a copy at a commit the source's HEAD as its
+    /// starting commit.
     async fn record_copied_from(
         &self,
         id: &SpaceId,
@@ -679,8 +652,7 @@ impl Spaces {
     }
 }
 
-/// The files a copy of a checkpoint writes into its worktree at `head`,
-/// which the checkpoint's `commit` keeps.
+/// The checkpoint's `commit` keeps them.
 fn checkpoint_files(head: &CommitId, commit: &CommitId) -> RestoredFiles {
     RestoredFiles {
         head: head.clone(),
@@ -688,8 +660,7 @@ fn checkpoint_files(head: &CommitId, commit: &CommitId) -> RestoredFiles {
     }
 }
 
-/// Return the copy `workspace` to the checkpoint `files` it copies, as
-/// returning to a checkpoint does, refusing ignored files it would
+/// As returning to a checkpoint does. Refuses ignored files it would
 /// overwrite, which no checkpoint keeps.
 async fn rewind_copy(workspace: &Workspace, files: &RestoredFiles) -> Result<()> {
     let (path, head, snapshot) = (
@@ -707,9 +678,8 @@ async fn rewind_copy(workspace: &Workspace, files: &RestoredFiles) -> Result<()>
     git::checkpoint::rewind(path, head, snapshot).await
 }
 
-/// Refuse copying the files of the verified `workspace`, whose admin
-/// directory is `git_dir`, while a Git operation is under way there or it
-/// holds what a checkpoint cannot keep or Git metadata a copy would share.
+/// Refuses while a Git operation is under way there, or the worktree holds
+/// what a checkpoint cannot keep or Git metadata a copy would share.
 async fn ensure_copyable(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     let (name, path) = (&workspace.name, &workspace.path);
     ensure!(
@@ -729,7 +699,6 @@ async fn ensure_copyable(workspace: &Workspace, git_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// `workspace` as a copy starts from it at `head` with `files`.
 fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Source {
     Source {
         repository_id: workspace.repository().clone(),
@@ -743,7 +712,6 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
     }
 }
 
-/// Fill in what the workspace was copied from, when it is a copy.
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.copied_from = db
         .prepare_cached(

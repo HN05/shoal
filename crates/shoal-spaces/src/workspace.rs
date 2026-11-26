@@ -47,8 +47,8 @@ impl Spaces {
         self.list_workspaces_within(None).await
     }
 
-    /// `root` and every workspace below it, or every workspace without
-    /// `root`, by name. Only the selected workspaces load their details.
+    /// Every workspace without `root`. By name. Only the selected workspaces
+    /// load their details.
     pub async fn list_workspaces_within(&self, root: Option<&SpaceId>) -> Result<Vec<Workspace>> {
         let (root, records) = (root.cloned(), self.records.clone());
         self.store
@@ -56,13 +56,13 @@ impl Spaces {
             .await
     }
 
-    /// What the workspace's processes use, from the latest sample.
+    /// From the latest sample.
     pub fn workspace_usage(&self, id: &SpaceId) -> Option<crate::model::WorkspaceUsage> {
         let now = tokio::time::Instant::now();
         self.usage.with_workspaces(|usages| usages.get(id, now))
     }
 
-    /// Whether the workspace has any recorded execution, in any state.
+    /// In any state.
     pub async fn workspace_has_executions(&self, id: &SpaceId) -> Result<bool> {
         let id = id.to_owned();
         self.store
@@ -70,13 +70,13 @@ impl Spaces {
             .await
     }
 
-    /// Read recorded executions in every state for a known workspace ID.
+    /// In every state.
     pub async fn workspace_executions(&self, id: &SpaceId) -> Result<Vec<Execution>> {
         let id = id.to_owned();
         self.store.run(move |db| store::executions(db, &id)).await
     }
 
-    /// Count recorded executions in every state without decoding their details.
+    /// Counts without decoding the records.
     pub async fn workspace_execution_count(&self, id: &SpaceId) -> Result<usize> {
         let id = id.to_owned();
         self.store
@@ -84,8 +84,7 @@ impl Spaces {
             .await
     }
 
-    /// The workspace with this ID, unless it was removed, read in one store
-    /// operation, so a removal meanwhile reads as none.
+    /// Reads in one store operation, so a removal meanwhile reads as none.
     pub async fn find_workspace(&self, id: &SpaceId) -> Result<Option<Workspace>> {
         let id = id.to_owned();
         let records = self.records.clone();
@@ -135,7 +134,7 @@ impl Spaces {
         Ok(inspection)
     }
 
-    /// Record activity so automatic cleanup restarts its idle timer, and its
+    /// Automatic cleanup restarts its idle timer, and the store keeps the
     /// time for idle periods that must survive a restart.
     pub async fn touch(&self, id: &SpaceId) {
         self.usage.record_activity(id);
@@ -155,8 +154,8 @@ impl Spaces {
         }
     }
 
-    /// When the space `id` was last recorded active: a workspace without
-    /// any starts its idle period now, while a chat records no such time.
+    /// A workspace without any starts its idle period now. A chat records no
+    /// such time.
     pub async fn active_at(&self, id: &SpaceId) -> Result<Option<crate::time::UnixTime>> {
         let id = id.to_owned();
         self.store
@@ -176,7 +175,7 @@ impl Spaces {
             .await
     }
 
-    /// Drop in-memory bookkeeping for a workspace that no longer exists.
+    /// Drops the in-memory bookkeeping of a workspace that no longer exists.
     pub async fn forget_workspace(&self, daemon: &dyn Daemon, id: &SpaceId) {
         self.usage.forget_workspace(id);
         daemon.forget_rejected_config(id);
@@ -184,9 +183,7 @@ impl Spaces {
     }
 }
 
-/// Fill in what a workspace record reads from its related tables.
-/// `root` and every workspace below it, or every workspace without `root`,
-/// by name, each with its details.
+/// Every workspace without `root`, by name, each with its details.
 pub fn workspaces_within(
     db: &rusqlite::Connection,
     records: &dyn Records,
@@ -202,7 +199,6 @@ pub fn workspaces_within(
     Ok(workspaces)
 }
 
-/// The workspace `id` with its details, while it exists.
 fn recorded_workspace(
     db: &rusqlite::Connection,
     records: &dyn Records,
