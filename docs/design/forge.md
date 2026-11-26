@@ -230,11 +230,12 @@ reads its own, since `forge api` already reads it, while changing it stays the
 user's, with the user's own logins, and a scoped caller's change there is
 refused. Commands that need a space or checkout, such as `link`, `watch` and `pr
 open`, keep their rules. Item commands that need only a repository also run from
-a registered checkout outside any space: they act as the repository's agent
-account under its settings, open without a proposal, and link or record nothing,
-since a checkout holds no links; workspace processes act from their workspace. A
-chat acts the same way from its repository's checkout, under its own scope, but
-records what it opens as a workspace does: a new issue is linked as opened, or
+a registered checkout outside any space. Only the user acts there, so they act
+with the user's own logins under the repository's settings and open without a
+proposal. They link or record nothing, since a checkout holds no links; workspace
+processes act from their workspace. A chat acts from its repository's checkout
+too, but as the agent account, under its own scope, and records what it opens as
+a workspace does: a new issue is linked as opened, or
 assigned with `--link`, and its item actions default to its linked items. A chat
 holds links as a workspace does: the link tables name the space, a workspace or
 chat, with IDs from their shared namespace, and go with it. Its assigned items
