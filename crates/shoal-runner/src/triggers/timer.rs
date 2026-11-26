@@ -1,6 +1,5 @@
-//! The loop that fires timer triggers when their times come, catching up
-//! on a time missed while the daemon was stopped or the machine slept, and
-//! launches the queued runs whose wait ended.
+//! The loop that fires timer triggers and launches the queued runs whose
+//! wait ended.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -14,7 +13,6 @@ use crate::{Runner, daemon::Daemon, log, time::UnixTime};
 /// timers but not for the wall clock, which the loop reads again after it.
 const MAX_SLEEP: Duration = Duration::from_secs(30);
 
-/// Fire the triggers whose times come, until the daemon stops.
 pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
     loop {
         let next = runner.trigger_pass(&daemon, UnixTime::now()).await;

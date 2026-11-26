@@ -1,8 +1,5 @@
-//! The runner each repository registers on its forge: registered while
-//! `runner.enabled` is on for it, with the user's own login, and deleted on
-//! the forge once the setting is off or the repository is removed. On a
-//! forge whose runners each take one job, registration only checks that the
-//! login may register them and keeps no runner.
+//! The runner each repository with `runner.enabled` registers on its forge.
+//! On a forge whose runners each take one job, it keeps no runner.
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -84,7 +81,6 @@ impl Runner {
         Ok(())
     }
 
-    /// The runner `repository_id` registered, if any.
     pub async fn runner_registration(
         &self,
         repository_id: &RepositoryId,
@@ -154,7 +150,6 @@ impl Runner {
         self.register_runner(repository).await
     }
 
-    /// Register a runner for `repository` on its forge and keep it.
     async fn register_runner(&self, repository: &Repository) -> Result<()> {
         // One account, so a token from a command is fetched once.
         let account = self.forges.user_account();
@@ -222,7 +217,6 @@ impl Runner {
             .await
     }
 
-    /// Tell the user `message` about a runner that failed.
     async fn notify_runner_failed(&self, message: String) {
         let kind = AlertKind::RunnerFailed;
         let alert = NewAlert::shoal(kind, About::default(), message);

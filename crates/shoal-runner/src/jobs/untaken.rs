@@ -1,12 +1,6 @@
-//! Claimed jobs whose runner never takes them. A runner of the repository's
-//! own, as Forgejo keeps, claims its job by handle and takes that job or
-//! none: once the forge no longer lists the job as waiting and says another
-//! runner took it, or that none did, the runner holds its job slot and the
-//! job's expected memory for nothing. The waiting-jobs poll that sees it
-//! stops the runner, and the job then ends as any other does. A runner
-//! registered for one job takes any its labels match, and goes once none is
-//! left for it. A runner that ended without taking its job, however it
-//! ended, keeps no run for its job's cost: it used nothing a run does.
+//! Claimed jobs whose runner never takes them, which the waiting-jobs poll
+//! stops. Such a runner keeps no run for its job's cost: it used nothing a
+//! run does.
 use std::collections::HashSet;
 
 use anyhow::{Context, Result};

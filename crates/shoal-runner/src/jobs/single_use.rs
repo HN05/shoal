@@ -1,7 +1,5 @@
-//! The runners a forge registers for one job each, which take a job their
-//! labels match rather than the one claimed: kept with the claim, deleted on
-//! the forge once the job ends, and deleted before then when no job is left
-//! for the runner, which then exits so its workspace goes.
+//! The runners a forge registers for one job each. Such a runner takes any
+//! job its labels match, not only the claimed one.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::{path::PathBuf, time::Duration};
 
@@ -19,7 +17,6 @@ use crate::{Runner, log, time::UnixTime};
 const IDLE_AFTER: Duration = Duration::from_secs(60);
 
 impl Runner {
-    /// The directory a claimed job's runner keeps its files in.
     pub fn job_directory(&self, id: &QueueEntryId) -> PathBuf {
         self.paths.state.join("runner").join(id)
     }
@@ -39,7 +36,6 @@ impl Runner {
             .await
     }
 
-    /// Delete the runner registered for `job` alone, if any, on its forge.
     pub async fn delete_job_runner(&self, job: &ClaimedJob) -> Result<()> {
         let Some(runner) = job.runner_id else {
             return Ok(());

@@ -1,7 +1,5 @@
-//! What each repository's CI jobs use: the peak resident memory of every
-//! run, read from its workspace's usage samples and kept as a run of its
-//! job, and the cost a waiting or starting run of a job counts at in
-//! admission, which the runs it keeps estimate, none before it has run.
+//! What each repository's CI jobs use, and what admission expects a run of a
+//! job to use.
 use anyhow::Result;
 use rusqlite::{OptionalExtension, Transaction, params};
 use shoal_daemon_base::{

@@ -1,19 +1,5 @@
-//! The end of a claimed job: once the execution running the forge's runner
-//! ends, however it ended, the runner registered for the job alone is
-//! deleted and the job's workspace is removed whatever it holds,
-//! with its permit, once what its steps left running there is stopped and
-//! named in the workspace's log, as for a job whose runner outlived its
-//! run; the runner's directory of a job no longer claimed, however its
-//! workspace went, is deleted. A job ends only on the forge's word: stopping it, removing its workspace while it runs, or a signal
-//! ending its wrapper's session cancels its run there, and the forge's
-//! runner then stops it, or Shoal or the wrapper does once the runner
-//! outlives the run or the signal. Only load protection ends a job without
-//! cancelling its run, which would end the run's other jobs too: it has the
-//! forge cancel the job alone where the forge's runner protocol lets it,
-//! and otherwise the forge fails the job once its runner reports the stopped
-//! step, or gives up on the stopped runner; Shoal reruns the job once the
-//! run has finished.
-//! Shoal's log names what stopped each runner.
+//! The end of a claimed job: once its runner's execution ends, however it
+//! ended, its workspace and runner directory go.
 use anyhow::Result;
 use shoal_daemon_base::{
     alerts::{About, NewAlert},
@@ -63,10 +49,8 @@ impl Runner {
         }
     }
 
-    /// Finish the ended `job`: keep what it used if its runner took it,
-    /// stop what its steps left running, delete the runner registered for
-    /// it alone and remove its workspace, telling the user of a removal
-    /// that fails, which the next pass tries again.
+    /// Finish the ended `job`. A removal that fails is told to the user and
+    /// tried again on the next pass.
     async fn finish_job(&self, daemon: &dyn Daemon, job: &ClaimedJob) -> Result<()> {
         self.keep_job_usage(job).await?;
         if job.execution_id.is_some() {
@@ -151,7 +135,6 @@ impl Runner {
         Ok(())
     }
 
-    /// Whether the runner records a claim of the job `id`.
     async fn job_claimed(&self, id: &QueueEntryId) -> Result<bool> {
         let id = id.to_owned();
         self.store

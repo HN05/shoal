@@ -10,7 +10,6 @@ use crate::{Runner, daemon::Daemon, log};
 /// repository's ID equals.
 const GLOBAL: &str = "global";
 
-/// A trigger as the config defines it, with where.
 #[derive(Debug, Clone)]
 pub struct Configured {
     /// The registered repository whose config defines it; none for the
@@ -26,7 +25,6 @@ impl Configured {
         (self.repository.as_ref()).map_or_else(|| GLOBAL.to_owned(), ToString::to_string)
     }
 
-    /// How a message names it.
     pub fn label(&self) -> String {
         match &self.repository {
             Some(repository) => format!("trigger {} of repository {repository}", self.name),
@@ -120,7 +118,6 @@ impl Runner {
     }
 }
 
-/// The global config's `triggers`.
 fn global(triggers: &Triggers) -> Vec<Configured> {
     (triggers.iter())
         .map(|(name, trigger)| Configured {

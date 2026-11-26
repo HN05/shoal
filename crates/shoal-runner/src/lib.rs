@@ -1,6 +1,5 @@
-//! The daemon's triggers, and the CI jobs it runs for repositories' forges.
-//! [`Runner`] holds what they keep in memory and offers their operations;
-//! what they need of the rest of the daemon is the interface in [`daemon`].
+//! The triggers that start agents, and the CI jobs this machine runs. See
+//! `docs/design/runner.md`.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::sync::Arc;
 
@@ -18,7 +17,6 @@ pub mod triggers;
 #[cfg(test)]
 mod stand_in;
 
-/// The triggers' and the CI jobs' service, which `Manager` holds.
 pub struct Runner {
     store: Store,
     gates: Arc<Gates>,
@@ -54,7 +52,6 @@ impl Runner {
         }
     }
 
-    /// The global config as it stands.
     fn config(&self) -> Arc<config::Config> {
         self.config.current()
     }

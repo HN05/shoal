@@ -1,8 +1,5 @@
-//! What the triggers and the runner need of the rest of the daemon, which
-//! implements it: the registered repositories and their config, the agents
-//! a trigger's launch meets and starts, the permission a scoped caller acts
-//! with, the forges the runner registers on, the hub it hands the jobs it
-//! cut off, and the agent queue's rows it changes in its own transactions.
+//! The interfaces through which the triggers and the runner reach the rest
+//! of the daemon.
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -29,29 +26,21 @@ use shoal_protocol::{
 };
 use shoal_refs::CommitId;
 
-/// The registered repositories, and the config the daemon reads for them.
 pub trait Repositories: Send + Sync {
-    /// The registered repositories.
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 
-    /// The registered repository `id`.
     fn repository<'a>(&'a self, id: &'a RepositoryId) -> BoxFuture<'a, Result<Repository>>;
 
-    /// The config layers of the registered repository `id`: its
-    /// checkout's file and its local config.
     fn repository_layers<'a>(&'a self, id: &'a RepositoryId)
     -> BoxFuture<'a, Result<ConfigLayers>>;
 
-    /// The registered repository a request made in `context` acts in: a
-    /// workspace's or a chat's, or the checkout's; none without a context
-    /// or for a chat without a repository.
+    /// The repository a request made in `context` acts in: none without a
+    /// context, or for a chat without a repository.
     fn context_repository(
         &self,
         context: Option<ItemContext>,
     ) -> BoxFuture<'_, Result<Option<RepositoryId>>>;
 
-    /// The settings of the registered repository `id` under the global
-    /// `config`.
     fn repository_settings_from<'a>(
         &'a self,
         config: &'a Config,
@@ -67,9 +56,7 @@ pub trait Repositories: Send + Sync {
     fn acts_on_global_config(&self) -> bool;
 }
 
-/// The agents a trigger's launch starts, and those it waits for.
 pub trait Agents: Send + Sync {
-    /// The agent queue's entries, as the user sees them.
     fn queue_entries(&self) -> BoxFuture<'_, Result<Vec<QueueEntry>>>;
 
     /// The agent queue's entries that wait or start, not those that failed.
@@ -108,7 +95,6 @@ pub trait Agents: Send + Sync {
     ) -> BoxFuture<'static, Result<SpaceId>>;
 }
 
-/// The permissions scoped callers act with.
 pub trait Permissions: Send + Sync {
     /// Let `caller` take `action`, which `key` governs, in `repository`:
     /// an error refuses it, or makes it an approval request.
@@ -121,7 +107,6 @@ pub trait Permissions: Send + Sync {
     ) -> BoxFuture<'a, Result<()>>;
 }
 
-/// The spaces a job's run is for, and those jobs run in.
 pub trait Spaces: Send + Sync {
     /// The spaces this machine has.
     fn present_spaces(&self) -> BoxFuture<'_, Result<Vec<Space>>>;
@@ -129,15 +114,12 @@ pub trait Spaces: Send + Sync {
     /// What the workspace `id` used at its latest usage sample.
     fn workspace_usage(&self, id: &SpaceId) -> Option<WorkspaceUsage>;
 
-    /// The workspace `id`.
     fn workspace_by_id<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Workspace>>;
 
-    /// The ID of the space `selector` names.
     fn select_space_id<'a>(&'a self, selector: &'a SpaceSelector)
     -> BoxFuture<'a, Result<SpaceId>>;
 }
 
-/// The executions of the runner's jobs.
 pub trait Executions: Send + Sync {
     /// Stop every process of the job workspace `id` but its runner,
     /// leftovers whose parent is gone included, returning what it stopped.
@@ -192,7 +174,6 @@ pub trait Executions: Send + Sync {
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>>;
 }
 
-/// The workspaces the runner's jobs run in.
 pub trait Workspaces: Send + Sync {
     /// Move the job workspace `id` to `commit`, fetched by `reference` when
     /// it is not there yet.
@@ -219,7 +200,6 @@ pub trait Workspaces: Send + Sync {
         reference: Option<&'a str>,
     ) -> BoxFuture<'a, Result<Box<dyn RecordedJobWorkspace<'a> + 'a>>>;
 
-    /// The settings of the job workspace `workspace`.
     fn workspace_settings<'a>(
         &'a self,
         workspace: &'a Workspace,
@@ -239,14 +219,11 @@ pub trait Workspaces: Send + Sync {
 /// A job workspace recorded and not yet checked out, which holds its
 /// repository's Git gate until it is or it drops.
 pub trait RecordedJobWorkspace<'a>: Send {
-    /// The workspace's ID.
     fn id(&self) -> &SpaceId;
 
-    /// Check the workspace out at its commit.
     fn check_out(self: Box<Self>) -> BoxFuture<'a, Result<Workspace>>;
 }
 
-/// The hub this machine joined.
 pub trait Hub: Send + Sync {
     /// Hand the hub `jobs`, which this machine cut off, to rerun in its
     /// place, returning whether it keeps them now: false on the hub's own
@@ -254,8 +231,6 @@ pub trait Hub: Send + Sync {
     fn hand_cut_off_jobs(&self, jobs: Vec<CutOffJob>) -> BoxFuture<'_, Result<bool>>;
 }
 
-/// Everything the triggers and the runner need of the daemon, which each of
-/// their operations that reaches beyond them takes.
 pub trait Daemon:
     Repositories + Agents + Permissions + Spaces + Workspaces + Executions + Hub + Coordinators
 {
@@ -273,33 +248,26 @@ pub struct RecordedExecutions {
     pub spaces: HashSet<SpaceId>,
 }
 
-/// A job waiting in the agent queue for admission.
 pub struct WaitingEntry {
     pub id: QueueEntryId,
     pub name: SpaceName,
     pub job: QueuedJob,
 }
 
-/// The agent queue's rows the runner changes in its own connection or
-/// transaction. Its methods run on the store's thread, so they are not
-/// futures.
+/// The agent queue's rows the runner changes in its own transaction. Its
+/// methods run on the store's thread, so they return no futures.
 pub trait Records: Send + Sync {
-    /// Take the job entries of `repository` out of the agent queue.
     fn forget_job_entries(&self, db: &Connection, repository: &RepositoryId) -> Result<()>;
 
-    /// Each waiting job's entry ID, repository and job.
     fn waiting_jobs(&self, db: &Connection)
     -> Result<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>;
 
-    /// `repository`'s job entries waiting for admission.
     fn waiting_job_entries(
         &self,
         db: &Connection,
         repository: &RepositoryId,
     ) -> Result<Vec<WaitingEntry>>;
 
-    /// The job entries admission admitted, each with its repository and
-    /// job.
     fn admitted_jobs(
         &self,
         db: &Connection,
@@ -309,7 +277,6 @@ pub trait Records: Send + Sync {
     /// reattachment.
     fn recorded_executions(&self, db: &Connection) -> Result<RecordedExecutions>;
 
-    /// Take the entry `id` out of the agent queue.
     fn remove_queue_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()>;
 
     /// Put the admitted entry `id` back in the queue, where it waits again.

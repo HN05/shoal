@@ -1,6 +1,4 @@
-//! What lists and status show of the runner's jobs: each claimed job's
-//! workspace names its job, and the spaces its run is for now list the jobs
-//! that run or wait for it.
+//! What lists and status show of the runner's jobs.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -26,7 +24,6 @@ impl Runner {
         Ok(())
     }
 
-    /// The job the runner runs in the workspace `id`, if any.
     pub async fn workspace_job(
         &self,
         daemon: &dyn Daemon,

@@ -1,6 +1,4 @@
-//! The CI jobs this machine runs for repositories' forges: what the runner
-//! keeps between passes, what stops a job's runner, and the labels a runner
-//! registers with.
+//! The CI jobs this machine runs, and what the runner keeps between passes.
 use std::{
     collections::{HashMap, HashSet},
     sync::{Mutex, MutexGuard, PoisonError},
@@ -40,13 +38,10 @@ pub use passes::run;
 pub use registration::Registration;
 
 impl Runner {
-    /// What the runner keeps between passes.
     pub fn jobs(&self) -> &Runners {
         &self.jobs
     }
 
-    /// Record in Shoal's log that `cause` stopped the runner of `job`, with
-    /// the `outcome` for its run.
     pub fn log_job_stop(&self, job: &ClaimedJob, cause: JobStop, outcome: &str) {
         log!(
             "runner: {} of run {} stopped by {cause}; {outcome}",
@@ -235,7 +230,6 @@ impl Runners {
         lock(&self.taken).insert(entry.clone());
     }
 
-    /// Whether the forge said the runner of the running job `entry` took it.
     pub fn taken(&self, entry: &QueueEntryId) -> bool {
         lock(&self.taken).contains(entry)
     }
@@ -258,7 +252,6 @@ impl Runners {
         self.wake.notify_one();
     }
 
-    /// Wait until a pass is asked for.
     pub async fn woken(&self) {
         self.wake.notified().await;
     }

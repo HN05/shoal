@@ -1,7 +1,4 @@
-//! A firing's way to a run, the same whatever its source: the filter drops
-//! it, or it becomes a run that its key, its launch's values and the
-//! trigger's overlap decide, launched through the operation `shoal start`
-//! uses, as the user.
+//! A firing's way to a run, the same whatever its source.
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
@@ -15,7 +12,6 @@ use super::{
 };
 use crate::{Runner, daemon::Daemon, time::UnixTime};
 
-/// One firing of a trigger.
 pub(super) struct Firing {
     pub origin: RunOrigin,
     /// The source's input, which the filter, templates and key read.
@@ -247,7 +243,6 @@ impl Runner {
             .await
     }
 
-    /// Add `ran` to the trigger's history.
     async fn record_trigger_run(&self, trigger: &Configured, ran: &Ran) -> Result<()> {
         let (scope, name) = (trigger.scope(), trigger.name.clone());
         let (run, waiting) = (ran.run.clone(), ran.waiting.clone());
@@ -272,7 +267,6 @@ fn queued(firing: &Firing, waiting: Waiting, busy: Started) -> Ran {
     }
 }
 
-/// A run of `firing` with `outcome`.
 fn run(firing: &Firing, outcome: RunOutcome, reason: Option<String>) -> TriggerRun {
     TriggerRun {
         at: firing.at,

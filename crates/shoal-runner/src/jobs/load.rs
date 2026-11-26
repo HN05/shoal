@@ -1,9 +1,5 @@
-//! What the runner's jobs load the machine with, as admission counts it:
-//! each job starting or running, with what it is expected to use, what its
-//! workspace used at the latest usage sample, and how long ago its runner
-//! started. One whose runner has not started yet has just started, so it
-//! holds back the next start until it runs; a job whose runner ended adds
-//! nothing, however long its workspace remains.
+//! What the runner's jobs load the machine with, as admission counts it. A
+//! job whose runner ended adds nothing, however long its workspace remains.
 use std::time::Duration;
 
 use anyhow::Result;
@@ -16,7 +12,8 @@ use shoal_daemon_base::jobs::JobCost;
 /// A job starting or running, as admission counts it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JobLoad {
-    /// How long ago its runner started; none yet for one starting.
+    /// How long ago its runner started; zero for one still starting, so it holds
+    /// back the next start until it runs.
     pub age: Duration,
     /// What its runs are expected to use.
     pub cost: JobCost,
@@ -35,7 +32,6 @@ struct ActiveJob {
 }
 
 impl Runner {
-    /// The load of each job starting or running.
     pub async fn job_loads(&self, daemon: &dyn Daemon) -> Result<Vec<JobLoad>> {
         let now = UnixTime::now();
         let mut loads = Vec::new();

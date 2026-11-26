@@ -1,9 +1,5 @@
-//! Cancelling a claimed job's run on the forge as something stops its
-//! runner: `shoal stop` of its workspace, the workspace's removal or a
-//! daemon stop. A job ends only on the forge's word, so its run is
-//! cancelled first, and the forge's runner then stops; a forge that refuses
-//! is told to the user. A signal ending its wrapper's session, as a logout
-//! or a shutdown sends, cuts the job off instead, which then reruns.
+//! Cancelling a claimed job's run on the forge before its runner stops, since
+//! a job ends only on the forge's word.
 use std::collections::HashSet;
 
 use anyhow::{Context as _, Result};
@@ -122,7 +118,6 @@ impl Runner {
         self.notifications.notify_user(alert).await;
     }
 
-    /// The job claimed in the workspace `workspace_id`, if any.
     pub(super) async fn workspace_claim(
         &self,
         workspace_id: &SpaceId,

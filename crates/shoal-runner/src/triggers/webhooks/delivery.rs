@@ -1,7 +1,4 @@
-//! A request's delivery to its webhook trigger: the route names the
-//! trigger, `/webhooks/<name>` for the global config's and
-//! `/webhooks/<repository>/<name>` for a repository's; an active trigger
-//! takes it once its signature checks out, and fires in the background.
+//! A request's delivery to the webhook trigger its route names.
 use shoal_core::config::values::Values;
 use std::{ffi::OsString, os::unix::ffi::OsStrExt, sync::Arc, time::Duration};
 
@@ -17,9 +14,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use super::super::{Configured, firing::Firing};
 use crate::{Runner, daemon::Daemon, log, time::UnixTime};
 
-/// What a delivery became.
 pub(in crate::triggers) enum Delivered {
-    /// Its trigger fires for it.
     Accepted,
     /// No active trigger takes it: none has its route, the trigger is
     /// paused or the signature is wrong, which the caller cannot tell apart.
@@ -52,9 +47,7 @@ pub(super) async fn fetch_secret(name: &str, secret: &Secret, values: &Values) -
     }
 }
 
-/// What a route names: a repository's trigger, or the global config's.
 struct Route<'a> {
-    /// The registered repository's name.
     repository: Option<&'a str>,
     name: &'a str,
 }
@@ -220,7 +213,6 @@ impl Runner {
     }
 }
 
-/// The ID of the one registered repository named `name`.
 async fn repository_named(
     daemon: &dyn Daemon,
     name: &str,

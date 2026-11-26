@@ -1,6 +1,4 @@
-//! The runner's entries in the agent queue: a repository whose runner was
-//! turned off takes its jobs out, and a job the runner leaves to other
-//! runners is passed over, so that it does not join the queue again.
+//! The runner's entries in the agent queue.
 use anyhow::Result;
 use rusqlite::params;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};

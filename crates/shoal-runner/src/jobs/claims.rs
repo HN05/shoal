@@ -1,12 +1,5 @@
-//! Claiming the jobs admission admitted: each runs the forge's runner,
-//! which claims the job by its handle, as a tracked execution in a workspace
-//! at the job's commit that starts from the seed and holds a permit from the
-//! repository's `runner.permit` pool when it names one, at low CPU priority
-//! so that it takes only the cores agents and the user leave idle. A
-//! superseded PR job is passed over, as is one that cannot start, which
-//! stays with the forge for other runners, as do the jobs of a repository
-//! whose runner was turned off. A job admitted as the
-//! system shuts down waits in the queue again.
+//! Claiming the jobs admission admitted: each runs the forge's runner in a
+//! workspace of its own.
 use std::{
     collections::BTreeMap, ffi::OsString, io::Write as _, os::unix::fs::OpenOptionsExt as _,
     path::Path,
@@ -183,7 +176,6 @@ impl Runner {
         Ok(recorded)
     }
 
-    /// Start `claim`'s job in its workspace once it holds its permit.
     async fn start_claimed(&self, daemon: &dyn Daemon, claim: Claimed<'_>) -> Result<Claim> {
         if let Some(pool) = &claim.runner.permit
             && !daemon
@@ -291,7 +283,6 @@ impl Runner {
         Ok(command)
     }
 
-    /// The forge's command that runs `claim`'s job.
     async fn forge_job_command(&self, claim: &Claimed<'_>, job: &QueuedJob) -> Result<JobCommand> {
         let program = self.runner_program(claim.forge)?;
         let labels = runner_labels(&claim.runner.labels);
@@ -405,7 +396,6 @@ async fn prepare_job_files(workspace: &Workspace, command: &JobCommand) -> Resul
     Ok(())
 }
 
-/// Make `link` a symbolic link to `workspace`, with the directories above it.
 fn link_workspace(workspace: &Workspace, link: &Path) -> Result<()> {
     if let Some(parent) = link.parent() {
         std::fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;

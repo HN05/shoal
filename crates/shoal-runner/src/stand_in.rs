@@ -1,9 +1,5 @@
 //! A stand-in for the rest of the daemon, which the tests of the triggers
-//! and the runner build the service over: one registered repository, whose
-//! checkout's file, local config and forge a test gives, recorded in the
-//! store as the runner's own records reference it, an agent queue and
-//! agents a test sets, launches that each open a space whose agent then
-//! runs, and the user's account from the global config.
+//! and the runner build the service over, with one registered repository.
 use shoal_core::test_support::git;
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{HashMap, HashSet};
@@ -117,13 +113,11 @@ impl Fixture {
         runner(&self.root, &self.daemon).await
     }
 
-    /// Make `text` the global config.
     pub(crate) fn configure(&self, text: &str) {
         let config = shoal_core::test_support::global_config(text);
         self.daemon.config.publish(config);
     }
 
-    /// The daemon the service's operations take.
     pub(crate) fn daemon(&self) -> Arc<dyn Daemon> {
         self.daemon.clone()
     }
@@ -226,15 +220,11 @@ async fn runner(root: &tempfile::TempDir, daemon: &Arc<StandIn>) -> Arc<Runner> 
 /// A daemon with one registered repository.
 pub(crate) struct StandIn {
     repository: Repository,
-    /// The global config, which the service reads too.
     config: Arc<ConfigState>,
-    /// The repository's checkout's file.
     pub(crate) tracked: Mutex<String>,
-    /// The repository's local config.
     pub(crate) local: Mutex<String>,
     /// Whether `shoal contribute` registered the repository.
     pub(crate) contribution: AtomicBool,
-    /// Whether the repository is being removed.
     pub(crate) removing: AtomicBool,
     /// What each launch asked for, with the space it opened, oldest first.
     pub(crate) launched: Mutex<Vec<(SpaceId, Launch)>>,
@@ -246,13 +236,10 @@ pub(crate) struct StandIn {
     pub(crate) opened: Mutex<HashMap<QueueEntryId, SpaceId>>,
     /// The repositories whose job entries left the queue, in order.
     pub(crate) forgotten: Mutex<Vec<RepositoryId>>,
-    /// The spaces this machine has.
     pub(crate) spaces: Mutex<Vec<Space>>,
     /// Whether a job could start beside those in use.
     pub(crate) could_start: AtomicBool,
-    /// The job entries admission admitted.
     pub(crate) admitted: Mutex<Vec<(QueueEntryId, RepositoryId, QueuedJob)>>,
-    /// The executions the daemon records.
     pub(crate) executions: Mutex<crate::daemon::RecordedExecutions>,
     /// The CI jobs cut off that the hub keeps, none for a machine in no
     /// hub.
@@ -260,7 +247,6 @@ pub(crate) struct StandIn {
 }
 
 impl StandIn {
-    /// The tasks of the launches, oldest first.
     pub(crate) fn tasks(&self) -> Vec<Vec<String>> {
         let launched = self.launched.lock().unwrap();
         launched
@@ -269,24 +255,19 @@ impl StandIn {
             .collect()
     }
 
-    /// The spaces the launches opened, oldest first.
     pub(crate) fn opened_spaces(&self) -> Vec<SpaceId> {
         let launched = self.launched.lock().unwrap();
         launched.iter().map(|(space, _)| space.clone()).collect()
     }
 
-    /// Give the space `id` an agent that runs.
     pub(crate) fn run_agent(&self, id: &SpaceId) {
         self.agents.lock().unwrap().insert(id.clone());
     }
 
-    /// Stop the agent of the space `id`.
     pub(crate) fn stop_agent(&self, id: &SpaceId) {
         self.agents.lock().unwrap().remove(id);
     }
 
-    /// The repository's config layers: its checkout's file and its local
-    /// config.
     fn layers(&self) -> Result<ConfigLayers> {
         let tracked = self.tracked.lock().unwrap().clone();
         let local = self.local.lock().unwrap().clone();

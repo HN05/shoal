@@ -1,9 +1,5 @@
-//! Triggers, the daemon's side of `[triggers.NAME]`: it reads the
-//! configured triggers, keeps each one's runtime state, and fires them, the
-//! timer source's from a background loop, the webhook source's as requests
-//! reach its listener, and any trigger at once for `shoal trigger run`.
-//! Every firing takes the same steps whatever its source, and launches
-//! through the operation `shoal start` uses.
+//! The triggers `[triggers.NAME]` configures: their runtime state and their
+//! firings.
 use std::collections::HashMap;
 
 use shoal_ids::repository_ids::RepositoryId;
@@ -43,7 +39,6 @@ pub(crate) struct Triggers {
 }
 
 impl Triggers {
-    /// Have the loop read the triggers and their state again now.
     pub(crate) fn wake(&self) {
         self.wake.notify_one();
     }

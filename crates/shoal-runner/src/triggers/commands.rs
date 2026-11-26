@@ -1,7 +1,4 @@
-//! What `shoal trigger` asks of the daemon: the triggers of the repository
-//! a caller acts in and the global config's, with their runtime state, and
-//! pausing, resuming and running one, as the caller's `triggers`
-//! permission allows.
+//! What `shoal trigger` asks of the daemon.
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -104,7 +101,6 @@ impl Runner {
         Ok(trigger)
     }
 
-    /// `trigger` with its runtime state as of `now`.
     async fn trigger_status(&self, trigger: &Configured, now: UnixTime) -> Result<TriggerStatus> {
         let state = self.trigger_state(trigger, now).await?;
         let (scope, name) = (trigger.scope(), trigger.name.clone());

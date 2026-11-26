@@ -1,8 +1,5 @@
-//! The job a runner registered for one job took, which the forge chose: its
-//! job-started hook reports the job's run before the first step. The claim
-//! then records that job, and a job of another run than the claimed one
-//! waits until its workspace is at that run's commit; a workspace that
-//! cannot move fails the job instead of running it on the wrong commit.
+//! The job that a runner registered for one job took, which the forge chose
+//! and its job-started hook reports.
 use anyhow::{Context, Result};
 use rusqlite::params;
 use shoal_forge::ci::runner::{RunnerRequests, TookRun, answer_took_run, reported_run, took_run};

@@ -1,10 +1,4 @@
-//! The runner's background work: each repository's runner follows its
-//! `runner.enabled` setting, checked when the global config or a local
-//! config changes and every [`INTERVAL`] for the repositories' own files;
-//! every [`POLL_INTERVAL`], and whenever admission admits a job, the jobs
-//! that ended give up their workspaces, admitted jobs are claimed, and the
-//! forge's waiting jobs are read while one could start, and every
-//! [`INTERVAL`] while none can.
+//! The runner's background passes.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
@@ -16,7 +10,6 @@ use crate::{Runner, daemon::Daemon, log};
 /// How often the forge's waiting jobs are read while one could start.
 const POLL_INTERVAL: Duration = Duration::from_secs(10);
 
-/// Run the runner's passes until the daemon stops.
 pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
     let mut config = runner.config.watch();
     let mut reconciled: Option<Instant> = None;
@@ -51,11 +44,6 @@ pub async fn run(runner: Arc<Runner>, daemon: Arc<dyn Daemon>) {
     }
 }
 
-/// Record the running jobs' usage, remove the workspaces of the jobs that
-/// ended, rerun those protection stopped whose runs have finished, move a
-/// job's workspace to the commit of the job its runner took instead,
-/// release the runners the forge gave no job, claim the jobs admission
-/// admitted, and read the forge's waiting jobs when due.
 async fn pass(runner: &Arc<Runner>, daemon: &Arc<dyn Daemon>) -> Result<()> {
     runner.sample_job_usage(&**daemon).await?;
     runner.finish_ended_jobs(&**daemon).await?;

@@ -1,6 +1,4 @@
-//! Each trigger's runtime state in the store: whether it is paused, the
-//! times its source counts from, its newest runs and the keys of the runs
-//! it started.
+//! Each trigger's runtime state in the store.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -13,7 +11,6 @@ use crate::time::UnixTime;
 /// its last started one, which overlap reads.
 pub const HISTORY: i64 = 50;
 
-/// A trigger's runtime state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct State {
     pub paused: bool,
@@ -55,7 +52,6 @@ impl Started {
         space.map(Self::Space).or(entry.map(Self::Entry))
     }
 
-    /// The run's `space_id` and `queue_entry`.
     pub fn columns(&self) -> (Option<&SpaceId>, Option<&QueueEntryId>) {
         match self {
             Self::Space(space) => (Some(space), None),
@@ -73,7 +69,6 @@ impl std::fmt::Display for Started {
     }
 }
 
-/// A queued run of a trigger.
 pub struct Queued {
     pub id: i64,
     /// What it waits for: the trigger's last launch, until its agent stops.
@@ -132,7 +127,6 @@ pub fn count_from(db: &Connection, scope: &str, name: &str, to: UnixTime) -> Res
     Ok(())
 }
 
-/// Record that the trigger fired at `at`.
 pub fn fired(db: &Connection, scope: &str, name: &str, at: UnixTime) -> Result<()> {
     db.execute(
         "UPDATE trigger_states SET last_fired_at=?3 WHERE scope=?1 AND name=?2",
@@ -186,7 +180,6 @@ pub fn record(
     Ok(())
 }
 
-/// The trigger's newest run.
 pub fn last_run(db: &Connection, scope: &str, name: &str) -> Result<Option<TriggerRun>> {
     Ok(db
         .query_row(
@@ -233,7 +226,6 @@ pub fn opened(db: &Connection, id: i64, space: &SpaceId) -> Result<()> {
     Ok(())
 }
 
-/// The trigger's run that waits to launch, if any.
 pub fn queued(db: &Connection, scope: &str, name: &str) -> Result<Option<Queued>> {
     let row = db
         .query_row(

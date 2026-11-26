@@ -1,6 +1,4 @@
-//! The jobs the runner claimed, as it records them: each with the
-//! workspace it runs in, the execution running the forge's runner once it
-//! started, and the runner the forge registered for it alone.
+//! The jobs the runner claimed, as it records them.
 use anyhow::Result;
 use rusqlite::params;
 use shoal_forge_types::numbers::RunnerId;
@@ -12,7 +10,6 @@ use shoal_protocol::model::QueuedJob;
 
 use crate::{Runner, time::UnixTime};
 
-/// A job the runner claimed.
 #[derive(Debug, Clone)]
 pub struct ClaimedJob {
     /// The ID its queue entry had.
@@ -21,7 +18,6 @@ pub struct ClaimedJob {
     pub workspace_id: SpaceId,
     /// The execution running the forge's runner, once it started.
     pub execution_id: Option<ExecutionId>,
-    /// When that execution started.
     pub launched_at: Option<UnixTime>,
     pub job: QueuedJob,
     /// The runner the forge registered for this job alone, if it did.
@@ -29,7 +25,6 @@ pub struct ClaimedJob {
 }
 
 impl Runner {
-    /// The jobs the runner claimed.
     pub async fn claimed_jobs(&self) -> Result<Vec<ClaimedJob>> {
         self.store.run(|db| claims(db)).await
     }
@@ -76,7 +71,6 @@ pub(super) fn claims(db: &rusqlite::Connection) -> Result<Vec<ClaimedJob>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The job a row holds as JSON in its column `index`.
 fn queued_job(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<QueuedJob> {
     serde_json::from_str(&row.get::<_, String>(index)?).map_err(|error| {
         rusqlite::Error::FromSqlConversionFailure(

@@ -1,7 +1,4 @@
-//! The webhook listener: the HTTP server `[machine.webhooks] listen` sets
-//! up for webhook triggers, with no routes but theirs. It binds again once
-//! a reload changes the address, and reads each request whole, within a
-//! size limit, before its delivery decides what becomes of it.
+//! The HTTP server `[machine.webhooks] listen` sets up for webhook triggers.
 use std::{convert::Infallible, net::SocketAddr, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
@@ -125,7 +122,6 @@ async fn accept(
     }
 }
 
-/// Answer the requests on `stream` until it closes.
 async fn serve(
     runner: Arc<Runner>,
     daemon: Arc<dyn Daemon>,
@@ -180,14 +176,12 @@ async fn respond(
     empty(status)
 }
 
-/// A response with `status` and no body.
 fn empty(status: StatusCode) -> Response<Empty<Bytes>> {
     let mut response = Response::new(Empty::new());
     *response.status_mut() = status;
     response
 }
 
-/// What reading a request found.
 enum Read {
     /// A POST with its path, the request as its trigger's input reads it,
     /// and its body as sent, which a signature covers.
@@ -202,7 +196,6 @@ enum Read {
     Failed(anyhow::Error),
 }
 
-/// Read `request` whole.
 async fn read(request: Request<Incoming>) -> Read {
     if request.method() != Method::POST {
         return Read::NotFound;

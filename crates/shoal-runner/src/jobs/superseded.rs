@@ -1,10 +1,5 @@
-//! PR jobs whose PR moved to a newer head than their run's commit. Their
-//! run is superseded, so the runner cancels it unless it finished, since
-//! Shoal's runners leave its jobs waiting on the forge, where they would
-//! hold the PR's checks, and passes the jobs over. A claim checks its job
-//! before it starts, and each waiting-jobs poll checks every queued one,
-//! reading each PR's head once, so a job admission holds back does not hold
-//! the PR's checks while it waits.
+//! Passing over the jobs of a PR whose head moved past their run's commit,
+//! and cancelling that run.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use std::collections::{BTreeMap, HashSet};
 

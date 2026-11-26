@@ -1,8 +1,5 @@
-//! The spaces a job's run is for: those that link the run's PR, or the
-//! workspace that owns the branch it ran on. Linking a job lists it in
-//! their status; it places none of them above the job's own workspace.
-//! Links change after a job is queued, so whatever reads the spaces a job
-//! is for links it again first.
+//! The spaces a job's run is for. Links change after a job is queued, so
+//! whatever reads the spaces a job is for links it again first.
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -101,7 +98,6 @@ fn runs_for(space: &Space, forge: &ForgeRepo, run: &JobRun) -> bool {
     }
 }
 
-/// Whether `links` names the PR `number` of `forge`'s repository.
 fn links_pull(forge: &ForgeRepo, links: &SpaceLinks, number: PullNumber) -> bool {
     (links.prs.iter().map(|pr| &pr.url))
         .any(|url| url.repository() == forge && url.pull().is_ok_and(|linked| linked == number))

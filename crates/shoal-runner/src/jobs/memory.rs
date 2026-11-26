@@ -1,8 +1,5 @@
 //! What the scope a job's runner ran in recorded of its memory, which the
-//! wrapper reports as the runner ends: the most it held raises the job's
-//! peak memory, which its cost reads, and processes of it the kernel's OOM
-//! killer killed, such as a build's compiler, mark its run as one that
-//! needed more and are named in the job's end in its workspace's log.
+//! wrapper reports as the runner ends.
 use anyhow::Result;
 use shoal_daemon_base::events::record_job_ended;
 use shoal_ids::execution_ids::ExecutionId;

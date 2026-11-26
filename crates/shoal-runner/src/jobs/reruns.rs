@@ -1,20 +1,5 @@
-//! CI jobs Shoal ends so they run again elsewhere: one load protection
-//! stops, and each one the machine's sleep or a shutdown cuts off. Shoal
-//! ends one as it ends a job whose runner outlived its run, without
-//! cancelling its run, which would end the run's other jobs, recording why
-//! in the workspace's log. Before anything is signaled it records the job
-//! to rerun and has the forge cancel that job alone, which a forge whose
-//! runner protocol Shoal speaks does, so the job shows as cancelled rather
-//! than failed. Each pass then reruns it on its forge as soon as its run
-//! has finished there, whatever this machine's readings, and the forge
-//! offers the waiting job to every runner, each Shoal runner admitting it
-//! as any other. A sleep or shutdown first hands the jobs it cut off to the
-//! hub this machine joined, which reruns them in its place while it is
-//! away, and forgets those the hub keeps, so it never reruns one again once
-//! it is back; it tries the reruns of the rest at once, since a run whose
-//! last running job it ended has finished, and the user hears of each job
-//! one cut off once it reruns. A rerun its run never allows within
-//! [`PATIENCE`] is given up.
+//! Ending a CI job so it runs again elsewhere, and rerunning it once its run
+//! has finished. `docs/reference/ci.md` says when Shoal does this.
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -40,7 +25,8 @@ use super::{ClaimedJob, overrun::ended_job};
 use crate::{Runner, daemon::Daemon, log};
 use shoal_daemon_base::jobs::JobStop;
 
-/// How long after its stop a job waits for its run to allow its rerun.
+/// How long after its stop a job waits for its run to allow its rerun,
+/// before Shoal gives the rerun up.
 const PATIENCE: Duration = Duration::from_secs(24 * 60 * 60);
 
 /// How long a job to stop waits for its forge to name the job its runner
@@ -350,7 +336,6 @@ impl Runner {
             .await
     }
 
-    /// The jobs waiting to rerun.
     async fn stopped_jobs(&self) -> Result<Vec<StoppedJob>> {
         self.store
             .read(|db| {
@@ -422,7 +407,6 @@ impl Runner {
         true
     }
 
-    /// Forget the rerun of the job `id` of the run `run` in `repository`.
     async fn forget_job_rerun(
         &self,
         run: &ItemRef,
@@ -464,7 +448,6 @@ impl Runner {
         self.alert_runner_failed(message).await;
     }
 
-    /// Tell the user `message` about a job Shoal stopped.
     async fn alert_runner_failed(&self, message: String) {
         let alert = NewAlert::shoal(AlertKind::RunnerFailed, About::default(), message);
         self.notifications.notify_user(alert).await;

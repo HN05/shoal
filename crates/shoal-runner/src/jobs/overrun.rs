@@ -1,9 +1,5 @@
-//! A job whose runner keeps running after the forge finished the job's run,
-//! as when a process a step left behind holds the runner's output open.
-//! Once the runner has outlived the run by [`GRACE`], Shoal ends the job
-//! itself: it stops every process of the job's workspace, leftovers whose
-//! parent is gone included, then the runner, and records what it stopped in
-//! the workspace's log. The job then ends as any other does.
+//! Ending a job whose runner keeps running after the forge finished its run,
+//! as when a process a step left holds the runner's output open.
 use std::time::Duration;
 
 use anyhow::Result;

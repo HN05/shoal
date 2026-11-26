@@ -1,9 +1,4 @@
-//! The forge's waiting jobs as entries of the agent queue. Each poll adds
-//! the jobs a repository's runner may take, with the run each belongs to and
-//! the spaces that run links, drops the entries of jobs the forge no longer
-//! lists as waiting, which another runner took or a cancel ended, ends the
-//! runners of claimed jobs that went the same way, and passes over the jobs
-//! of PRs that moved on.
+//! The forge's waiting jobs as entries of the agent queue.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -57,11 +52,6 @@ impl Runner {
         Ok(())
     }
 
-    /// Queue the jobs `repository`'s forge lists as waiting for `labels`
-    /// that the runner has not queued, claimed or passed over, drop the
-    /// entries of those it no longer lists, end the runners of claimed
-    /// ones it no longer lists that they did not take, and pass over the
-    /// superseded ones.
     async fn refresh_repository_jobs(
         &self,
         daemon: &dyn Daemon,
