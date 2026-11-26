@@ -6,8 +6,7 @@ use serde_json::{Map, Value};
 use shoal_protocol::surfaces::{Input, InputKind, SurfaceAction};
 
 use super::{
-    Entries, SelectionCanceled, input, input_with_default, pick, pick_choice, pick_many,
-    pick_with_header, read_input,
+    Entries, SelectionCanceled, input, pick, pick_choice, pick_many, pick_with_header, read_input,
 };
 use crate::cli::context::Context;
 
@@ -123,15 +122,24 @@ fn boolean(ctx: &Context, prompt: &str, input: &Input) -> Result<Value> {
     )?))
 }
 
-/// Typed text, offering the input's value when it has one; blank text is
-/// an answer too.
+/// Typed text, blank text an answer too; where the input has a value,
+/// Enter alone keeps it and a lone `-` clears it.
 fn typed(ctx: &Context, prompt: &str, input: &Input) -> Result<Value> {
-    let text = match initial_text(input) {
-        Some(initial) => input_with_default(ctx, prompt, &initial)?,
-        None => read_input(ctx, prompt)?.ok_or(SelectionCanceled)?,
+    let Some(initial) = initial_text(input) else {
+        let text = read_input(ctx, prompt)?.ok_or(SelectionCanceled)?;
+        return Ok(Value::String(text));
     };
-    Ok(Value::String(text))
+    let prompt = format!("{prompt} [{initial}; - clears it]");
+    let text = read_input(ctx, &prompt)?.ok_or(SelectionCanceled)?;
+    Ok(Value::String(match text.as_str() {
+        "" => initial,
+        CLEAR => String::new(),
+        _ => text,
+    }))
 }
+
+/// What clears a typed input's value.
+const CLEAR: &str = "-";
 
 fn label(value: bool) -> &'static str {
     if value { "true" } else { "false" }

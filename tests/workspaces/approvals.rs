@@ -474,6 +474,42 @@ fn thread_picker_asks_for_the_values_an_action_takes() {
 }
 
 #[test]
+fn thread_picker_clears_a_prefilled_text_input_with_a_dash() {
+    let fixture = Fixture::new();
+    fixture.add("asker");
+    let form = fixture.root.path().join("note.json");
+    fs::write(
+        &form,
+        serde_json::json!({"version": "1.0", "createSurface": {"surfaceId": "note",
+            "components": [
+                {"id": "root", "component": "Column", "children": ["note", "ok"]},
+                {"id": "note", "component": "TextField", "label": "Note",
+                 "value": {"@path": "/note"}},
+                {"id": "ok", "component": "Button", "child": "ok-label",
+                 "action": {"event": {"name": "save", "context": {"note": {"@path": "/note"}}}}},
+                {"id": "ok-label", "component": "Text", "text": "Save"}],
+            "dataModel": {"note": "draft"}}})
+        .to_string(),
+    )
+    .unwrap();
+    let question = ask(
+        &fixture,
+        "asker",
+        "Note?",
+        &["Your note?", "--ui", form.to_str().unwrap()],
+    );
+    let id = question["number"].as_str().unwrap().to_owned();
+    let (output, _) = fixture.pick(&["thread", "list"], &format!("{id} action:0"), "-\n");
+    assert!(output.status.success(), "{}", printed(&output));
+    let answer = latest(&fixture, &id);
+    assert_eq!(
+        answer["answer"]["values"],
+        serde_json::json!({"note": ""}),
+        "{answer}"
+    );
+}
+
+#[test]
 fn thread_picker_answers_an_options_input_with_none() {
     let fixture = Fixture::new();
     fixture.add("asker");

@@ -347,7 +347,8 @@ side's latest surface offers actions, a picker offers them under that post:
 
 - The recommended action comes first, where the picker starts.
 - Picking an action asks for each value it takes, in the order its inputs
-  show, picking among an input's options or none of them.
+  show, picking among an input's options or none of them. A typed value
+  offers the one the surface holds, which Enter keeps and a lone `-` clears.
 - Picking the reply in words asks for the reply.
 - Ctrl-C leaves.
 
