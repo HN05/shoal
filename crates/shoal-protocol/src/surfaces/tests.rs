@@ -368,3 +368,23 @@ fn a_date_input_takes_date_bounds() {
     );
     assert!(refusal(vague, &[]).contains("schema"));
 }
+
+#[test]
+fn a_date_answer_takes_the_input_s_form_and_bounds() {
+    let booking = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["day", "book"]},
+            {"id": "day", "component": "DateTimeInput", "enableDate": true,
+             "min": "2026-11-26", "max": "2026-12-31", "value": {"@path": "/day"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"day": {"@path": "/day"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"day": ""}),
+    );
+    let answer = |day: &str| booking.resolve("book", values(&[("day", json!(day))]));
+    assert_eq!(answer("2026-12-01").unwrap()["day"], json!("2026-12-01"));
+    for refused in ["garbage", "2026-02-30", "14:30", "2026-11-25", "2027-01-01"] {
+        assert!(answer(refused).is_err(), "{refused}");
+    }
+}

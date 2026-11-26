@@ -10,11 +10,13 @@ use serde_json::{Map, Value};
 
 mod actions;
 mod checks;
+mod dates;
 mod schema;
 mod shorthand;
 mod text;
 
 pub use actions::{Input, InputKind, SurfaceAction};
+pub use dates::{DateForm, Dates};
 
 /// The A2UI spec version every surface is written in, which it records.
 pub const VERSION: &str = "1.0";

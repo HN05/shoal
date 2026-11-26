@@ -4,7 +4,7 @@
 use anyhow::{Context as _, Result, bail, ensure};
 use serde_json::{Map, Value};
 
-use super::{Component, Surface, binding};
+use super::{Component, Surface, binding, dates::Dates};
 
 /// An action a surface offers.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +45,7 @@ pub enum InputKind {
         options: Vec<(String, String)>,
         multiple: bool,
     },
-    DateTime,
+    DateTime(Dates),
     /// Data no input component enters, taken as given.
     Any,
 }
@@ -208,7 +208,7 @@ fn entry(component: Component<'_>) -> Option<InputKind> {
             min: number("min").or(Some(0.0)),
             max: number("max"),
         },
-        "DateTimeInput" => InputKind::DateTime,
+        "DateTimeInput" => InputKind::DateTime(Dates::of(component)),
         "ChoicePicker" => InputKind::Options {
             options: (component
                 .get("options")
@@ -233,7 +233,8 @@ impl InputKind {
     fn accept(&self, key: &str, given: Value) -> Result<Value> {
         match (self, given) {
             (Self::Any, given) => Ok(given),
-            (Self::Text | Self::DateTime, Value::String(text)) => Ok(Value::String(text)),
+            (Self::Text, Value::String(text)) => Ok(Value::String(text)),
+            (Self::DateTime(dates), Value::String(text)) => dates.accept(key, &text),
             (Self::Number { min, max }, given) => number(key, &given, *min, *max),
             (Self::Boolean, Value::Bool(value)) => Ok(Value::Bool(value)),
             (Self::Boolean, Value::String(text)) => match text.as_str() {
@@ -266,7 +267,7 @@ impl InputKind {
                 options,
                 multiple: true,
             } => format!("any of {}, repeated", values(options)),
-            Self::DateTime => "an ISO 8601 date or time".into(),
+            Self::DateTime(dates) => dates.describe(),
             Self::Any => "a value".into(),
         }
     }
