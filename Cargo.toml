@@ -54,6 +54,7 @@ tempfile = "3"
 tokio = "1"
 toml = "1.1.6"
 toml_edit = "0.25"
+unicode-segmentation = "1"
 unicode-width = "0.2"
 uuid = "1.26.1"
 

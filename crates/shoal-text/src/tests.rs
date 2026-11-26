@@ -41,6 +41,24 @@ fn width_counts_wide_characters_twice() {
 }
 
 #[test]
+fn width_measures_an_emoji_sequence_as_one() {
+    assert_eq!(width("👩\u{200D}💻"), 2);
+    assert_eq!(width("❤\u{FE0F}"), 2);
+}
+
+#[test]
+fn cut_width_keeps_an_emoji_sequence_whole() {
+    assert_eq!(cut_width("ab👩\u{200D}💻cd".to_owned(), 3), "ab…");
+}
+
+#[test]
+fn cut_fits_both_limits_at_once() {
+    let text = format!("{}a{}", "a".repeat(39), "\u{301}".repeat(61));
+    let cut = cut(text, 40, 160);
+    assert_eq!(cut, format!("{}…", "a".repeat(39)));
+}
+
+#[test]
 fn cut_width_keeps_wide_characters_within_the_columns() {
     let cut = cut_width("漢字のテキスト".to_owned(), 6);
     assert_eq!(cut, "漢字…");
