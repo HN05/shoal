@@ -409,3 +409,28 @@ fn a_date_bound_compares_moments_and_reads_bound_data() {
     answer("2026-11-26T15:00:00+02:00").unwrap();
     answer("2026-11-27T08:00:00Z").unwrap();
 }
+
+#[test]
+fn context_data_no_input_enters_is_taken_as_it_is() {
+    let counted = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["note", "go"]},
+            {"id": "note", "component": "TextField", "label": "Note", "value": {"@path": "/note"}},
+            {"id": "go", "component": "Button", "child": "go-label",
+             "action": {"event": {"name": "go",
+                 "context": {"count": {"@path": "/count"}, "note": {"@path": "/note"}}}}},
+            {"id": "go-label", "component": "Text", "text": "Go"},
+        ]),
+        json!({"count": 3, "note": ""}),
+    );
+    let go = counted.action("go").unwrap();
+    let keys: Vec<&str> = go.inputs.iter().map(|input| input.key.as_str()).collect();
+    assert_eq!(keys, ["note"]);
+    let resolved = counted.resolve("go", serde_json::Map::new()).unwrap();
+    assert_eq!(Value::Object(resolved), json!({"count": 3, "note": ""}));
+    assert!(
+        counted
+            .resolve("go", values(&[("count", json!("4"))]))
+            .is_err()
+    );
+}

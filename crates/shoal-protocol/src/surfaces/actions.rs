@@ -16,8 +16,8 @@ pub struct SurfaceAction {
     pub label: String,
     /// Whether the surface recommends it, as its primary button.
     pub recommended: bool,
-    /// The values it takes, one for each key of its context that binds an
-    /// input's data, in the order their inputs render.
+    /// The values it takes, one for each key of its context that binds the
+    /// data of an input component, in the order those components render.
     pub inputs: Vec<Input>,
 }
 
@@ -46,8 +46,6 @@ pub enum InputKind {
         multiple: bool,
     },
     DateTime(Dates),
-    /// Data no input component enters, taken as given.
-    Any,
 }
 
 impl Surface {
@@ -113,18 +111,7 @@ impl Surface {
     fn action_of(&self, component: Component<'_>) -> Option<SurfaceAction> {
         let event = component.event()?;
         let id = event.get("name")?.as_str()?.to_owned();
-        let mut bound: Vec<(&String, &str)> = (self.context(&id).into_iter())
-            .filter_map(|(key, value)| Some((key, binding(value)?)))
-            .collect();
-        let rendered = self.rendered();
-        let shown = |path: &str| {
-            let entering = |component: &Component<'_>| entering(*component, path);
-            rendered.iter().position(entering).unwrap_or(usize::MAX)
-        };
-        bound.sort_by_key(|(_, path)| shown(path));
-        let inputs = (bound.into_iter())
-            .map(|(key, path)| self.input(key, path))
-            .collect();
+        let inputs = self.inputs(&id);
         Some(SurfaceAction {
             label: (component.literal("child"))
                 .and_then(|child| self.label(child, ""))
@@ -147,17 +134,26 @@ impl Surface {
         .collect()
     }
 
-    /// The input `key` of an action, bound to the data at `path`: what
-    /// the component bound there enters, and the data it starts with.
-    fn input(&self, key: &str, path: &str) -> Input {
-        let entering = (self.components()).find(|component| entering(*component, path));
-        Input {
-            key: key.to_owned(),
-            kind: entering
-                .and_then(|input| self.entry(input))
-                .unwrap_or(InputKind::Any),
-            initial: self.data(path).cloned(),
-        }
+    /// The inputs of the action `id`: the keys of its context that bind
+    /// data an input component enters, in the order those components
+    /// render. A key that binds data no component enters takes the data as
+    /// it is.
+    fn inputs(&self, id: &str) -> Vec<Input> {
+        let rendered = self.rendered();
+        let mut entered: Vec<(usize, Input)> = (self.context(id).into_iter())
+            .filter_map(|(key, value)| {
+                let path = binding(value)?;
+                let at = (rendered.iter()).position(|component| entering(*component, path))?;
+                let input = Input {
+                    key: key.clone(),
+                    kind: self.entry(rendered[at])?,
+                    initial: self.data(path).cloned(),
+                };
+                Some((at, input))
+            })
+            .collect();
+        entered.sort_by_key(|(at, _)| *at);
+        entered.into_iter().map(|(_, input)| input).collect()
     }
 
     /// What the component `id` says, as a button's label: a `Text`'s
@@ -246,7 +242,6 @@ impl InputKind {
     /// `--value KEY=VALUE` passes it as well as typed JSON.
     fn accept(&self, key: &str, given: Value) -> Result<Value> {
         match (self, given) {
-            (Self::Any, given) => Ok(given),
             (Self::Text, Value::String(text)) => Ok(Value::String(text)),
             (Self::DateTime(dates), Value::String(text)) => dates.accept(key, &text),
             (Self::Number { min, max }, given) => number(key, &given, *min, *max),
@@ -282,7 +277,6 @@ impl InputKind {
                 multiple: true,
             } => format!("any of {}, repeated", values(options)),
             Self::DateTime(dates) => dates.describe(),
-            Self::Any => "a value".into(),
         }
     }
 }
