@@ -1,4 +1,3 @@
-//! Bitbucket's uploads and downloads of attached files.
 use anyhow::Result;
 
 use super::Bitbucket;

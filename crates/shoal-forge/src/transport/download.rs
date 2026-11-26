@@ -1,7 +1,6 @@
-//! Files fetched from a forge's web host, such as an image in a description,
-//! through curl with the account's token passed on stdin. It follows
-//! redirects to the storage that serves the file and sends the token only
-//! to the host it is for.
+//! Fetching a file from a forge's web host through curl. Curl follows
+//! redirects to the storage that serves the file and sends the token only to
+//! the host it is for.
 use anyhow::Result;
 use tokio::process::Command;
 

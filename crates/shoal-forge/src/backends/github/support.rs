@@ -1,4 +1,3 @@
-//! What GitHub supports.
 use crate::capability::{Support, Supports};
 use shoal_forge_types::{backends::github::GitHub, capability::Capability};
 

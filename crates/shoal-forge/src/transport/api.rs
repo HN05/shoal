@@ -1,6 +1,5 @@
-//! REST requests and how backends send them as an [`Account`]: through
-//! curl, with the account's token passed on stdin, never placed on a
-//! command line.
+//! Sending REST requests as an [`Account`] through curl, which reads the
+//! token on stdin, never on its command line.
 use std::{path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -112,7 +111,6 @@ impl Request {
         }
     }
 
-    /// Refuse a response longer than `bytes`.
     pub fn limited(mut self, bytes: usize) -> Self {
         self.max_bytes = bytes;
         self
@@ -157,12 +155,10 @@ impl Request {
 /// Sending requests and reading pages.
 #[shoal_forge_derive::extension(pub(crate) TransportRequests)]
 impl ForgeRepo {
-    /// The API endpoint for `path` under this repository.
     pub(crate) fn repo_endpoint(&self, path: &str) -> String {
         self.kind().repo_endpoint(self, path)
     }
 
-    /// The repository as the forge reports it.
     pub(crate) async fn read_repository(&self, account: &Account) -> Result<Value> {
         let endpoint = self.repo_endpoint("");
         let read = Request::get(endpoint.trim_end_matches('/').into());

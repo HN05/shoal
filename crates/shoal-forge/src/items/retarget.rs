@@ -1,4 +1,4 @@
-//! Change a PR's base branch, for stacked workspaces whose base PR merged.
+//! Changing a PR's base branch.
 use anyhow::{Context, Result};
 use shoal_refs::BranchName;
 

@@ -1,4 +1,3 @@
-//! GitLab's merges and reverts of PRs, and the branches they delete.
 use anyhow::{Context, Result};
 use serde_json::json;
 

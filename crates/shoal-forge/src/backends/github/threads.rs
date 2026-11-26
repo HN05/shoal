@@ -1,4 +1,4 @@
-//! GitHub review threads, which only its GraphQL API reports with their
+//! GitHub's review threads, which only its GraphQL API reports with their
 //! resolution.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};

@@ -1,5 +1,4 @@
-//! The repository's labels as the forge lists them, so agents can follow
-//! the scheme the repository describes in its label descriptions.
+//! A repository's labels as its forge lists them.
 use anyhow::Result;
 use serde_json::Value;
 

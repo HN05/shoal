@@ -1,4 +1,3 @@
-//! The users and teams GitHub can ask to review the repository's PRs.
 use anyhow::Result;
 
 use crate::{

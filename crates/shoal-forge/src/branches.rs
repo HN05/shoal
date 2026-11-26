@@ -1,5 +1,5 @@
-//! A repository's branches on its forge: listing them with the open PRs
-//! that join them, and checking one at the commit it was read at.
+//! A repository's branches on its forge, the open PRs that join them, and
+//! whether a branch is still at the commit it was read at.
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};

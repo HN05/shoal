@@ -1,5 +1,3 @@
-//! GitLab's branches, which it lists with their protection, and its merge
-//! requests by the branches they join.
 use anyhow::{Context, Result};
 use serde_json::Value;
 

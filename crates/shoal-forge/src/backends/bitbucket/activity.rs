@@ -1,4 +1,3 @@
-//! Bitbucket's item activity, PR status and item views.
 use anyhow::{Context, Result, bail};
 use serde_json::Value;
 

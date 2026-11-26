@@ -1,8 +1,5 @@
-//! Running a repository's CI jobs on this machine: the jobs waiting for a
-//! runner, the run each belongs to, registering and deleting the
-//! repository's runner, and the command of the forge's own runner that runs
-//! one job. Shoal decides which job runs when; the forge's runner runs its
-//! steps.
+//! Running a repository's CI jobs on this machine. Shoal decides which job
+//! runs when, and the forge's own runner runs its steps.
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},

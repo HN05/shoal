@@ -1,6 +1,4 @@
 //! Bitbucket Cloud: its REST shapes, and the credentials Shoal sends to it.
-//! Bitbucket has no official CLI to own a login, so requests sign in with
-//! the token the account's login for the host fetches.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, ensure};

@@ -1,4 +1,3 @@
-//! Forgejo items as its REST API reports them, for item views.
 use anyhow::{Context, Result};
 use serde_json::Value;
 

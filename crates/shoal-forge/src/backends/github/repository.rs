@@ -1,4 +1,3 @@
-//! GitHub's push access and forks.
 use anyhow::Result;
 
 use crate::{backends::github_rest, repo::Repositories, transport::account::Account};

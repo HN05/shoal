@@ -1,6 +1,4 @@
-//! Reviews of a PR: who it can ask, its review threads, its diff, and the
-//! reviews Shoal submits on it, a verdict, a body and comments on lines of
-//! its diff, checked against the diff before anything is sent.
+//! Reviews of a PR, and submitting one.
 pub mod diff;
 pub mod reviewers;
 pub mod thread;

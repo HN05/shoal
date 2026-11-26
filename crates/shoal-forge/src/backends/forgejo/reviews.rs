@@ -1,6 +1,5 @@
-//! Forgejo and Gitea reviews: the users and teams they can ask for one, replies
-//! in review threads, a PR's diff as the Git diff they serve, and a review with
-//! its line comments in one request.
+//! Forgejo's and Gitea's reviews, each posted with its line comments in one
+//! request.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 

@@ -1,5 +1,5 @@
-//! What an item's read reports about it besides its state, such as its
-//! title and labels, and the edits between two observations of it.
+//! What an item's read reports besides its state, and the edits between
+//! two reads.
 use serde::{Deserialize, Serialize};
 use shoal_refs::BranchName;
 

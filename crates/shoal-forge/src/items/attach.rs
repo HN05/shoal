@@ -1,6 +1,5 @@
-//! Files attached to a description or comment: the CLI checks them and points
-//! the body's references at them, and the daemon uploads them and shows each
-//! where the body references it, or after the body.
+//! Files attached to a description or comment, each shown where the body
+//! references it or else after the body.
 use std::{ops::Range, path::Path};
 
 use anyhow::{Context, Result, bail};

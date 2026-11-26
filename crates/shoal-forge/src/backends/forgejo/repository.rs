@@ -1,4 +1,3 @@
-//! Forgejo's push access and forks.
 use anyhow::Result;
 
 use crate::{

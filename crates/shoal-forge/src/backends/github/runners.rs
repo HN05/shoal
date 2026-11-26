@@ -1,6 +1,5 @@
-//! GitHub's self-hosted runners and `actions/runner`: the queued jobs of the
-//! repository's active runs, a run's event, and a just-in-time runner for
-//! each job, which takes one job its labels match and ends with it. GitHub
+//! Running a GitHub repository's jobs with a just-in-time `actions/runner`
+//! for each, which takes one job its labels match and ends with it. GitHub
 //! picks that job, so a job-started hook reports the run it belongs to and
 //! waits for the daemon when it is not the claimed one's.
 use shoal_forge_types::{

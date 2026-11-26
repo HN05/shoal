@@ -1,5 +1,4 @@
-//! An issue's or PR's content, status and discussion, read on request so
-//! callers need not know which forge serves it.
+//! An issue's or PR's content, status and discussion.
 use anyhow::Result;
 
 use crate::{

@@ -1,7 +1,5 @@
-//! Forgejo's runner API and `forgejo-runner`: the job search, a run's event,
-//! repository runners, `forgejo-runner one-job` on the host backend, the
-//! runner that took a job, and the runner protocol Shoal speaks as the
-//! repository's runner.
+//! Running a Forgejo repository's jobs with `forgejo-runner one-job` on the
+//! host backend.
 use shoal_forge_types::{
     ForgeRepo,
     ci::runner::{JobRun, Trigger, WaitingJob},

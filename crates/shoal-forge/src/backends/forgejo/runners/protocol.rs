@@ -1,7 +1,7 @@
-//! Forgejo's runner protocol, which Shoal speaks as the repository's runner
-//! it registered, with that runner's UUID and token: reporting a job it
-//! runs cancelled. Forgejo keeps a finished task's result, so the runner's
-//! own report of the stop that follows changes nothing.
+//! Reporting a job cancelled through Forgejo's runner protocol, as the
+//! runner Shoal registered for the repository. Forgejo keeps a finished
+//! task's result, so the runner's own report of the stop that follows
+//! changes nothing.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use shoal_forge_types::{ForgeRepo, numbers::JobId, raw::HttpMethod};

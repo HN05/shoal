@@ -1,4 +1,3 @@
-//! GitLab's CI checks on a commit, the actions on their jobs and their logs.
 use anyhow::{Result, bail};
 use serde_json::Value;
 

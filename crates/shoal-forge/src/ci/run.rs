@@ -1,6 +1,4 @@
-//! Starting a CI workflow run on a branch, as the workspace's agent account.
-//! A started run is a new run, not a rerun of a PR's checks; only a run on
-//! the PR's head commit reports checks there.
+//! Starting a CI workflow run on a branch.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result, ensure};

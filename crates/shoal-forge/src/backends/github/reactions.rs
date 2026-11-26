@@ -1,4 +1,3 @@
-//! GitHub's reactions on items and comments.
 use anyhow::Result;
 use serde_json::Value;
 

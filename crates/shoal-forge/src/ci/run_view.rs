@@ -1,5 +1,4 @@
-//! Reading CI workflow runs: one run with its jobs and their logs, or the
-//! newest runs of a branch or workflow, as the workspace's agent account.
+//! Reading CI workflow runs and their jobs.
 use anyhow::{Context, Result, bail, ensure};
 use futures_util::StreamExt;
 use shoal_refs::CommitId;

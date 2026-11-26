@@ -1,5 +1,5 @@
-//! Forgejo review threads, which its API reports only as reviews' inline
-//! comments; Shoal groups them as its web UI does.
+//! Forgejo's review threads. Its API reports only reviews' inline comments,
+//! so Shoal groups them into threads as its web UI does.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};

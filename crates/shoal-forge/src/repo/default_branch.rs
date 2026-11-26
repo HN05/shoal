@@ -1,4 +1,3 @@
-//! The branch a repository's forge reports as its default.
 use anyhow::{Context, Result};
 
 use crate::{

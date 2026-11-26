@@ -1,5 +1,4 @@
-//! The reactions a repository's forge allows, so a client can offer them
-//! before it reacts.
+//! The reactions a repository's forge allows.
 use anyhow::Result;
 
 use crate::{

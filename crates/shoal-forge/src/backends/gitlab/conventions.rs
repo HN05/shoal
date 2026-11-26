@@ -1,4 +1,3 @@
-//! GitLab's description templates, labels and milestones.
 use serde_json::Value;
 
 use super::GitLab;

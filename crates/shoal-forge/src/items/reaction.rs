@@ -1,5 +1,4 @@
-//! Reactions on an issue, a PR or one of their comments: read for item
-//! views, and added or removed as the acting account's own.
+//! Reactions on an issue, a PR or one of their comments.
 pub mod allowed;
 
 use anyhow::{Context, Result};

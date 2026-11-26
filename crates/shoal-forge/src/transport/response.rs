@@ -1,5 +1,4 @@
-//! A forge's HTTP response as a transport reads it: the status, the headers
-//! that precede the body, and the body as text or, for a file, as bytes.
+//! A forge's HTTP response as a transport reads it.
 use std::ops::Range;
 
 use anyhow::{Context, Result, bail};

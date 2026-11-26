@@ -1,5 +1,5 @@
 //! Changes to an issue or PR, planned as the REST requests each forge needs
-//! and applied in order, stopping at the first failure.
+//! and sent in order, stopping at the first failure.
 use std::borrow::Cow;
 
 use anyhow::{Context, Result, ensure};

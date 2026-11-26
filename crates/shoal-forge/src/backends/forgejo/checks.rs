@@ -1,4 +1,3 @@
-//! Forgejo's CI checks on a commit, the actions on their jobs and their logs.
 use anyhow::Result;
 
 use super::{Forgejo, actions};

@@ -1,8 +1,5 @@
-//! Which forge a host serves. Hosts outside the well-known names are asked
-//! through each forge's version or metadata endpoint; the caller decides
-//! what it already knows, such as a configured type or an earlier answer,
-//! and this process remembers each answer so that parsing a link of the
-//! host later picks the same forge.
+//! Asking a host which forge it serves. The caller decides what it already
+//! knows, such as a configured type or an earlier answer.
 use std::future::Future;
 
 use anyhow::{Result, anyhow};

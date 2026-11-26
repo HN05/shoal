@@ -1,5 +1,4 @@
-//! Open issues and PRs through the forge's REST API, and find a branch's
-//! open PR.
+//! Opening issues and PRs, and finding a branch's open PR.
 use anyhow::{Context, Result};
 use serde_json::Value;
 use shoal_refs::{BranchName, CommitId};

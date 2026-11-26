@@ -1,5 +1,5 @@
-//! The comments of an issue or PR: finding one among its discussion and
-//! inline comments, and replacing the body of one the acting login wrote.
+//! Finding a comment of an issue or PR, and replacing the body of one the
+//! acting login wrote.
 use anyhow::{Result, bail, ensure};
 
 use crate::{

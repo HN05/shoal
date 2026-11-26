@@ -1,5 +1,3 @@
-//! GitLab's issues and PRs: reading, listing, opening, editing and commenting
-//! on them, and finding a PR by its head.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use shoal_refs::BranchName;

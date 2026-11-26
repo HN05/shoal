@@ -1,5 +1,5 @@
 //! Reading an issue or PR as one REST read reports it, in the same shape for
-//! every forge: what an action returns and what planning an action reads.
+//! every forge.
 use anyhow::{Result, ensure};
 use serde_json::Value;
 

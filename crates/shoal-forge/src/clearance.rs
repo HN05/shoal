@@ -1,6 +1,5 @@
-//! Whether an issue, PR or CI run that blocks work has cleared: an issue
-//! once it closes, a PR once it merges or closes, and a CI run once it, or a
-//! run of its workflow on the default branch that started after it, passes.
+//! Whether an issue, PR or CI run that blocks work has cleared.
+//! `docs/design/progress.md` says when each clears.
 use std::collections::HashMap;
 
 use anyhow::Result;

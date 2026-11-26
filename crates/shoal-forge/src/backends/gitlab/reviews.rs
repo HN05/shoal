@@ -1,6 +1,5 @@
-//! GitLab reviews: a merge request's reviewers and discussions, its diff as the
-//! version GitLab keeps of it at a head commit, and a review as draft notes on
-//! it that GitLab publishes together with the body and the requested changes.
+//! GitLab's reviews, posted as draft notes that GitLab publishes together
+//! with the body and the requested changes.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::{Value, json};
 

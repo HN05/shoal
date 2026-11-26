@@ -1,4 +1,4 @@
-//! GitLab's push access, and the forks it opens no merge requests from.
+//! GitLab's push access.
 use anyhow::Result;
 
 use crate::{

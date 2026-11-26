@@ -1,6 +1,6 @@
-//! Forgejo's attached files, kept with the item or comment that shows them.
-//! The instance's attachment settings are checked before a comment or item
-//! is posted, since Forgejo takes its files only once it exists.
+//! Forgejo's attached files. Forgejo takes an item's or comment's files only
+//! once it exists, so the instance's attachment settings are checked before
+//! it is posted.
 use std::io::Read;
 
 use anyhow::{Context, Result, bail, ensure};

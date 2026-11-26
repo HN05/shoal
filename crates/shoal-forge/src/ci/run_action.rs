@@ -1,6 +1,5 @@
-//! Rerunning and cancelling one CI workflow run, by its web URL or the
-//! number in it, as the workspace's agent account. A PR's checks are acted
-//! on through [`shoal_forge_types::ci::CiAction`] on its head instead.
+//! Rerunning and cancelling one CI workflow run. A PR's checks are acted on
+//! through [`shoal_forge_types::ci::CiAction`] on its head instead.
 use anyhow::{Context, Result, ensure};
 
 use crate::{

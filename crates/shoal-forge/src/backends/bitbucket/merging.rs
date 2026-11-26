@@ -1,4 +1,3 @@
-//! Bitbucket's merges and reverts of PRs, and the branches they delete.
 use anyhow::Result;
 use serde_json::json;
 

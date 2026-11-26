@@ -1,4 +1,4 @@
-//! A PR's current state, CI checks and reviews, looked up on request.
+//! A PR's current state, CI checks and reviews.
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};

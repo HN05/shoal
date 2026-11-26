@@ -1,4 +1,3 @@
-//! What GitLab supports.
 use crate::capability::{self, Support, Supports};
 use shoal_forge_types::{backends::gitlab::GitLab, capability::Capability};
 

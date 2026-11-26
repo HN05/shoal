@@ -1,4 +1,3 @@
-//! GitHub's merges and reverts of PRs, and the branches they delete.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use shoal_refs::BranchName;

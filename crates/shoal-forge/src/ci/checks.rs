@@ -1,6 +1,4 @@
-//! CI checks on a commit as each forge reads them, acts on their jobs and
-//! serves their logs, and failed job logs resolved from a PR's current
-//! check, using its agent account.
+//! CI checks on a commit, the actions on their jobs, and their logs.
 pub(crate) mod plain;
 
 use anyhow::{Context, Result, ensure};

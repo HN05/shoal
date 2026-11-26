@@ -1,4 +1,3 @@
-//! Forgejo's reactions on items and comments.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 

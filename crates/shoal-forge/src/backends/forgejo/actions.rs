@@ -1,5 +1,4 @@
-//! Forgejo Actions: the runs that commit statuses link, the requests that
-//! rerun or cancel them, and the logs of failed jobs.
+//! Forgejo Actions, which a commit status links by its run's URL.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 use tokio::process::Command;

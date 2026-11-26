@@ -1,6 +1,4 @@
-//! GitHub reviews: the users and teams it can ask for one, replies to and
-//! resolutions of review threads, a PR's diff as the patches of its changed
-//! files, and a review with its line comments in one request.
+//! GitHub's reviews, each posted with its line comments in one request.
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 

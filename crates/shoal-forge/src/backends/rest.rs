@@ -1,5 +1,5 @@
-//! Reads shared by the forges Shoal reaches through their REST APIs; GitHub
-//! keeps its own activity reads.
+//! Reads that every forge but GitHub makes the same way through its REST
+//! API.
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};

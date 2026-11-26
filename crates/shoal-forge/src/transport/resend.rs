@@ -1,5 +1,5 @@
-//! Sending a request again after a failure that may pass, such as a dropped
-//! connection or a busy forge, where the request says that is safe.
+//! Sending a request again after a failure that may pass, where the request
+//! says that is safe.
 use std::{future::Future, time::Duration};
 
 use anyhow::Result;

@@ -1,5 +1,4 @@
-//! Who a PR can ask for a review, named as `pr edit --add-reviewer` takes
-//! them, so a client can offer the choices without knowing the forge.
+//! Who a PR can ask for a review.
 use anyhow::Result;
 
 use crate::{

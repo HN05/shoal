@@ -1,7 +1,6 @@
-//! GitHub's branches, which only its GraphQL API lists with their commits'
-//! times and only to a login, so an anonymous reader lists them through REST
-//! without those times; protected by a branch protection rule or a ruleset;
-//! and its PRs by the branches they join.
+//! GitHub's branches. Only its GraphQL API lists them with their commits'
+//! times, and only to a login, so an anonymous reader lists them through
+//! REST without those times.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 

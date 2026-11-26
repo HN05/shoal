@@ -1,5 +1,4 @@
-//! GitHub Actions: check runs on a commit, the jobs their URLs link, the
-//! requests that rerun or cancel them, and where their logs are.
+//! GitHub Actions, whose check runs link their jobs by URL.
 use anyhow::{Context, Result, bail, ensure};
 use serde_json::Value;
 

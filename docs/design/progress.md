@@ -59,9 +59,11 @@ without one, and goes with it. A space is blocked while a blocker of its own
 or one on every open step remains. One resolver serves queued launches and
 spaces: the item poll looks each forge blocker and each blocking run's
 workflow on the default branch up once, and a space blocker clears as
-admission decides for a launch. A CI run blocker clears once a later run of
-its workflow on the default branch passes, so a broken default branch that a
-merge fixes releases every agent it blocked without anyone touching them.
+admission decides for a launch. An issue blocker clears once the issue
+closes, and a PR blocker once the PR merges or closes. A CI run blocker clears
+once it passes, or a later run of its workflow on the default branch passes,
+so a broken default branch that a merge fixes releases every agent it blocked
+without anyone touching them.
 Becoming blocked is the one blocker event that notifies, through the path
 that reports `done`, so a coordinator learns of it once. A blocked agent has
 nothing to do, so once its turn ends Shoal stops it as an idle stop does and

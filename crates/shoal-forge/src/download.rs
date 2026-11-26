@@ -1,7 +1,5 @@
-//! Files the forge serves on its web host to signed-in users, such as the
-//! images and attachments in descriptions and comments of a private
-//! repository. Only URLs on the repository's own forge are fetched, so its
-//! login goes nowhere else.
+//! Files the forge serves on its web host to signed-in users. Only URLs on
+//! the repository's own forge are fetched, so its login goes nowhere else.
 use anyhow::{Context, Result, ensure};
 
 use crate::{

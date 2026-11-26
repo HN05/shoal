@@ -1,4 +1,3 @@
-//! GitHub's uploads and downloads of attached files.
 use anyhow::{Context, Result, ensure};
 
 use super::GitHub;

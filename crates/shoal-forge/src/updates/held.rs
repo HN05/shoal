@@ -1,5 +1,6 @@
-//! Passing CI checks held back while other checks on the PR's head are
-//! pending, so its agent wakes when a check fails or every check has passed.
+//! Holding back passing CI checks while other checks on the PR's head are
+//! pending, so that its agent wakes when a check fails or every check has
+//! passed.
 use serde::{Deserialize, Serialize};
 use shoal_refs::CommitId;
 

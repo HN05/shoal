@@ -1,5 +1,4 @@
-//! What each forge does its own way with workflow runs: starting, listing and
-//! reading them and their jobs, and acting on them.
+//! What each forge does its own way with workflow runs.
 use anyhow::Result;
 use serde_json::Value;
 

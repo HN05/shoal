@@ -1,5 +1,4 @@
-//! What an issue, PR or CI run shows now, read across items, reviews and CI:
-//! the snapshots watches compare, a PR's status and item views.
+//! What an issue, PR or CI run shows now.
 pub mod status;
 pub mod view;
 

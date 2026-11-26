@@ -1,4 +1,3 @@
-//! Forgejo's branches, which it lists with their protection.
 use anyhow::Result;
 use serde_json::Value;
 

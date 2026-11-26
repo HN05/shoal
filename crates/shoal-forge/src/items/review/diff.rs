@@ -1,5 +1,5 @@
-//! A PR's diff as the lines its hunks show, so a review's line comments
-//! are checked against it before anything is posted.
+//! A PR's diff as the lines its hunks show, which a review's line comments
+//! are checked against before anything is posted.
 use anyhow::{Context, Result, bail, ensure};
 
 use crate::{

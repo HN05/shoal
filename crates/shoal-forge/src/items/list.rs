@@ -1,5 +1,4 @@
-//! Issues and PRs a repository lists: those a search matches, or the open
-//! ones for choosing one interactively.
+//! Listing the issues and PRs a search matches.
 use anyhow::Result;
 
 use crate::{capability::CapabilityRequests, items::Items, transport::account::Account};

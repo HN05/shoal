@@ -1,4 +1,3 @@
-//! The users and teams Forgejo can ask to review the repository's PRs.
 use anyhow::{Context, Result};
 
 use crate::{

@@ -1,4 +1,3 @@
-//! Forgejo's item activity, PR status and item views.
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 

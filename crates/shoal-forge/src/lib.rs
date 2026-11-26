@@ -1,7 +1,6 @@
-//! Issues, PRs, review threads and CI on the forge a Git remote names,
-//! through each forge's own CLI login or REST API. Callers choose the
-//! [`transport::account::Account`] a request acts as; this crate never decides
-//! who may act.
+//! Requests to the forge a Git remote names. Callers choose the
+//! [`transport::account::Account`] a request acts as; this crate never
+//! decides who may act.
 
 /// Run `$body` with `$backend` bound to the backend `$kind` names. The
 /// traits of what forges do their own way forward their methods through it,

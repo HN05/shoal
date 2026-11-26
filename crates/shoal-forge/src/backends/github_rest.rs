@@ -1,4 +1,4 @@
-//! GitHub's REST shapes, which Forgejo and Gitea serve too; each forge
+//! GitHub's REST shapes, which Forgejo and Gitea serve too. Each forge
 //! implements [`GitHubShapes`] for what it serves its own way.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};

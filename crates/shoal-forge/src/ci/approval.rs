@@ -1,6 +1,4 @@
-//! CI runs a forge holds until a maintainer approves them, as it does for
-//! the PRs of forks and first-time contributors, and approving them with the
-//! account the caller passes, which is the user's.
+//! Approving the CI runs a forge holds until a maintainer approves them.
 use anyhow::{Context, Result, ensure};
 use shoal_forge_types::{
     ForgeRepo,

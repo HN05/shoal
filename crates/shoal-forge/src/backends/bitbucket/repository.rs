@@ -1,4 +1,3 @@
-//! Bitbucket's push access, forks and default branch.
 use anyhow::Result;
 use serde_json::Value;
 

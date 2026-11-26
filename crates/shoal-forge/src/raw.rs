@@ -1,6 +1,5 @@
-//! Any request to the forge's API, for reads no other operation covers.
-//! Whether a caller may send one that changes something is the caller's
-//! decision.
+//! Any request to the forge's API, for reads no other operation covers. The
+//! caller decides whether a request that changes something may go.
 use anyhow::Result;
 use serde_json::Value;
 

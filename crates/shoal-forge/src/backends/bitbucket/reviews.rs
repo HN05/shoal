@@ -1,6 +1,5 @@
-//! Bitbucket Cloud reviews: a pull request's reviewers and comment threads, its
-//! diff as the Git diff Bitbucket serves between two commits, and a review as a
-//! comment for each line, then the body, then the verdict.
+//! Bitbucket Cloud's reviews. It takes a review as a comment for each line,
+//! then the body, then the verdict.
 use anyhow::{Context, Result};
 use serde_json::{Value, json};
 

@@ -1,7 +1,6 @@
-//! GitHub activity, PR status and item views, read through its REST API, which
-//! answers repeated reads as unchanged and reports its rate limit. Snapshots
-//! key, fingerprint and name what they record as they did when `gh` read it
-//! through GraphQL, so snapshots saved then read as unchanged.
+//! GitHub's item activity, read through its REST API, which answers a
+//! repeated read as unchanged. Snapshots key, fingerprint and name what they
+//! record in the shape of GitHub's GraphQL API, which stored snapshots hold.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 
@@ -164,7 +163,8 @@ async fn open_checks(
     Some(checks(repo, account, pull).await)
 }
 
-/// The item's discussion comments, by the GraphQL node IDs `gh` reported.
+/// The item's discussion comments, keyed by their GraphQL node IDs as
+/// stored snapshots key them.
 async fn discussion(
     repo: &ForgeRepo,
     account: &Account,
@@ -300,8 +300,8 @@ fn entries(items: &[Value], id_field: &str) -> Result<Vec<(String, Entry)>> {
         .collect()
 }
 
-/// The fingerprint of a comment or review with ID `id`; `gh` never set
-/// `lastEditedAt`, which snapshots saved from its reports still hold.
+/// The fingerprint of a comment or review with ID `id`. It keeps
+/// `lastEditedAt` null, as stored snapshots hold it.
 fn comment_fingerprint(id: &Value, item: &Value) -> String {
     json!({
         "id": id,

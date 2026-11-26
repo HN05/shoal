@@ -1,5 +1,3 @@
-//! Bitbucket's workflow runs: starting, listing and reading them and their
-//! jobs, and acting on them.
 use anyhow::Result;
 use serde_json::{Value, json};
 

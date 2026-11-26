@@ -40,8 +40,7 @@ use shoal_forge_types::{
     numbers::{IssueNumber, PullNumber},
 };
 
-/// How the forge reads, lists, opens, edits and comments on issues
-/// and PRs, and finds a PR by its head.
+/// What each forge does its own way with issues and PRs.
 #[shoal_forge_derive::forwarded(ForgeKind, dispatch)]
 pub(crate) trait Items: Backend {
     /// The REST collection PRs are under.
@@ -141,10 +140,8 @@ pub(crate) trait Items: Backend {
     /// The requests that change `current` as `edit` says, in order.
     fn edit(&self, repo: &ForgeRepo, current: &Current, edit: &Edit) -> Result<Vec<Request>>;
 
-    /// Post `body` as a comment on the item.
     fn comment(&self, repo: &ForgeRepo, item: &Item, body: &str) -> Request;
 
-    /// Close or reopen the item.
     fn set_state(&self, repo: &ForgeRepo, item: &Item, state: ItemState) -> Result<Request>;
 
     /// Where activity records a posted comment: its source, and the
@@ -170,10 +167,8 @@ pub(crate) trait Items: Backend {
     /// in the response.
     fn branch_read(&self, repo: &ForgeRepo, branch: &str) -> (Request, &'static str);
 
-    /// The request that opens `pull`.
     fn new_pull(&self, repo: &ForgeRepo, pull: &NewPull) -> Request;
 
-    /// The request that opens `issue`.
     fn new_issue(&self, repo: &ForgeRepo, issue: &NewIssue) -> Request;
 
     /// Whether a new issue's labels are added after opening it, because

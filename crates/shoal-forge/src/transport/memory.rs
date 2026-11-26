@@ -1,7 +1,6 @@
-//! What a long-lived caller, such as Shoal's daemon, remembers about one
-//! account's forge responses between requests: the last body of each read,
-//! with the validators that let the forge answer `304 Not Modified` instead
-//! of sending it again, and until when each forge limits its requests.
+//! What a long-lived caller remembers of one account's forge responses: the
+//! last body of each read, with the validators that let the forge answer
+//! `304 Not Modified`, and until when each forge limits its requests.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

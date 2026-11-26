@@ -1,4 +1,3 @@
-//! Forgejo's description templates, labels and milestones.
 use anyhow::Result;
 use serde_json::Value;
 

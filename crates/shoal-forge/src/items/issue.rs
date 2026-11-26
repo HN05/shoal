@@ -1,4 +1,4 @@
-//! Look up issue state.
+//! Reading an issue's details and blockers.
 use anyhow::{Result, ensure};
 
 use crate::{RepoRequests, items::Items, transport::account::Account};

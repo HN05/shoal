@@ -1,8 +1,7 @@
-//! Which runner took a job Shoal's runner claimed by its handle. Forgejo
-//! names the runner of a job only in the first line of its log, which
-//! `forgejo-runner` writes as it takes the job's task: `Runner <UUID>
-//! (version:…) received task …`. A log that does not start so names no
-//! runner yet.
+//! Which runner took a job Shoal's runner claimed. Forgejo names a job's
+//! runner only in the first line of its log, which `forgejo-runner` writes
+//! as it takes the task: `Runner <UUID> (version:…) received task …`. A log
+//! that does not start so names no runner yet.
 use anyhow::Result;
 use serde_json::Value;
 use shoal_forge_types::{ForgeRepo, ci::runner::WaitingJob};

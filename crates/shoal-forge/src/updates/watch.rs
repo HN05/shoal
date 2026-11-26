@@ -1,5 +1,5 @@
 //! What a watch last saw of an item, and the updates delivered from it that
-//! are not acknowledged yet, which the caller stores apart so reading them
+//! are not acknowledged yet. The caller stores those apart, so reading them
 //! reads none of the item's history.
 use std::collections::BTreeSet;
 

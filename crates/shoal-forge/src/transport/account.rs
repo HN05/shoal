@@ -1,5 +1,4 @@
-//! Whose credentials a forge request uses: the user's own tokens, or an
-//! agent's, which the caller chooses and describes.
+//! Whose credentials a forge request uses.
 use std::collections::HashMap;
 
 use anyhow::{Result, bail, ensure};
@@ -83,7 +82,6 @@ pub struct Account {
 }
 
 impl Account {
-    /// The user's tokens.
     pub fn user(logins: Logins) -> Self {
         Self {
             logins,

@@ -1,6 +1,5 @@
-//! Bitbucket's branches, which its branch restrictions protect from
-//! deletion by a pattern or by their kind in the branching model, and its
-//! PRs by the branches they join.
+//! Bitbucket's branches. Its branch restrictions protect a branch from
+//! deletion by a pattern or by the branch's kind in the branching model.
 use anyhow::{Context, Result};
 use serde_json::Value;
 

@@ -1,5 +1,4 @@
-//! Rerunning failed and cancelling running CI jobs on a PR's current head,
-//! as the workspace's agent account.
+//! Rerunning failed and cancelling running CI jobs on a PR's current head.
 pub mod approval;
 pub mod checks;
 pub mod run;

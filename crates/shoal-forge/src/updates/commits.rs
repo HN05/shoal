@@ -1,5 +1,5 @@
-//! A commit a snapshot may lack, such as an issue's head, stored as the
-//! empty text it was stored as before commits had a type of their own.
+//! A commit a snapshot may lack, such as an issue's head, stored as empty
+//! text.
 use serde::{Deserialize, Deserializer, Serializer};
 use shoal_refs::CommitId;
 

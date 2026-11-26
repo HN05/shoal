@@ -1,6 +1,4 @@
-//! An issue, PR or CI run, parsed once from the URL or number that names it
-//! and passed on from there. Each serializes and stores as the text it was
-//! parsed from, its canonical URL or the number.
+//! The forge an item reference's host serves.
 
 use anyhow::Result;
 

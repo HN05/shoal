@@ -1,6 +1,6 @@
-//! GitLab's attached files, uploaded to the project. Its web routes for a
-//! file uploaded to a project or group, such as an image in a description,
-//! take no access token, while the API serves the same file to a member.
+//! GitLab's attached files, uploaded to the project. Its web routes for an
+//! uploaded file take no access token, so downloads read the same file
+//! through the API.
 use anyhow::{Context, Result, ensure};
 
 use super::GitLab;

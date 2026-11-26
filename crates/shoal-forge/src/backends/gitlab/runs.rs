@@ -1,5 +1,3 @@
-//! GitLab's workflow runs: starting, listing and reading them and their jobs,
-//! and acting on them.
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
 use shoal_refs::CommitId;

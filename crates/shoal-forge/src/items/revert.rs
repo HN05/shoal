@@ -1,5 +1,5 @@
-//! Revert a merged PR: through a forge that opens the revert itself, or
-//! with what reverting its merge with Git needs.
+//! Reverting a merged PR through the forge, or reading what a revert with
+//! Git needs.
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 

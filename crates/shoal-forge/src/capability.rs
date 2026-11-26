@@ -1,6 +1,5 @@
-//! What each forge supports. Each forge declares its capabilities, and a
-//! request that needs one the forge lacks is refused before anything is sent,
-//! with one error that names the forge and what it lacks.
+//! What each forge supports. A request that needs a capability the forge
+//! lacks is refused before anything is sent.
 use anyhow::Result;
 
 use crate::transport::account::Account;

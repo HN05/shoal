@@ -1,6 +1,4 @@
-//! What each forge does its own way in sending a request: where it goes,
-//! how it signs in, how it fails and how lists page. Each forge implements
-//! [`Backend`] in its module under `backends`.
+//! What each forge does its own way in sending a request.
 use anyhow::Result;
 use serde_json::Value;
 

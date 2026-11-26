@@ -1,4 +1,4 @@
-//! What Forgejo, and Gitea, support, release by release.
+//! What Forgejo and Gitea support, release by release.
 use anyhow::Result;
 
 use super::version;

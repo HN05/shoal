@@ -1,4 +1,4 @@
-//! Assigning an issue to the account that works on it, and taking that
+//! Assigning an issue to the account that works it, and taking that
 //! assignment back.
 use anyhow::{Context, Result};
 
