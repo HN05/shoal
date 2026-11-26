@@ -20,7 +20,7 @@ use crate::{
     paths::Paths,
 };
 
-/// Held from startup through shutdown or handoff; dropping it removes the
+/// Held from startup through shutdown or handoff. Dropping it removes the
 /// socket. Never unlink the lock file: waiters must all lock the same inode.
 pub struct Ownership {
     paths: Paths,
@@ -30,8 +30,8 @@ pub struct Ownership {
 }
 
 impl Ownership {
-    /// Lock the state directory, taking over a handoff's lock and listener
-    /// or opening the lock file and clearing a stale socket.
+    /// Takes over a handoff's lock and listener, or else opens the lock file
+    /// and clears a stale socket.
     pub fn acquire(paths: &Paths, managed: bool, handoff: Option<Handoff>) -> Result<Self> {
         let (lock, inherited) = match handoff {
             Some(handoff) => {
@@ -56,7 +56,7 @@ impl Ownership {
         })
     }
 
-    /// Accept clients on the inherited listener or a newly bound socket.
+    /// Uses the inherited listener or binds a new socket.
     pub fn listen(&mut self) -> Result<UnixListener> {
         let listener = match self.inherited.take() {
             Some(listener) => UnixListener::from_std(listener).context("inherit daemon socket")?,
@@ -66,8 +66,8 @@ impl Ownership {
         Ok(listener)
     }
 
-    /// Replace this process with the daemon at `path`, passing it the lock
-    /// and listener; returns only when exec fails.
+    /// Replaces this process with the daemon at `path`, passing it the lock
+    /// and listener. Returns only when exec fails.
     pub fn hand_off(&self, path: &Path, listener: &UnixListener) -> Result<()> {
         daemon_handoff::exec(path, &self.paths, listener, &self.lock)
     }

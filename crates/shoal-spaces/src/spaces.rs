@@ -1,5 +1,5 @@
-//! Spaces: workspaces and chats, which share one namespace of IDs and names,
-//! so a request naming a space acts on whichever of them it names.
+//! Workspaces and chats share one namespace of IDs, so a request that names
+//! a space acts on whichever kind it names.
 use anyhow::Result;
 use rusqlite::OptionalExtension as _;
 use shoal_ids::repository_ids::RepositoryId;
@@ -8,7 +8,6 @@ use shoal_protocol::space_names::SpaceName;
 
 use crate::model::SpaceKind;
 
-/// The kind of the space `id`, while it exists.
 pub fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceKind>> {
     Ok(db
         .query_row("SELECT kind FROM spaces WHERE id=?1", [id], |row| {
@@ -17,7 +16,6 @@ pub fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Spac
         .optional()?)
 }
 
-/// The name of the space `id`, while it exists.
 pub fn space_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceName>> {
     Ok(db
         .query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
@@ -26,7 +24,6 @@ pub fn space_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Spac
         .optional()?)
 }
 
-/// The IDs of every space, a workspace's or a chat's.
 pub fn space_ids(db: &rusqlite::Connection) -> Result<std::collections::HashSet<SpaceId>> {
     Ok(db
         .prepare("SELECT id FROM spaces")?
@@ -34,7 +31,7 @@ pub fn space_ids(db: &rusqlite::Connection) -> Result<std::collections::HashSet<
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The IDs of the workspaces of `repository`, or of every workspace.
+/// Of every workspace when `repository` is `None`.
 pub fn workspace_ids(
     db: &rusqlite::Connection,
     repository: Option<&RepositoryId>,

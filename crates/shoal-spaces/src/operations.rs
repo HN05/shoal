@@ -9,8 +9,7 @@ use shoal_protocol::{protocol::operations::OperationSpec, space_names::SpaceSele
 use crate::Spaces;
 
 impl Spaces {
-    /// Start `spec` in a worker that acts with `caller`'s scope, in `env`
-    /// when given, returning the operation's ID. The scope check already
+    /// The worker acts with `caller`'s scope. The scope check already
     /// narrowed a scoped caller's workspace to an ID. A move starts with its
     /// own request.
     pub async fn start_operation(

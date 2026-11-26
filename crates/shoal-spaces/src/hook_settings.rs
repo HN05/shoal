@@ -1,5 +1,4 @@
-//! The executables and environment of a space's hooks, which its settings
-//! name and configure.
+//! The executables and environment of a space's hooks.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -16,7 +15,6 @@ use crate::{
 };
 
 impl Spaces {
-    /// [`Self::workspace_hook`] of the workspace `selector` names.
     pub async fn selected_workspace_hook(
         &self,
         daemon: &dyn Daemon,
@@ -27,8 +25,7 @@ impl Spaces {
         self.workspace_hook(daemon, &workspace, kind).await
     }
 
-    /// A hook's executable from the resolved settings, in the directory it
-    /// runs from.
+    /// Resolves the executable in the directory the hook runs from.
     pub async fn workspace_hook(
         &self,
         daemon: &dyn Daemon,
@@ -44,8 +41,8 @@ impl Spaces {
         let repository = daemon
             .repository(crate::repository::Selector::from(workspace.repository()))
             .await?;
-        // The caller renders the hook's [env], whose caches only the daemon
-        // creates, with the temporary directory, which is gone after removal.
+        // The caller renders the hook's [env] with the temporary directory,
+        // which is gone after removal. Only the daemon creates its caches.
         crate::caches::directories(&repository, &settings.caches)?;
         if !matches!(kind, HookKind::PostRemove) {
             shoal_core::tmp_dirs::directory(&repository, &workspace.id)?;
@@ -61,10 +58,9 @@ impl Spaces {
         ))
     }
 
-    /// What `[env]` of `settings` and the temporary directory of `space`,
-    /// created when missing, add to the environment of its hooks, which act
-    /// in the repository `repository`: its own, or the registered one a chat
-    /// without one acts in, or none.
+    /// Creates the temporary directory when it is missing. `repository` is
+    /// the space's own, the registered one a chat without one acts in, or
+    /// none.
     pub async fn hook_environment<P: Part>(
         &self,
         daemon: &dyn Daemon,
@@ -75,9 +71,8 @@ impl Spaces {
         (self.environment_from_settings(daemon, space, repository, settings, true)).await
     }
 
-    /// What `[env]` adds to the environment of the post-remove hook, which
-    /// runs once the temporary directory is gone and so keeps the inherited
-    /// `TMPDIR`.
+    /// The post-remove hook runs once the temporary directory is gone, so it
+    /// keeps the inherited `TMPDIR`.
     pub async fn removed_workspace_environment(
         &self,
         daemon: &dyn Daemon,
@@ -132,7 +127,7 @@ impl Spaces {
     }
 }
 
-/// Refuse a lease hook while the worktree file, which may name it, is
+/// Refuses a lease hook while the worktree file, which may name it, is
 /// `rejected`: a lease is kept until its release hook ran, so leases neither
 /// come nor go without the file. Other hooks go with the ignored file.
 fn ensure_lease_hook_readable(kind: HookKind, rejected: Option<&str>) -> Result<()> {

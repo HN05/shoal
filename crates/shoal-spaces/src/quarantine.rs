@@ -1,5 +1,5 @@
-//! The operations a daemon left unfinished when it stopped, which the next
-//! one quarantines at startup, while it holds the startup lock and before it
+//! The operations a stopped daemon left unfinished, which the next one
+//! quarantines at startup while it holds the startup lock and before it
 //! audits or serves anything.
 use std::sync::Arc;
 
@@ -11,15 +11,13 @@ use crate::daemon::Records;
 use crate::state::WorkspaceState;
 
 impl Spaces {
-    /// Mark the operations a stopped daemon left running as interrupted, in
-    /// one transaction of its own, after the store's migration.
+    /// Runs in one transaction of its own, after the store's migration.
     pub async fn interrupted_operations(&self) -> Result<()> {
         interrupted_operations(&self.store, self.records.clone()).await
     }
 }
 
-/// Mark the operations a stopped daemon left running in `store` as
-/// interrupted, those other subsystems record through `records`, in one
+/// Also marks what other subsystems record, through `records`, in the same
 /// transaction of its own.
 pub async fn interrupted_operations(store: &Store, records: Arc<dyn Records>) -> Result<()> {
     store

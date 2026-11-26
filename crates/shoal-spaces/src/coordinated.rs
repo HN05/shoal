@@ -1,10 +1,7 @@
-//! Spaces whose coordinator does their work itself: workspaces in which no
-//! agent of their own has started, as a split child before `shoal start`
-//! gives it one, which the workspace's unrecorded mode tells, and chats
-//! whose agent stopped. The coordinator's subagents work there from inside
-//! its agent, reporting under its scope from its directory, so Shoal cannot
-//! tell which such workspace a subagent works in; each counts as its
-//! coordinator's work, and a stopped chat's work is left to it.
+//! Spaces whose coordinator does their work: workspaces where no agent of
+//! their own has started, and chats whose agent stopped. Shoal cannot tell
+//! which such workspace a coordinator's subagent works in, so each counts as
+//! its coordinator's work. See `docs/design/spaces.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::daemon::Records;
@@ -20,8 +17,6 @@ use crate::{
 };
 
 impl Spaces {
-    /// Fill in, for each workspace among `spaces` whose coordinator does
-    /// its work, the turn state that coordinator's agent reports.
     pub async fn load_coordinator_states(
         &self,
         daemon: &dyn Daemon,
@@ -44,12 +39,11 @@ impl Spaces {
         Ok(())
     }
 
-    /// Whether the agent of the coordinator that does the work of the space
-    /// `id` runs, in any turn state, since its subagents may work on past
-    /// its turn: one here, or above it on another machine with an agent,
-    /// whatever that machine's link, as the hub lists it; while the hub
-    /// cannot be asked, a space with a parent elsewhere counts as worked
-    /// on, so cleanup never takes it unknowing.
+    /// Counts the agent in any turn state, since its subagents may work on
+    /// past its turn. A coordinator above on another machine counts too,
+    /// whatever that machine's link, as the hub lists it. While the hub
+    /// cannot be asked, a space with a parent elsewhere counts as worked on,
+    /// so cleanup never takes it unknowing.
     pub async fn coordinator_runs(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         let agents = self.tracked_agents(daemon).await;
         let owned = id.to_owned();
@@ -72,8 +66,6 @@ impl Spaces {
     }
 }
 
-/// The turn state the agent of the coordinator that does the work of
-/// workspace `id` reports.
 fn coordinator_state(
     db: &Connection,
     records: &dyn Records,
@@ -86,19 +78,16 @@ fn coordinator_state(
     records.agent_state(db, &coordinator)
 }
 
-/// Who does the work of a space.
 enum Working {
-    /// An agent of its own has started there.
     Own,
-    /// The coordinator here, the nearest space above with an agent.
+    /// The nearest space above here with an agent.
     Here(SpaceId),
     /// None here does; one above on another machine may.
     Above,
 }
 
-/// Who does the work of the space `id`: its coordinator while no agent of
-/// its own works there, as none has started in the workspace, or the chat's
-/// has stopped.
+/// The coordinator works while no agent of the space's own does: none
+/// started in the workspace, or the chat's stopped.
 fn working_coordinator(db: &Connection, id: &SpaceId, agents: &TrackedAgents) -> Result<Working> {
     let kind: Option<(SpaceKind, bool)> = db
         .query_row(

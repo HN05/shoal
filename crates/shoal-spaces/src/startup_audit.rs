@@ -1,6 +1,6 @@
 //! The startup audit of workspace ownership, and the cleanup sweep's
-//! recheck of the workspaces it failed, which a worktree on a volume that
-//! mounted late, or whose file access stalled, recovers through.
+//! recheck of the workspaces it failed, through which a worktree on a
+//! volume that mounted late, or whose file access stalled, recovers.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -11,12 +11,13 @@ use crate::{
     {log, workspace::VerifiedWorktree},
 };
 
-/// How the startup audit's workspace errors begin, which the recheck looks for.
+/// How the startup audit's workspace errors begin, which the recheck looks
+/// for.
 pub const STARTUP_OWNERSHIP_FAILURE: &str = "startup ownership check failed";
 
 impl Spaces {
-    /// Startup audit never deletes work, releases leases, or assumes unknown
-    /// executions are dead. Invalid ready workspaces are quarantined as failed.
+    /// Never deletes work, releases leases, or assumes unknown executions are
+    /// dead. Invalid ready workspaces are quarantined as failed.
     pub async fn audit_worktrees(&self, daemon: &dyn Daemon) -> Result<()> {
         for workspace in self.list_workspaces().await? {
             if workspace.state != WorkspaceState::Ready {
@@ -48,9 +49,10 @@ impl Spaces {
         Ok(())
     }
 
-    /// Make each workspace the startup audit failed ready again once its
+    /// Makes ready again each workspace the startup audit failed once its
     /// worktree verifies. Other failures, such as a failed setup, stay for
-    /// the user, and a repository whose Git gate is busy waits for the next pass.
+    /// the user. A repository whose Git gate is busy waits for the next
+    /// pass.
     pub async fn recheck_startup_failures(&self, daemon: &dyn Daemon) -> Result<()> {
         for workspace in self.list_workspaces().await? {
             if !failed_at_startup(&workspace) {
@@ -85,7 +87,8 @@ impl Spaces {
         let previous = self
             .reserve_lifecycle(&workspace.id, WorkspaceState::Reconciling)
             .await?;
-        // Another operation may have changed the workspace since it was listed.
+        // Another operation may have changed the workspace since it was
+        // listed.
         let current = self.workspace_by_id(&workspace.id).await?;
         let mut listed = current.clone();
         listed.state = previous;
@@ -111,7 +114,7 @@ impl Spaces {
     }
 }
 
-/// Whether the startup audit failed the workspace and nothing changed it since.
+/// True only while nothing changed the workspace since the audit failed it.
 fn failed_at_startup(workspace: &Workspace) -> bool {
     workspace.state == WorkspaceState::Failed
         && workspace

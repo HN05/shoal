@@ -1,5 +1,5 @@
-//! Completion cleanup: the sweep that removes completed spaces and the
-//! spaces below them, which a completion only signals.
+//! The sweep that removes completed spaces and the spaces below them. A
+//! completion only signals it.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -13,8 +13,9 @@ use crate::{
 };
 
 impl Spaces {
-    /// A completion without cleanup also blocks older PR watches. A completion
-    /// must never authorize removal of a later revision of the assignment.
+    /// A completion without cleanup also blocks older PR watches. A
+    /// completion must never authorize removal of a later revision of the
+    /// assignment.
     pub async fn completion_allows_cleanup(
         &self,
         daemon: &dyn Daemon,
@@ -33,8 +34,8 @@ impl Spaces {
         Ok(true)
     }
 
-    /// Each space's PR gate is held only while that space is handled. A
-    /// space below a completed one goes by that completion.
+    /// Holds each space's PR gate only while it handles that space. A space
+    /// below a completed one goes by that completion.
     pub async fn sweep_completed(&self, daemon: &dyn Daemon) -> Result<()> {
         // A failure in one space, such as an unreadable completion of its
         // ancestor, does not skip the others.
@@ -47,7 +48,6 @@ impl Spaces {
         failed.into_result()
     }
 
-    /// Remove `listed` for its own completion or a completed ancestor's.
     async fn sweep_completed_space(&self, daemon: &dyn Daemon, listed: &Space) -> Result<()> {
         if let Some(workspace) = listed.worktree()
             && self
@@ -58,7 +58,7 @@ impl Spaces {
             return Ok(());
         }
         // An ancestor's completion that takes the space changes under the
-        // ancestor's gate, so that one is held too.
+        // ancestor's gate, so hold that one too.
         let gated = self.completed_ancestor(daemon, &listed.id).await?;
         let gates = std::iter::once(&listed.id).chain(gated.as_ref().map(|a| &a.id));
         let _guard = self.gates.lock_prs(gates).await;
@@ -99,7 +99,7 @@ impl Spaces {
         if !completion.cleanup || self.completion_keeps(daemon, &space.id).await? {
             return Ok(false);
         }
-        // A pre-existing PR registration keeps its own merge requirements
+        // A PR registration made earlier keeps its own merge requirements
         // where the space has a worktree, whose branch the PR carries.
         if space.worktree().is_some() && daemon.pr_registration(&space.id).await?.is_some() {
             return Ok(false);
@@ -109,9 +109,9 @@ impl Spaces {
             .await
     }
 
-    /// Remove `space` for its completed `ancestor` once its grace period
-    /// ends, unless something keeps it or spaces below it remain, which go
-    /// first under the same completion.
+    /// Waits for the grace period, and leaves the space while something
+    /// keeps it or spaces below it remain, which go first under the same
+    /// completion.
     async fn sweep_under_completed(
         &self,
         daemon: &dyn Daemon,
@@ -132,9 +132,9 @@ impl Spaces {
             .await
     }
 
-    /// Whether something keeps the completed space `id`: what keeps it from
-    /// every unattended removal, or a watched PR that merged before a poll
-    /// recorded the merge, which starts the lookup of its runs.
+    /// Whatever keeps it from every unattended removal, or a watched PR that
+    /// merged before a poll recorded the merge, which starts the lookup of
+    /// its runs.
     async fn completion_keeps(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<bool> {
         Ok(self.keep_reason(daemon, id).await?.is_some() || daemon.merged_unseen(id).await?)
     }
@@ -155,14 +155,13 @@ impl Spaces {
             .await
     }
 
-    /// Record that cleanup after the space `id`'s completion failed with
-    /// `error`.
     async fn record_completion_error(&self, id: &SpaceId, error: &anyhow::Error) -> Result<()> {
         let id = id.to_owned();
         let error = format!("{error:#}");
         self.store
             .run(move |db| {
-                // Preserve malformed records for diagnosis instead of overwriting them.
+                // Keep a malformed record for diagnosis instead of
+                // overwriting it.
                 db.execute(
                     "UPDATE space_completion SET record=json_set(record, '$.error', ?2)
                 WHERE space_id=?1 AND json_valid(record)",

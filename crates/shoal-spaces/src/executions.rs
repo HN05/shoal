@@ -1,5 +1,4 @@
-//! What the spaces read of the executions recorded in them: whether and how
-//! many run, the newest, and the agent it runs.
+//! What the spaces read of the executions recorded in them.
 use std::collections::HashSet;
 
 use anyhow::Result;
@@ -8,8 +7,7 @@ use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 
 use crate::{agent::Agent, state::ExecutionState};
 
-/// How many executions the space `space_id` records, in `state` or in any,
-/// read without decoding them, so a damaged record still counts.
+/// Reads without decoding the records, so a damaged record still counts.
 pub fn execution_count(
     db: &Connection,
     space_id: &SpaceId,
@@ -23,7 +21,6 @@ pub fn execution_count(
     Ok(usize::try_from(count)?)
 }
 
-/// The space the execution `id` runs in and its state.
 pub fn execution_state(
     db: &Connection,
     id: &ExecutionId,
@@ -37,7 +34,6 @@ pub fn execution_state(
         .optional()?)
 }
 
-/// The newest execution of the space `space_id`.
 pub fn newest_execution(db: &Connection, space_id: &SpaceId) -> Result<Option<ExecutionId>> {
     Ok(db
         .query_row(
@@ -48,8 +44,7 @@ pub fn newest_execution(db: &Connection, space_id: &SpaceId) -> Result<Option<Ex
         .optional()?)
 }
 
-/// The agent the newest execution of the space `space_id` that runs one
-/// runs.
+/// The agent of the newest execution of the space that runs one.
 pub fn newest_agent(db: &Connection, space_id: &SpaceId) -> Result<Option<Agent>> {
     Ok(db
         .query_row(
@@ -61,7 +56,6 @@ pub fn newest_agent(db: &Connection, space_id: &SpaceId) -> Result<Option<Agent>
         .optional()?)
 }
 
-/// The spaces that record an execution.
 pub fn spaces_with_executions(db: &Connection) -> Result<HashSet<SpaceId>> {
     Ok(db
         .prepare("SELECT DISTINCT space_id FROM executions")?

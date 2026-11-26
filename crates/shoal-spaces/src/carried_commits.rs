@@ -1,10 +1,6 @@
-//! Commits a start on another joined machine carries there: a base whose
-//! commits only this machine has, which the other machine cannot fetch from
-//! the origin, goes as a Git bundle of the history the origin's branches
-//! lack, over a duplex stream of the hub's links. That machine's daemon
-//! fetches it into the repository the start goes in, registering it as a
-//! URL clone where it has none, under a ref of Shoal's own, and the start
-//! then names the commit by its full ID.
+//! Carrying commits only this machine has to a start on another joined
+//! machine, as a Git bundle of the history the origin's branches lack. See
+//! `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::fsutil::off_runtime;
@@ -24,16 +20,13 @@ use crate::model::Repository;
 pub mod retention;
 pub use retention::CarriedHolds;
 
-/// The name of a carried bundle in the temporary directory that holds it.
 const BUNDLE: &str = "carried.bundle";
 
-/// The most bytes of a bundle written at once.
 const CHUNK: usize = 64 << 10;
 
 impl Spaces {
-    /// Carry `commit` of `repository`, whose origin's URL is `origin`, to
-    /// `machine` for `caller`'s start there, which then names it by its ID,
-    /// with the history the origin's `branch` lacks.
+    /// The bundle holds the history the origin's `branch` lacks. The start
+    /// there then names the commit by its ID.
     pub async fn carry_commit(
         &self,
         daemon: &dyn Daemon,
@@ -62,8 +55,7 @@ impl Spaces {
             })
     }
 
-    /// Send the bundle `file` to `machine` for `caller` as `receive` asks,
-    /// and wait for its answer that it took the commits.
+    /// Waits for `machine`'s answer that it took the commits.
     async fn send_bundle(
         &self,
         daemon: &dyn Daemon,
@@ -79,11 +71,9 @@ impl Spaces {
             .map(drop)
     }
 
-    /// Take the bundle of `commit` that the caller writes on `stream` once
-    /// this daemon answered `request_id`, into `repository`, registered
-    /// from `origin`, after the origin's `branch`, held for the launch it is
-    /// carried for, and answer again once the repository has the commit,
-    /// holding `guard` until then.
+    /// Answers `request_id` first, and again once `repository`, registered
+    /// from `origin`, has the commit. The commit is held for the launch it
+    /// is carried for. Holds `guard` until then.
     pub async fn receive_commits(
         &self,
         daemon: &dyn Daemon,
@@ -110,8 +100,7 @@ impl Spaces {
     }
 }
 
-/// Write what `stream` reads until the caller ends its side to the new
-/// file `file`, a chunk at a time.
+/// Reads until the caller ends its side. `file` must be a new file.
 pub async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
     let path = file.to_owned();
     let mut output = off_runtime::run_io(move || std::fs::File::create(path)).await?;
@@ -126,8 +115,7 @@ pub async fn receive_file(stream: &mut UnixStream, file: &Path) -> Result<()> {
     }
 }
 
-/// Fetch `commit` into `repo`, after the origin's `branch`, from the bundle
-/// read from `stream` until the caller ends its side.
+/// Reads the bundle until the caller ends its side.
 async fn take_bundle(
     stream: &mut UnixStream,
     repo: &Path,

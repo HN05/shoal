@@ -15,19 +15,16 @@ use crate::{
     shoal_dirs::{Contents, ShoalDir},
 };
 
-/// What Shoal owns under a repository's workspace directory.
 pub struct OwnedWorktrees {
     pub tracked: HashSet<PathBuf>,
-    /// The worktree of the repository's seed, once it verifies as Shoal's.
+    /// None unless the seed's worktree verifies as Shoal's.
     pub seed: Option<PathBuf>,
-    /// The directory of the repository's review runs, whose checkouts are
-    /// worktrees, when it is the one Shoal created.
+    /// None unless the directory of review runs is the one Shoal created.
     pub review_runs: Option<PathBuf>,
 }
 
 impl OwnedWorktrees {
-    /// Each Git worktree under `root`, other than the checkout, Shoal's
-    /// seed and its review checkouts, that no workspace owns.
+    /// Leaves out the checkout, Shoal's seed and its review checkouts.
     pub fn untracked<'a>(
         &self,
         checkout: &Path,
@@ -48,9 +45,8 @@ impl OwnedWorktrees {
 }
 
 impl Spaces {
-    /// The untracked Git worktrees under every repository's workspace
-    /// directory. A repository whose Git gate is busy is left out, since its
-    /// ownership is changing.
+    /// Leaves out a repository whose Git gate is busy, since its ownership
+    /// is changing.
     pub async fn untracked_worktrees(&self, daemon: &dyn Daemon) -> Result<Vec<UntrackedWorktree>> {
         let mut untracked = Vec::new();
         for repo in daemon.repositories().await? {
@@ -79,7 +75,8 @@ impl Spaces {
         Ok(untracked)
     }
 
-    /// The caller holds the repository's Git gate so ownership stays current.
+    /// The caller holds the repository's Git gate so ownership stays
+    /// current.
     pub async fn owned_worktrees(
         &self,
         daemon: &dyn Daemon,
@@ -102,7 +99,7 @@ impl Spaces {
     }
 }
 
-/// Whether `path` is `worktree`, as Git lists it or after resolving links.
+/// Compares as Git lists the worktree and after resolving links.
 fn is_path(worktree: &Path, path: &Path) -> bool {
     path == worktree || std::fs::canonicalize(worktree).is_ok_and(|real| real == path)
 }
