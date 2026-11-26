@@ -267,9 +267,9 @@ A rename relabels the places the space's agents run in and the places Shoal
 created for it, wherever the command runs. Each goes through the host that
 opened it, on the server its record names, as a close reaches it.
 
-A place takes a new label only while it still shows the label Shoal gave it.
-Any other label is the user's: a chat's old name, or the label a workspace's
-previous title rendered. A place labelled before its workspace's template, issue
+A place takes a new label only while it still shows the label Shoal gave it:
+a chat's old name, or the label a workspace's previous title rendered. Any
+other label is the user's. A place labelled before its workspace's template, issue
 or branch changed keeps that stale label rather than risk overwriting the
 user's.
 
