@@ -17,7 +17,7 @@ pub struct NewReview {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<LineComment>,
     /// The head commit the review covers. When the PR's head has moved past
-    /// it, the review is refused with [`HeadMoved`] before anything is sent.
+    /// it, the review is refused before anything is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub commit: Option<CommitId>,
 }

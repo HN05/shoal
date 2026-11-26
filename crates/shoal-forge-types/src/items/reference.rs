@@ -139,7 +139,7 @@ impl ItemRef {
     }
 
     /// The repository the URL names, on the forge its route or host gave
-    /// when it was read; [`forge`](Self::forge) asks the host.
+    /// when it was read; `shoal-forge`'s `forge` asks the host.
     pub fn repository(&self) -> &ForgeRepo {
         &self.0.repository
     }

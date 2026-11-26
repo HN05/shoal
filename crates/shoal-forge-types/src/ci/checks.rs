@@ -44,7 +44,7 @@ impl CheckLog {
     }
 
     /// The log's last whole lines within [`TAIL_BYTES`], each longer than
-    /// [`LINE_BYTES`] shortened to its start and end, so that one long line
+    /// `LINE_BYTES` shortened to its start and end, so that one long line
     /// leaves room for the lines around it; marked truncated when it left
     /// anything out.
     pub fn tail(mut self) -> Self {

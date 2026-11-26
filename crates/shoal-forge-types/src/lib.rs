@@ -134,7 +134,7 @@ impl ForgeRepo {
     }
 
     /// Refuse `input` when it names no repository on any forge, before
-    /// [`resolve_named`](Self::resolve_named) asks a host which forge it is.
+    /// `shoal-forge`'s `resolve_named` asks a host which forge it is.
     pub fn check_named(input: &str) -> Result<()> {
         let path = if Self::named_by_url(input) {
             let remote =
