@@ -116,12 +116,12 @@ pub struct InEffect {
 
 impl MemoryLimitSetting {
     /// Whether the config leaves the limit to `load`.
-    pub fn follows_load(&self) -> bool {
+    pub(super) fn follows_load(&self) -> bool {
         *self == Self::Load
     }
 
     /// The limit in effect on this machine under `load`.
-    pub fn in_effect(self, load: Load) -> InEffect {
+    pub(super) fn in_effect(self, load: Load) -> InEffect {
         self.where_enforced(load, enforced())
     }
 
