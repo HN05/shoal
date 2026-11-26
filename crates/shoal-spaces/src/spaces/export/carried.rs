@@ -1,5 +1,5 @@
-//! The spaces a package carries with its space: which go with it, and what
-//! the package holds of each once its removal recorded it.
+//! The spaces a package carries with its space, and what the package holds
+//! of each once its removal recorded it.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::EventCause;
@@ -12,8 +12,7 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 
 impl Spaces {
-    /// The spaces that go with the space `id` as `carrying` says, each
-    /// after its parent and the workspace whose worktree it works in.
+    /// Each after its parent and the workspace whose worktree it works in.
     pub async fn carried_by(
         &self,
         daemon: &dyn Daemon,
@@ -29,8 +28,8 @@ impl Spaces {
             .collect())
     }
 
-    /// The settings describing the agents of each of `spaces`, read while
-    /// they exist, since each one's own config may describe its agents.
+    /// Read while the spaces exist, since each one's own config may describe
+    /// its agents.
     pub(super) async fn agent_settings_of(
         &self,
         daemon: &dyn Daemon,
@@ -43,9 +42,8 @@ impl Spaces {
         settings
     }
 
-    /// What the removal of `space`, whose agents stopped, would record of
-    /// it, a workspace at a new checkpoint with its pending review, for a
-    /// move that ends it only once another machine imported it.
+    /// A workspace is recorded at a new checkpoint with its pending review,
+    /// for a move that ends it only once another machine imported it.
     pub(super) async fn moving_record(
         &self,
         daemon: &dyn Daemon,
@@ -59,9 +57,7 @@ impl Spaces {
         Ok(record)
     }
 
-    /// The package, without its session files, of the space `record`
-    /// records with the spaces `carried` records, spaces of `repos` or of
-    /// none.
+    /// Leaves out the session files.
     pub(super) async fn manifest_of(
         &self,
         repos: &[Repository],
@@ -75,8 +71,6 @@ impl Spaces {
         Ok(manifest)
     }
 
-    /// What a package of spaces of `repos` holds of the spaces `records`
-    /// records.
     async fn carried_packages(
         &self,
         repos: &[Repository],
@@ -97,17 +91,15 @@ impl Spaces {
     }
 }
 
-/// Refuse to package `space` with the spaces `carried` when one of them is
-/// a workspace whose removal keeps no record.
+/// Refuses a workspace whose removal keeps no record.
 pub(super) fn ensure_packable(space: &Space, carried: &[Space]) -> Result<()> {
     std::iter::once(space)
         .chain(carried)
         .try_for_each(super::worktree::ensure_packable)
 }
 
-/// The records among `records` of the spaces the removal of the space `id`
-/// took, each after the records it waits for, when `carrying` carries the
-/// spaces below it; a selection leaves them here, below the space's record.
+/// Each after the records it waits for. Empty unless `carrying` carries the
+/// spaces below: a selection leaves them here, below the space's record.
 pub(super) fn taken_by_removal(
     records: &[RemovedSpace],
     id: &SpaceId,
@@ -127,8 +119,8 @@ pub(super) fn taken_by_removal(
         .collect()
 }
 
-/// Keep in `record`, of a space that goes on elsewhere, a workspace's
-/// queued or running review, which its import queues again.
+/// Keeps a workspace's queued or running review in the record of a space
+/// that goes on elsewhere. Its import queues the review again.
 pub(super) async fn carry_review(daemon: &dyn Daemon, record: &mut RemovedSpace) -> Result<()> {
     let review = daemon.pending_review(&record.space_id).await?;
     if let Ok(kept) = record.kept_workspace_mut() {

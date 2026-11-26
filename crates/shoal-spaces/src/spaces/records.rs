@@ -1,6 +1,5 @@
-//! The row each space has in `spaces`, with what every space has, which its
-//! kind's row extends: recording a space, changing its kind and removing it.
-//! A space's kind row goes in first, in the same transaction, so that what
+//! The row each space has in `spaces`, which its kind's row extends. A
+//! space's kind row goes in first, in the same transaction, so that what
 //! journals the space's creation reads both.
 use anyhow::Result;
 
@@ -16,24 +15,22 @@ use crate::{
     store,
 };
 
-/// What a space records in `spaces`.
 pub struct NewSpace<'a> {
     pub id: &'a SpaceId,
     pub kind: SpaceKind,
     pub repository_id: Option<&'a RepositoryId>,
     pub name: &'a SpaceName,
-    /// The number it keeps, as a restored space does; 0 takes the next one
+    /// The number it keeps, as a restored space does. 0 takes the next one
     /// of the hub's sequence on a machine of a hub, and else the smallest
     /// one free here.
     pub number: SpaceNumber,
     pub mode: Option<&'a ModeName>,
     pub narrowing: &'a PermissionsConfig,
-    /// When it was recorded, which a conversion keeps.
+    /// A conversion keeps it.
     pub created_at: crate::time::UnixTime,
 }
 
-/// Record `space`, whose kind's row is already recorded, and return its
-/// number.
+/// Its kind's row is already recorded. Returns its number.
 pub fn record(
     tx: &Transaction<'_>,
     records: &dyn Records,
@@ -66,9 +63,8 @@ pub fn record(
     )
 }
 
-/// Make the space `id` one of `kind`, whose agent runs in `mode` with the
-/// permissions `narrowing` gives it, once its row of that kind is recorded
-/// and before its other kind's row goes.
+/// Runs once its row of that kind is recorded and before its other kind's
+/// row goes.
 pub fn convert(
     tx: &Transaction<'_>,
     id: &SpaceId,
@@ -83,8 +79,8 @@ pub fn convert(
     Ok(())
 }
 
-/// Remove the space `id`, with its kind's row and what the tables of spaces
-/// hold for it. Returns whether it was recorded.
+/// Removes its kind's row and what the tables of spaces hold for it too.
+/// Returns whether it was recorded.
 pub fn remove(tx: &Transaction<'_>, id: &SpaceId) -> Result<bool> {
     Ok(tx.execute("DELETE FROM spaces WHERE id=?1", [id])? == 1)
 }

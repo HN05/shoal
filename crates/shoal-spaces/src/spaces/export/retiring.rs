@@ -1,8 +1,5 @@
-//! Ending a space here that another joined machine took over from the
-//! hub's package of it while this one was offline: its agents stop, saving
-//! their sessions, and it goes through the export's removal, which keeps
-//! its work in its removal record and its branch, while the spaces below it
-//! stay here, below it where it runs now.
+//! Ending a space here that another joined machine took over from the hub's
+//! package while this one was offline. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -16,10 +13,9 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// End `space` here, which another joined machine took over, keeping
-    /// a checkpoint of a workspace's files, its agents' sessions and its
-    /// branch, and leaving its issues' assignees to the space there; what
-    /// opens the work it kept.
+    /// Keeps a checkpoint of a workspace's files, its agents' sessions and
+    /// its branch, and leaves its issues' assignees to the space there.
+    /// Returns what opens the work it kept.
     pub async fn retire_space(&self, daemon: &dyn Daemon, space: &Space) -> Result<String> {
         let selector = SpaceSelector::id(&space.id);
         daemon
@@ -36,9 +32,8 @@ impl Spaces {
         Ok(opening(&record))
     }
 
-    /// The work of `space` its retirement deletes, once a new checkpoint
-    /// keeps it: a workspace's unsaved files and detached HEAD, and none of
-    /// the spaces below it.
+    /// Runs once a new checkpoint keeps it: a workspace's unsaved files and
+    /// detached HEAD, and none of the spaces below it.
     async fn retired_work(&self, daemon: &dyn Daemon, space: &Space) -> Result<UnsavedWork> {
         if space.worktree().is_none() {
             return Ok(UnsavedWork::Confirmed {
@@ -54,8 +49,7 @@ impl Spaces {
     }
 }
 
-/// What opens the work the removal `record` of a retired space keeps: a
-/// workspace's checkpoint as a copy, or a chat's agents' sessions, which
+/// A workspace's checkpoint as a copy, or a chat's agents' sessions, which
 /// their tools continue.
 fn opening(record: &RemovedSpace) -> String {
     let id = &record.space_id;

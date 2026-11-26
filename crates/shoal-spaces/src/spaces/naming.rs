@@ -1,5 +1,4 @@
-//! A space's name, the label its lists, tabs and notices show, which only
-//! `shoal rename` changes after its creation.
+//! A space's name. Only `shoal rename` changes it after its creation.
 use crate::Spaces;
 use anyhow::Result;
 use rusqlite::{Transaction, params};
@@ -9,9 +8,7 @@ use crate::model::RenamedSpace;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 impl Spaces {
-    /// Give the workspace or chat `selector` names the name `name`,
-    /// returning it with the name it had before, which its places may still
-    /// show.
+    /// Also returns the name it had before, which its places may still show.
     pub async fn rename_space(
         &self,
         selector: &SpaceSelector,
@@ -31,8 +28,8 @@ impl Spaces {
     }
 }
 
-/// Record `name` as the name of space `id`, returning the name it replaces,
-/// read in the same transaction so a concurrent rename cannot come between.
+/// Returns the name it replaces, read in the same transaction so a
+/// concurrent rename cannot come between.
 fn store_name(tx: &Transaction<'_>, id: &SpaceId, name: &SpaceName) -> Result<SpaceName> {
     let previous = tx.query_row("SELECT name FROM spaces WHERE id=?1", [id], |row| {
         row.get(0)

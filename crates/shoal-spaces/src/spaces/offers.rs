@@ -21,7 +21,6 @@ use crate::{
 };
 
 impl Spaces {
-    /// How `acting` judges each space of this machine `caller` sees.
     pub async fn offers_here(
         &self,
         daemon: &dyn Daemon,
@@ -32,8 +31,7 @@ impl Spaces {
         Ok(self.judged_here(daemon, caller, acting, &spaces).await)
     }
 
-    /// How `acting` judges each of `spaces`, this machine's that `caller`
-    /// sees, with the facts its check reads of them.
+    /// With the facts its check reads of them.
     pub async fn judged_here(
         &self,
         daemon: &dyn Daemon,
@@ -48,10 +46,8 @@ impl Spaces {
         judged(daemon.target_check(acting), spaces, &facts)
     }
 
-    /// How `acting` judges each space of the other joined machines in
-    /// `view`, as the daemon of each connected machine judges its own. A
-    /// machine that is offline or cannot be asked judges none of its
-    /// spaces.
+    /// The daemon of each connected machine judges its own. A machine that
+    /// is offline or cannot be asked judges none of its spaces.
     pub async fn offers_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -71,8 +67,6 @@ impl Spaces {
         offers
     }
 
-    /// How `machine`'s daemon judges its own spaces for `acting`, from
-    /// `caller`.
     async fn judged_by(
         &self,
         daemon: &dyn Daemon,
@@ -93,8 +87,6 @@ impl Spaces {
     }
 }
 
-/// The other connected machines in `view` that run spaces the caller sees,
-/// whose daemons judge them.
 fn judging_machines(view: &HubView) -> impl Iterator<Item = &Member> {
     (view.directory.machines.iter()).filter(|machine| {
         machine.connected
@@ -103,8 +95,6 @@ fn judging_machines(view: &HubView) -> impl Iterator<Item = &Member> {
     })
 }
 
-/// How `check`, the one a request declares, judges each of `spaces`, with
-/// `facts`.
 pub fn judged(check: Option<TargetCheck>, spaces: &[Space], facts: &Facts) -> Vec<SpaceOffer> {
     (spaces.iter())
         .map(|space| SpaceOffer {
@@ -114,8 +104,7 @@ pub fn judged(check: Option<TargetCheck>, spaces: &[Space], facts: &Facts) -> Ve
         .collect()
 }
 
-/// How a request with `check` judges `space` with `facts`; a request that
-/// names no space takes any.
+/// A request that names no space takes any.
 fn offer(check: Option<TargetCheck>, space: &Space, facts: &Facts) -> Offer {
     match check.map(|check| check.judge(space, facts)) {
         None | Some(Verdict::Accepted) => Offer::Accepted,
