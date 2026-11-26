@@ -758,6 +758,27 @@ fn a_button_outside_a_list_takes_an_input_inside_it() {
 }
 
 #[test]
+fn an_input_in_a_list_over_absolute_data_inside_another_list_is_an_input() {
+    let nested = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["groups", "save"]},
+            {"id": "groups", "component": "List", "children": {"componentId": "group", "path": "/groups"}},
+            {"id": "group", "component": "List", "children": {"componentId": "name", "path": "/items"}},
+            {"id": "name", "component": "TextField", "label": "Name", "value": {"@path": "name"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save", "context": {"second": {"@path": "/items/1/name"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"groups": [{}], "items": [{"name": "Ada"}, {"name": "Grace"}]}),
+    );
+    assert_eq!(nested.action("save").unwrap().inputs.len(), 1);
+    let resolved = nested
+        .resolve("save", values(&[("second", json!("Ann"))]))
+        .unwrap();
+    assert_eq!(Value::Object(resolved), json!({"second": "Ann"}));
+}
+
+#[test]
 fn a_list_input_bound_absolutely_is_an_action_s_input() {
     let listed = surface(
         json!([

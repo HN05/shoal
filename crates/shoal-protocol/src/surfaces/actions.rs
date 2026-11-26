@@ -243,8 +243,17 @@ impl Surface {
         let absolute = component
             .binding("value")
             .is_some_and(|bound| bound.starts_with('/'));
+        let lists = self.lists_above(component);
+        // A list over absolute data repeats the same items in every item
+        // of the lists around it, so the scope starts afresh there.
+        let fresh = (lists.iter())
+            .rposition(|list| {
+                list.template()
+                    .is_some_and(|(_, path)| path.starts_with('/'))
+            })
+            .unwrap_or(0);
         let mut scope = String::new();
-        for list in self.lists_above(component) {
+        for list in &lists[fresh..] {
             let items = scoped(&scope, list.template()?.1);
             let within = |path: &str| {
                 let item = path
