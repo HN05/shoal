@@ -1,8 +1,6 @@
 //! Moves to a joined machine that would stop the agent that asks for them,
 //! as one of its own space does: Shoal records the move and starts it once
-//! that agent's turn ends, as a conversion waits for it, acting with the
-//! scope of its space, and tells the agent how a move that left its space
-//! here went; one that took the space tells the agent there.
+//! that agent's turn ends. See `docs/design/moves.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::model::RunningAgent;
@@ -18,9 +16,8 @@ use crate::{
 };
 
 impl Spaces {
-    /// Whether moving the spaces `order` takes stops the agent of
-    /// `caller`'s space: that space is among them, or goes with one of
-    /// them. A copy stops nothing.
+    /// The caller's space is among them, or goes with one of them. A copy
+    /// stops nothing.
     pub async fn move_stops_caller(
         &self,
         daemon: &dyn Daemon,
@@ -41,8 +38,7 @@ impl Spaces {
         Ok(false)
     }
 
-    /// Record `order` to start once the turn of the agent of `caller`'s
-    /// space ends, in place of a move it recorded before.
+    /// Replaces a move it recorded before.
     pub async fn move_after_turn(&self, caller: &Caller, order: MoveOrder) -> Result<DeferredMove> {
         let (space, order) = (caller.space_id.clone(), serde_json::to_string(&order)?);
         let recorded = space.clone();
@@ -60,8 +56,7 @@ impl Spaces {
         Ok(DeferredMove { space })
     }
 
-    /// Start each recorded move whose agent's turn ended, acting with the
-    /// scope of that agent's space.
+    /// Acts with the scope of that agent's space.
     pub async fn start_moves_after_turns(&self, daemon: &dyn Daemon) -> Result<()> {
         for (space, order) in self.store.read(waiting_moves).await? {
             if !daemon
@@ -81,7 +76,8 @@ impl Spaces {
                 .await
             {
                 Ok(id) => {
-                    // The move runs: a record left waiting would start it again.
+                    // The move runs: a record left waiting would start it
+                    // again.
                     if let Err(error) = self.record_started(daemon, &space, &id).await {
                         log!("the move of space {space} after its turn is untracked: {error:#}");
                         self.forget_move_after_turn(&space).await;
@@ -97,8 +93,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Record that the operation `id` runs the move recorded for `space`,
-    /// telling its agent how it went when it ended before this could.
+    /// Tells the agent how it went when it ended before this could.
     async fn record_started(&self, daemon: &dyn Daemon, space: &SpaceId, id: &str) -> Result<()> {
         let (recorded, operation) = (space.clone(), id.to_owned());
         (self.store)
@@ -111,8 +106,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// Tell the agent whose move the operation `id` ran, once it `ended`
-    /// with its space still here, how it went.
+    /// Runs once the operation `ended` with the space still here.
     pub async fn tell_move_after_turn(&self, daemon: &dyn Daemon, id: &str, ended: &Ended) {
         // Taken in one write, so only one of those who read the end tells.
         let operation = id.to_owned();
@@ -129,11 +123,10 @@ impl Spaces {
             .await;
     }
 
-    /// Settle each recorded move whose operation no longer runs: one that
-    /// ended without telling, as when its worker went without reporting,
-    /// tells its agent how it ended; one this daemon does not know, as one
-    /// a restart cut off, which Shoal finishes as it finishes any
-    /// interrupted move, tells its agent so.
+    /// One that ended without telling, as when its worker went without
+    /// reporting, tells its agent how it ended. One this daemon does not
+    /// know, as one a restart cut off, which Shoal finishes as it finishes
+    /// any interrupted move, tells its agent so.
     pub async fn forget_moves_cut_off(&self, daemon: &dyn Daemon) -> Result<()> {
         for (space, operation) in self.store.read(started_moves).await? {
             if let Some(ending) = self.operations.ending_of(&operation) {
@@ -149,7 +142,6 @@ impl Spaces {
         Ok(())
     }
 
-    /// Forget the move recorded for the turn of the agent of `space`.
     async fn forget_move_after_turn(&self, space: &SpaceId) {
         let forgotten = space.clone();
         let forgetting = (self.store).write(move |tx| {
@@ -161,7 +153,6 @@ impl Spaces {
         }
     }
 
-    /// Tell the agent of `space`, which asked for a move, `text`.
     async fn tell_mover(&self, daemon: &dyn Daemon, space: &SpaceId, text: String) {
         let told = daemon.queue_agent_message(space, AlertKind::MoveFinished, text);
         if let Err(error) = told.await {
@@ -170,8 +161,7 @@ impl Spaces {
     }
 }
 
-/// The moves recorded to start once their agents' turns end, by the space
-/// of each agent.
+/// By the space of each agent.
 pub fn waiting_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, MoveOrder)>> {
     let mut statement =
         db.prepare("SELECT space_id,move_order FROM pending_moves WHERE operation_id IS NULL")?;
@@ -184,8 +174,7 @@ pub fn waiting_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, Mov
     Ok(moves)
 }
 
-/// Forget the recorded move the operation `id` runs, if one does,
-/// returning the space of its agent.
+/// Returns the space of its agent.
 fn take_move_of_operation(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Option<SpaceId>> {
     Ok(tx
         .query_row(
@@ -196,8 +185,7 @@ fn take_move_of_operation(tx: &rusqlite::Transaction<'_>, id: &str) -> Result<Op
         .optional()?)
 }
 
-/// The recorded moves that started, by the space of each agent, with the
-/// operation that runs each.
+/// By the space of each agent, with the operation that runs each.
 pub fn started_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, String)>> {
     let mut statement = db.prepare(
         "SELECT space_id,operation_id FROM pending_moves WHERE operation_id IS NOT NULL",
@@ -206,7 +194,6 @@ pub fn started_moves(db: &rusqlite::Transaction<'_>) -> Result<Vec<(SpaceId, Str
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-/// Record that the operation `id` runs the move recorded for `space`.
 pub fn started(tx: &rusqlite::Transaction<'_>, space: &SpaceId, id: &str) -> Result<()> {
     tx.execute(
         "UPDATE pending_moves SET operation_id=?2 WHERE space_id=?1",
@@ -215,8 +202,6 @@ pub fn started(tx: &rusqlite::Transaction<'_>, space: &SpaceId, id: &str) -> Res
     Ok(())
 }
 
-/// What the agent of `space`, whose move `ended` with its space still
-/// here, hears of it.
 pub fn stayed_message(space: &SpaceId, ended: &Ended) -> String {
     match ended {
         Ended::Succeeded(outcome) => match outcome.as_ref() {

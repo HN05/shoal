@@ -1,12 +1,5 @@
-//! Moves between machines joined to the same hub. The machine a space
-//! moves from delivers its package over a duplex stream of the hub's links
-//! to the destination's daemon, which continues it there as
-//! `shoal restore --from -` would. The destination's claim of the space at
-//! the hub commits the move, so a source that cannot learn from the
-//! destination whether it claimed the space asks the hub instead. A
-//! removed space's record moves the same way, without an agent to stop.
-//! A space a machine handed over as it shut down arrives from the hub's
-//! package of it instead.
+//! Moves between machines joined to the same hub. See `docs/design/moves.md`
+//! and `docs/design/hub.md`.
 pub mod after_turn;
 pub mod authorization;
 mod delivering;

@@ -1,9 +1,6 @@
-//! The machine the hub chose for a space another machine handed over as it
-//! shut down, or that the hub took over from a machine that slept: it
-//! fetches the package the hub keeps of the space and
-//! continues it through `shoal internal import-moved`, as a move through
-//! the hub arrives, its claim taking the space over, then tells the
-//! space's agent where it is now.
+//! Continuing here a space another machine handed over as it shut down, or
+//! that the hub took over from a machine that slept, from the package the
+//! hub keeps of it. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, bail};
@@ -17,11 +14,9 @@ use crate::{
 };
 
 impl Spaces {
-    /// Continue here the space `id`, which left the machine named `from`
-    /// for `departure`, from the package the hub keeps of it, queueing its
-    /// agents' restores. An import the hub took the claim of is this
-    /// machine's space even when it then fails to open, which the user
-    /// hears of here; any other failure leaves the space on `from`.
+    /// Queues its agents' restores. An import whose claim the hub took is
+    /// this machine's space even when it then fails to open, which the user
+    /// hears of here. Any other failure leaves the space on `from`.
     pub async fn continue_handed_over(
         &self,
         daemon: &dyn Daemon,

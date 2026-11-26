@@ -12,23 +12,20 @@ use crate::{model::RemovedSpace, repository::NotRegistered, transfer::Manifest};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::repository::Selector;
 
-/// The repository here of each repository a package's spaces were in, by
-/// the ID it had there.
+/// By the ID it had there.
 #[derive(Default)]
 pub(super) struct Destinations {
-    /// Where the package's own space goes; none for a chat without one.
+    /// None for a chat without a repository.
     own: Option<RepositoryId>,
     here: BTreeMap<RepositoryId, RepositoryId>,
 }
 
 impl Destinations {
-    /// The repository the package's own space goes to.
     pub(super) fn own(&self) -> Option<&RepositoryId> {
         self.own.as_ref()
     }
 
-    /// The repository the packaged `space` goes to; none for a chat without
-    /// one.
+    /// None for a chat without a repository.
     pub(super) fn of(&self, space: &RemovedSpace) -> Option<Selector> {
         let there = space.repository_id.as_ref()?;
         self.here.get(there).map(|here| here.clone().into())
@@ -36,11 +33,10 @@ impl Destinations {
 }
 
 impl Spaces {
-    /// The repositories the spaces of the package `manifest` go to: the
-    /// one `repository` names for its own space and every space of the
-    /// same repository, else the one with the origin each space records.
-    /// `caller`, when scoped, imports every space only into its own
-    /// repository and clones none.
+    /// The one `repository` names for its own space and every space of the
+    /// same repository, else the one with the origin each space records. A
+    /// scoped `caller` imports every space only into its own repository and
+    /// clones none.
     pub(super) async fn destinations(
         &self,
         daemon: &dyn Daemon,
@@ -81,8 +77,7 @@ impl Spaces {
         Ok(destinations)
     }
 
-    /// The repository with the origin of the package `manifest`, as
-    /// [`Self::with_origin`] finds it for `caller`.
+    /// As [`Self::with_origin`] finds it for `caller`.
     async fn own_destination(
         &self,
         daemon: &dyn Daemon,
@@ -95,9 +90,8 @@ impl Spaces {
         self.with_origin(daemon, origin, caller).await
     }
 
-    /// The registered repository with `origin`, which the user's import
-    /// registers as a clone of it when none here has it; a scoped `caller`
-    /// imports only into its own repository and clones none.
+    /// The user's import registers a clone of it when none here has it. A
+    /// scoped `caller` imports only into its own repository and clones none.
     async fn with_origin(
         &self,
         daemon: &dyn Daemon,
@@ -128,8 +122,8 @@ impl Spaces {
     }
 }
 
-/// The source that registers a clone of `origin`: a local path as its
-/// `file:` URL, since registering a path takes it as a checkout in place.
+/// A local path goes as its `file:` URL, since registering a path takes it
+/// as a checkout in place.
 fn clone_source(origin: String) -> String {
     match Path::new(&origin).is_absolute() {
         true => format!("file://{origin}"),

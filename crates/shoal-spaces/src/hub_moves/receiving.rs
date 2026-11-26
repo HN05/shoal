@@ -1,9 +1,7 @@
 //! The destination's side of a move between joined machines: the package
-//! the other machine writes on the request's stream goes into
-//! `shoal internal import-moved`, which continues its spaces here, their
-//! claims at the hub carrying the move's ticket, and reports how it went;
-//! a removed space's package the daemon records as removed itself, since
-//! nothing of it opens.
+//! goes into `shoal internal import-moved`, which continues its spaces
+//! here. A removed space's package the daemon records as removed itself,
+//! since nothing of it opens.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::process::Stdio;
@@ -23,24 +21,19 @@ use crate::{
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
-/// A move another joined machine delivers here.
 pub struct Receiving {
     /// The ticket its claims carry, which a copy lacks.
     pub ticket: Option<MoveTicket>,
-    /// Whether its agents' restores are queued here.
     pub resume: bool,
-    /// The name of the machine it moves from.
     pub from: String,
-    /// Whether it moves a removed space's record, which stays removed here.
+    /// It moves a removed space's record, which stays removed here.
     pub removed: bool,
 }
 
 impl Spaces {
-    /// Continue the package of the move `receiving` that another joined
-    /// machine writes on `stream` once this daemon answered `request_id`,
-    /// telling the agents of the spaces a move, not a copy, brought where
-    /// they are now, or record a removed space's package as removed here,
-    /// then answer again with how that went, holding `guard` until then.
+    /// Answers `request_id` first, then again with how it went, holding
+    /// `guard` until then. Tells the agents of the spaces a move, not a
+    /// copy, brought where they are now.
     pub async fn receive_move(
         &self,
         daemon: &dyn Daemon,
@@ -64,7 +57,8 @@ impl Spaces {
             .await
         {
             Ok(imported) => {
-                // A copy's agents start as copies, while the originals run on.
+                // A copy's agents start as copies, while the originals run
+                // on.
                 if let ImportedMove::Arrived { arrived, carried } = &imported
                     && receiving.ticket.is_some()
                 {
@@ -80,10 +74,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Record the package of a removed space that another joined machine
-    /// writes on `stream` as removed here, its claims at the hub carrying
-    /// `ticket`, then answer `request_id` with how that went, holding
-    /// `guard` until then.
+    /// The claims at the hub carry `ticket`. Answers `request_id` with how
+    /// that went, holding `guard` until then.
     async fn receive_removed(
         &self,
         daemon: &dyn Daemon,
@@ -103,8 +95,7 @@ impl Spaces {
         Ok(())
     }
 
-    /// How recording the removed spaces of the package `input` holds as
-    /// removed here went, their claims at the hub carrying `ticket`.
+    /// The claims at the hub carry `ticket`.
     async fn record_removed(
         &self,
         daemon: &dyn Daemon,
@@ -130,9 +121,8 @@ impl Spaces {
         }
     }
 
-    /// How `shoal internal import-moved` continued the package `input`
-    /// holds, its spaces claimed at the hub as `claim` says, as the user,
-    /// in this daemon's environment.
+    /// Claims the spaces at the hub as `claim` says. Runs as the user, in
+    /// this daemon's environment.
     pub(super) async fn import_moved(
         &self,
         input: Package<'_>,
@@ -165,17 +155,13 @@ impl Spaces {
     }
 }
 
-/// Where `shoal internal import-moved` reads a package from.
 pub(super) enum Package<'a> {
     /// A request's stream, until the caller ends its side.
     Stream(&'a mut UnixStream),
-    /// A file, whole.
     File(std::fs::File),
 }
 
 impl Spaces {
-    /// Tell the agents of the `arrived` spaces, which moved here from the
-    /// machine named `from`, where they are now.
     pub(super) async fn tell_arrived(
         &self,
         daemon: &dyn Daemon,
@@ -197,8 +183,6 @@ impl Spaces {
     }
 }
 
-/// What the agent of `space`, which moved here from the machine named
-/// `from`, hears as it continues here.
 fn arrived_message(space: &Space, from: &str) -> String {
     let place = match space.worktree() {
         Some(workspace) => format!(", and its worktree is {}", workspace.path.display()),
@@ -209,8 +193,7 @@ fn arrived_message(space: &Space, from: &str) -> String {
     )
 }
 
-/// What the import that wrote `output` reported: its last line of
-/// standard output.
+/// Its last line of standard output.
 pub fn reported(output: &std::process::Output) -> Result<ImportedMove> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let last = stdout.lines().rev().find(|line| !line.trim().is_empty());

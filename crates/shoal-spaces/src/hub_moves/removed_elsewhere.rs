@@ -1,7 +1,6 @@
 //! Finding the removal record of a space another joined machine removed:
 //! the hub's directory lists the machine that keeps it, which answers for
-//! it as it answers its own callers, so a move to a file can take it from
-//! there, and a restore here names that machine.
+//! it as it answers its own callers.
 use anyhow::{Context as _, Result, bail};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
@@ -14,8 +13,7 @@ use shoal_protocol::{
 use crate::{Spaces, daemon::Daemon, scope::Caller};
 
 impl Spaces {
-    /// The removed space `selector` names by ID, with where its record is
-    /// kept: here, where `caller` may restore it, or on the other joined
+    /// Kept here, where `caller` may restore it, or on the other joined
     /// machine the hub lists as keeping it, which checks that for `caller`.
     pub async fn locate_removed(
         &self,
@@ -44,9 +42,8 @@ impl Spaces {
 }
 
 impl Spaces {
-    /// The removed space `selector` names, as [`Self::restorable_space`]
-    /// finds it, which a restore here reopens; refused naming the other
-    /// joined machine that keeps its record when this one keeps none.
+    /// As [`Self::restorable_space`] finds it. Refused, naming the other
+    /// joined machine that keeps its record, when this one keeps none.
     pub async fn restorable_here(
         &self,
         daemon: &dyn Daemon,
@@ -62,9 +59,7 @@ impl Spaces {
         Err(missing)
     }
 
-    /// Refuse the restore of the removed space `id` whose removal record
-    /// another joined machine keeps and this one does not, naming that
-    /// machine and how to open the space here.
+    /// Names that machine and how to open the space here.
     pub(crate) async fn refuse_kept_elsewhere(
         &self,
         daemon: &dyn Daemon,
@@ -84,8 +79,7 @@ impl Spaces {
     }
 }
 
-/// The removal record of the space `selector` names that `machine` keeps,
-/// as it answers `caller`.
+/// As `machine` answers `caller`.
 async fn record_kept_on(
     daemon: &dyn Daemon,
     machine: &Member,

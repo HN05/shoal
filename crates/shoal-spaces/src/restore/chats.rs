@@ -9,9 +9,8 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Record the chat `removed` records again, stopped, in the place it
-    /// ran, below `parent`, with its mode and permissions; its restore puts
-    /// back its links and what it saved of its agent.
+    /// Stopped, in the place it ran, with its mode and permissions. Its
+    /// restore puts back its links and what it saved of its agent.
     pub(super) async fn reopen_chat_place(
         &self,
         daemon: &dyn Daemon,
@@ -25,10 +24,9 @@ impl Spaces {
         Ok(())
     }
 
-    /// Where the chat `removed` works once restored: where it ran. Refuses
-    /// it where it can no longer run: in the worktree of a workspace that is
-    /// gone, or still removed, which its own restore opens first, or not
-    /// ready, or in a `root_dir` that no longer exists.
+    /// Where it ran. Refuses a place where it can no longer run: the worktree
+    /// of a workspace that is gone, still removed, which its own restore
+    /// opens first, or not ready, or a `root_dir` that no longer exists.
     async fn restored_workdir(
         &self,
         daemon: &dyn Daemon,
@@ -79,8 +77,7 @@ impl Spaces {
     }
 }
 
-/// The chat record that restores `removed`, which `kept` describes: under
-/// its ID, stopped, with what it was given, working in `workdir`.
+/// Under its ID, stopped, with what it was given, working in `workdir`.
 fn restored_record(removed: &RemovedSpace, kept: &KeptChat, workdir: Workdir) -> Chat {
     Chat {
         id: removed.space_id.clone(),

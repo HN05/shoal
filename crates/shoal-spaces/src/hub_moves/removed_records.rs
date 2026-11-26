@@ -1,11 +1,8 @@
-//! Moving a removed space's record to another joined machine: the record,
-//! with those of the spaces its removal took that the move carries, goes
-//! to the destination's daemon as a move's package does, which records them
-//! as removed there, claiming each with the move's ticket, and this machine
-//! forgets each record that machine claimed. A record whose claim the
-//! destination could not report is settled at the hub, and one it did not
-//! claim stays here. Each record's gate keeps its restore here from running
-//! while it moves.
+//! Moving a removed space's record to another joined machine, as a move's
+//! package goes. This machine forgets each record that machine claimed. A
+//! record whose claim the destination could not report is settled at the
+//! hub, and one it did not claim stays here. Each record's gate keeps its
+//! restore here from running while it moves.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail};
@@ -22,11 +19,10 @@ use crate::{
 };
 
 impl Spaces {
-    /// Deliver the removal record of the space `selector` names by ID, with
-    /// those of the spaces its removal took that `carrying` carries, to the
-    /// joined machine `destination` names, which records them as removed
-    /// there, its claims carrying `ticket`, and forget here those it
-    /// claimed; the records stay while its claim is unknown.
+    /// Also carries the records of the spaces its removal took that
+    /// `carrying` carries. The destination records them as removed, its
+    /// claims carrying `ticket`, and this machine forgets those it claimed.
+    /// The records stay while its claim is unknown.
     pub async fn deliver_removed(
         &self,
         daemon: &dyn Daemon,
@@ -52,12 +48,10 @@ impl Spaces {
         Ok(RemovedDelivery { exported, arrival })
     }
 
-    /// Settle at the hub the move `ticket` of the removal record of the
-    /// space `selector` names, with the records of the spaces `carried`, to
-    /// the joined machine named `machine`, whose arrival that machine could
-    /// not report, and forget here each record that machine claimed; how
-    /// the hub settled the space's own. Fails while the hub cannot be
-    /// asked, forgetting none.
+    /// For a move whose arrival the destination could not report. Forgets
+    /// here each record that machine claimed, and returns how the hub
+    /// settled the space's own. Fails while the hub cannot be asked,
+    /// forgetting none.
     pub async fn settle_removed_move(
         &self,
         daemon: &dyn Daemon,
@@ -90,8 +84,7 @@ impl Spaces {
         Ok(MoveSettled::Arrived)
     }
 
-    /// Hold the gates of the records the package `manifest` carries, each
-    /// one still here, so none is restored while they move.
+    /// Only those still here. None is restored while they move.
     async fn lock_carried_records(&self, manifest: &Manifest) -> Result<Vec<OwnedMutexGuard<()>>> {
         let mut gates = Vec::new();
         for record in carried_records(manifest) {
@@ -104,10 +97,8 @@ impl Spaces {
         Ok(gates)
     }
 
-    /// How the removal records the package `manifest` holds arrived on the
-    /// joined machine named `machine`, to which they moved with `ticket`,
-    /// as `delivered` says, once this machine forgot those that machine
-    /// claimed, with a warning for each carried record that stays here.
+    /// Runs once this machine forgot the records that machine claimed. Warns
+    /// for each carried record that stays here.
     async fn record_arrival(
         &self,
         daemon: &dyn Daemon,
@@ -134,11 +125,9 @@ impl Spaces {
         Ok((arrival, Vec::new()))
     }
 
-    /// Forget the records of the package `manifest` that the joined machine
-    /// named `machine` recorded, its own and those it lists in `recorded`,
-    /// and each other carried record the hub says it claimed with `ticket`,
-    /// as when the answer to its claim never came there; a warning for each
-    /// that stays here.
+    /// Its own and those it lists in `recorded`, and each other carried record
+    /// the hub says it claimed with `ticket`, as when the answer to its claim
+    /// never came there. Warns for each that stays here.
     async fn forget_arrived(
         &self,
         daemon: &dyn Daemon,
@@ -167,9 +156,8 @@ impl Spaces {
         Ok(warnings)
     }
 
-    /// Whether the joined machine named `machine` claimed the space `id`
-    /// with `ticket`, as the hub settles it, which refuses that claim from
-    /// then on when it did not.
+    /// As the hub settles it, which refuses that claim from then on when it
+    /// did not.
     async fn claimed_at_hub(
         &self,
         daemon: &dyn Daemon,
@@ -182,7 +170,7 @@ impl Spaces {
     }
 }
 
-/// The ID of the removed space `selector` names, which only its ID can.
+/// Only its ID can name a removed space.
 fn removed_id(selector: &SpaceSelector) -> Result<SpaceId> {
     match selector.given_id() {
         Some(id) => Ok(id.clone()),
@@ -192,7 +180,6 @@ fn removed_id(selector: &SpaceSelector) -> Result<SpaceId> {
     }
 }
 
-/// The removal records the package `manifest` carries below its own.
 fn carried_records(manifest: &Manifest) -> impl Iterator<Item = &RemovedSpace> {
     manifest.carried.iter().map(|carried| &carried.space.record)
 }

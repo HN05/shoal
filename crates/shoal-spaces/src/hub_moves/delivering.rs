@@ -1,7 +1,6 @@
 //! The source's side of a move between joined machines: the package goes
-//! to the destination's daemon over a duplex stream of the hub's links,
-//! with the ticket the destination's claims of its spaces carry, and a
-//! move whose arrival the destination could not report settles at the hub.
+//! to the destination's daemon with the ticket its claims carry, and a move
+//! whose arrival the destination could not report settles at the hub.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, bail, ensure};
@@ -18,10 +17,8 @@ use crate::{
 };
 
 impl Spaces {
-    /// Deliver the package of the recorded move of the space `selector`
-    /// names to the joined machine it goes to, and return how the import
-    /// there went; an error leaves it unknown whether that machine claimed
-    /// the space.
+    /// Returns how the import there went. An error leaves it unknown whether
+    /// that machine claimed the space.
     pub async fn deliver_move(
         &self,
         daemon: &dyn Daemon,
@@ -35,9 +32,7 @@ impl Spaces {
             .await
     }
 
-    /// Deliver the package of a copy of the space `selector` names to the
-    /// joined machine `destination` names, and return how the import there
-    /// went.
+    /// Returns how the import there went.
     pub async fn deliver_copy(
         &self,
         daemon: &dyn Daemon,
@@ -49,10 +44,9 @@ impl Spaces {
             .await
     }
 
-    /// Settle at the hub the recorded move of the space `selector` names,
-    /// whose arrival the joined machine it goes to could not report: that
-    /// machine claimed the space, or now no longer can. Fails while the
-    /// hub cannot be asked.
+    /// For a move whose arrival the destination could not report: that
+    /// machine claimed the space, or now no longer can. Fails while the hub
+    /// cannot be asked.
     pub async fn settle_move(
         &self,
         daemon: &dyn Daemon,
@@ -69,8 +63,8 @@ impl Spaces {
         })
     }
 
-    /// The joined machine `named` names as a move's destination: another
-    /// one than this, which is online, as a move needs both machines.
+    /// Another one than this, which is online, as a move needs both
+    /// machines.
     pub async fn receiving_machine(&self, daemon: &dyn Daemon, named: &str) -> Result<Member> {
         let (machine, own) = daemon.named_machine(named).await?;
         ensure!(
@@ -86,10 +80,8 @@ impl Spaces {
         Ok(machine)
     }
 
-    /// Deliver the package of the space `id`, waiting among the packages
-    /// delivered from here, to the joined machine `destination` names,
-    /// its spaces' claims there carrying `ticket`, recorded only as
-    /// removed there when `removed`, and return how the import there went.
+    /// The claims there carry `ticket`. With `removed`, the spaces are only
+    /// recorded as removed there. Returns how the import there went.
     pub(super) async fn deliver_package(
         &self,
         daemon: &dyn Daemon,
@@ -113,21 +105,17 @@ impl Spaces {
         )
     }
 
-    /// The file the package of the space `id` waits in among those
-    /// delivered from here.
     pub fn staged_package(&self, id: &SpaceId) -> std::path::PathBuf {
         (self.paths.move_packages()).join(crate::transfer::package_name(id))
     }
 
-    /// Delete the package of the space `id` that waited among those
-    /// delivered from here, once delivered or not; one left behind goes
-    /// with the next move of the space.
+    /// Whether or not it was delivered. One left behind goes with the next
+    /// move of the space.
     pub(super) fn discard_staged_package(&self, id: &SpaceId) {
         let _ = std::fs::remove_file(self.staged_package(id));
     }
 }
 
-/// The joined machine the recorded move `record` goes to.
 fn machine_destination(record: &MoveRecord) -> Result<&MachineDestination> {
     match &record.destination {
         MoveDestination::Machine(destination) => Ok(destination),

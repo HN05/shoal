@@ -1,12 +1,10 @@
-//! Who moves a space to another joined machine: a scoped caller moves every
-//! space its scope reaches, chats included, with no permission key, as it
-//! renames or converts them, and the removed spaces it may restore, and a
-//! caller on another machine too, since the space stays within the hub;
-//! ending a space the user holds takes those holds only as the caller's
-//! `user_holds` permission allows. A copy opens
-//! below the space its original is below, so only a copy of a space below
-//! the caller's own skips the `admin` permission: one of its own would open
-//! beside it, where a scoped caller creates nothing.
+//! Who moves a space to another joined machine. A scoped caller moves every
+//! space its scope reaches with no permission key, as it renames or
+//! converts them, and the removed spaces it may restore; ending a space the
+//! user holds takes those holds only as its `user_holds` permission allows.
+//! A copy opens below the space its original is below, so only a copy of a
+//! space below the caller's own skips the `admin` permission: one of its
+//! own would open beside it, where a scoped caller creates nothing.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::path::Path;
@@ -20,17 +18,16 @@ use crate::{
     transfer::{MoveDestination, MoveOrder},
 };
 
-/// Whether `caller` moves the spaces `order` takes with no permission key:
-/// to a joined machine, unless it copies its own space there.
+/// To a joined machine, unless it copies its own space there.
 pub fn moves_without_permission(caller: &Caller, order: &MoveOrder) -> bool {
     matches!(order.destination, MoveDestination::Machine(_))
         && !(order.keep && order.spaces.contains(&caller.space_id))
 }
 
 impl Spaces {
-    /// Let `caller` move the spaces `spaces` to a joined machine: each one
-    /// here that its scope reaches, and that the user holds only where it
-    /// may take those holds, and each removed one it may restore.
+    /// Each space here must be one its scope reaches, and one the user holds
+    /// only where it may take those holds. Each removed one must be one it
+    /// may restore.
     pub async fn authorize_joined_move(
         &self,
         daemon: &dyn Daemon,
@@ -55,10 +52,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Whether `file` is where the package of a copy of the space
-    /// `selector` names, below `caller`'s own, waits among those delivered
-    /// from here, as a copy for a joined machine does that needs no
-    /// permission key.
+    /// A copy for a joined machine of a space below `caller`'s own waits
+    /// there and needs no permission key.
     pub async fn copies_for_joined_machine(
         &self,
         caller: &Caller,
@@ -70,9 +65,8 @@ impl Spaces {
         Ok(file == staged && space.id != caller.space_id)
     }
 
-    /// Whether the space `selector` names is another than `caller`'s own,
-    /// as a copy that needs no permission key is; the request's scope
-    /// check makes it one below.
+    /// A copy that needs no permission key is of another space. The request's
+    /// scope check makes it one below.
     pub async fn copies_other_than_own(
         &self,
         caller: &Caller,
@@ -81,8 +75,7 @@ impl Spaces {
         Ok(self.space(selector).await?.id != caller.space_id)
     }
 
-    /// Whether a move recorded of the space `selector` names goes to a
-    /// joined machine; not for a space that is gone or records none.
+    /// False for a space that is gone or records none.
     pub async fn moves_to_joined_machine(&self, selector: &SpaceSelector) -> Result<bool> {
         let Ok(space) = self.space(selector).await else {
             return Ok(false);

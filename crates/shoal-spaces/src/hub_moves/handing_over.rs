@@ -1,6 +1,5 @@
 //! The start a package of a space places it by when the hub continues the
-//! space on another machine, as when its own shuts down or sleeps: the hub
-//! continues it on the machine its placement puts that start on.
+//! space on another machine, as when its own shuts down or sleeps.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result};
@@ -14,9 +13,7 @@ use crate::{
 };
 
 impl Spaces {
-    /// How placement reads a start of the agent of `space`, which a
-    /// package that records it as `packaged` continues elsewhere: the
-    /// origin of its repository, the tool of the agent that continues
+    /// The origin of its repository, the tool of the agent that continues
     /// there, else its settings' default one, and its mode.
     pub async fn package_start(
         &self,
@@ -43,9 +40,8 @@ impl Spaces {
         })
     }
 
-    /// The origin of the repository of `space`, by the key machines match
-    /// repositories by, with the settings its agent starts under: none and
-    /// the global config's for a chat without one.
+    /// By the key machines match repositories by, with the settings its agent
+    /// starts under: none and the global config's for a chat without one.
     async fn handover_settings(
         &self,
         daemon: &dyn Daemon,
