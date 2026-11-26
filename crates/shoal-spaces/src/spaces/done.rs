@@ -26,10 +26,10 @@ use shoal_protocol::{assignments::Done, space_names::SpaceSelector, threads::Clo
 use shoal_refs::CommitId;
 
 impl Spaces {
-    /// Stop the space's demos unless `done` keeps them, then record `done`
-    /// for the space `selector` names, at the HEAD of where its agent works.
-    /// Copies of the files it hands back are attached by `attacher`, and the
-    /// space's attached files keep them after its removal.
+    /// Stops the space's demos unless `done` keeps them, then records `done`
+    /// at the HEAD of where its agent works. `attacher` attaches the copies
+    /// of the files it hands back, which the space's attached files keep
+    /// after its removal.
     pub async fn mark_space_done(
         &self,
         daemon: &dyn Daemon,
@@ -59,9 +59,8 @@ impl Spaces {
         self.record_done(daemon, &space, completion).await
     }
 
-    /// Withdraw the completion the space `selector` names recorded, and
-    /// reopen the threads it closed; only holds and threads that wait keep
-    /// the space.
+    /// Reopens the threads it closed. Only holds and threads that wait keep
+    /// the space then.
     pub async fn undo_space_done(
         &self,
         daemon: &dyn Daemon,
@@ -93,15 +92,13 @@ impl Spaces {
         Ok(completion)
     }
 
-    /// The completion the space `id` recorded, a workspace's or a chat's.
     pub async fn completion(&self, id: &SpaceId) -> Result<Option<Completion>> {
         let id = id.to_owned();
         self.store.run(move |db| recorded(db, &id)).await
     }
 
-    /// Record that another branch has the work of the space `id` at `head`
-    /// under other commits, as `shoal done --integrated` records it,
-    /// keeping what a completion it recorded says otherwise.
+    /// As `shoal done --integrated` records it, keeping what a completion
+    /// recorded says otherwise.
     pub async fn record_integrated(&self, id: &SpaceId, head: CommitId) -> Result<()> {
         let id = id.to_owned();
         self.store
@@ -126,9 +123,9 @@ impl Spaces {
             .await
     }
 
-    /// `shoal resume` restores a stopped agent of the space, which says its
-    /// work is not finished: withdraw a standing completion, so a protection
-    /// stop restores the agent and completion cleanup leaves the space.
+    /// `shoal resume` restores a stopped agent, which says its work is not
+    /// finished. Withdrawing a standing completion lets a protection stop
+    /// restore the agent and keeps completion cleanup off the space.
     pub async fn reopen_for_resume(&self, daemon: &dyn Daemon, space_id: &SpaceId) {
         match self.completion(space_id).await {
             Ok(Some(_)) => {}
@@ -146,11 +143,11 @@ impl Spaces {
         }
     }
 
-    /// The HEAD a completion of `space` records, of where its agent works:
-    /// a workspace's verified worktree, or the worktree or checkout a chat
-    /// runs in. A chat without a repository records an empty one, since its
-    /// `root_dir` is no repository. Only a workspace is `integrated`: that
-    /// records that another branch has its commits.
+    /// Of where its agent works: a workspace's verified worktree, or the
+    /// worktree or checkout a chat runs in. A chat without a repository
+    /// records an empty one, since its `root_dir` is no repository. Only a
+    /// workspace is `integrated`: that records that another branch has its
+    /// commits.
     async fn completion_head(
         &self,
         daemon: &dyn Daemon,
@@ -173,9 +170,9 @@ impl Spaces {
         Ok(head)
     }
 
-    /// Record `completion`, with cleanup also when the space's settings
-    /// request it. Caller holds the space's PR gate and has verified
-    /// ownership and the completion's HEAD.
+    /// With cleanup also when the space's settings request it. The caller
+    /// holds the space's PR gate and has verified ownership and the
+    /// completion's HEAD.
     async fn record_done(
         &self,
         daemon: &dyn Daemon,
@@ -191,7 +188,8 @@ impl Spaces {
         let persisted = self
             .persist_completion(daemon, &space.id, &completion)
             .await?;
-        // Rerunning the hook is the one effect a repeated done may have left.
+        // Rerunning the hook is the one effect a repeated done may have
+        // left.
         ensure!(
             persisted.changed || hook.is_some(),
             "the space is already marked done at this HEAD"
@@ -224,10 +222,9 @@ impl Spaces {
         Ok(completion)
     }
 
-    /// Record `completion` of the space `space`, with its summary as the
-    /// status line, and close its open threads, here and on the other
-    /// machines, which its finished work waits on no longer, telling their
-    /// openers.
+    /// Sets the summary as the status line, and closes the space's open
+    /// threads, here and on the other machines, telling their openers: its
+    /// finished work no longer waits on them.
     async fn persist_completion(
         &self,
         daemon: &dyn Daemon,
@@ -269,8 +266,8 @@ impl Spaces {
         Ok(persisted)
     }
 
-    /// The configured `hooks.post_done`, in where the space's agent works,
-    /// holding off permit and lifecycle changes until it has run.
+    /// Runs where the space's agent works, and holds off permit and
+    /// lifecycle changes until it has run.
     async fn done_hook(
         &self,
         space: &Space,
@@ -283,8 +280,7 @@ impl Spaces {
         Ok(Some((command, guard)))
     }
 
-    /// Run `hooks.post_done` in `space`. Failure only notifies; it never
-    /// undoes completion.
+    /// A failure only notifies; it never undoes completion.
     async fn run_done_hook(
         &self,
         daemon: &dyn Daemon,
@@ -305,18 +301,13 @@ impl Spaces {
     }
 }
 
-/// What recording a completion changed.
 struct Persisted {
-    /// Whether it replaced another completion, released a hold or closed a
-    /// thread.
+    /// It replaced another completion, released a hold or closed a thread.
     changed: bool,
-    /// The numbers of the threads it closed.
     closed: Vec<ItemNumber>,
-    /// Whether it changed the status line.
     progressed: bool,
 }
 
-/// The completion the space `id` recorded.
 pub fn recorded(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Completion>> {
     let record: Option<String> = db
         .query_row(
@@ -330,8 +321,8 @@ pub fn recorded(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Comple
         .transpose()
 }
 
-/// Record `completion` for the space `id`, returning whether it differs from
-/// the recorded one in any field, or that record is unreadable.
+/// Returns whether it differs from the recorded one in any field, or that
+/// record is unreadable.
 pub fn record_completion(
     tx: &rusqlite::Transaction,
     id: &SpaceId,
@@ -353,8 +344,7 @@ pub fn record_completion(
     Ok(recorded.as_ref() != Some(completion))
 }
 
-/// Delete and return the completion the space `id` recorded, or `None`
-/// without one. An unreadable record stays in place for diagnosis.
+/// An unreadable record stays in place for diagnosis.
 pub fn take_completion(tx: &rusqlite::Transaction, id: &SpaceId) -> Result<Option<Completion>> {
     let record: Option<String> = tx
         .query_row(
@@ -368,8 +358,7 @@ pub fn take_completion(tx: &rusqlite::Transaction, id: &SpaceId) -> Result<Optio
         .transpose()?)
 }
 
-/// What the user is told about a completion, the threads it closed and
-/// the files it handed back, in the space numbered `space`.
+/// Names the threads it closed and the files it handed back.
 pub fn done_notice(space: &str, completion: &Completion, closed: &[ItemNumber]) -> String {
     let mut notice = String::from("finished");
     if completion.integrated {
@@ -384,9 +373,7 @@ pub fn done_notice(space: &str, completion: &Completion, closed: &[ItemNumber]) 
     notice
 }
 
-/// Add the threads a completion closed, the results it handed back and,
-/// last, its summary to the notice of the space `space`, a number, which
-/// selects it.
+/// The summary comes last. `space` is the number that selects the space.
 fn push_completion_details(
     notice: &mut String,
     space: &str,
@@ -410,8 +397,7 @@ fn push_completion_details(
     }
 }
 
-/// The results a notice names: the first few, then how many more, since
-/// `shoal files` lists them all.
+/// The first few, then how many more, since `shoal files` lists them all.
 pub fn results_preview(results: &[HandedBack]) -> String {
     const NAMED: usize = 3;
     let names: Vec<_> = results
