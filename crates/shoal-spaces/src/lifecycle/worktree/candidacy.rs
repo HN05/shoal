@@ -22,15 +22,14 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 use std::{collections::HashMap, path::Path};
 
-/// Why cleanup leaves `workspace` alone whatever else it finds: its worktree
-/// is not ready, as while it is set up or removed.
+/// A worktree that is not ready, as while it is set up or removed, keeps
+/// the workspace whatever else cleanup finds.
 pub fn not_ready(workspace: &crate::model::Worktree) -> Option<CleanupReason> {
     (workspace.state != WorkspaceState::Ready).then_some(CleanupReason::NotReady {
         state: workspace.state,
     })
 }
 
-/// What the worktree's state keeps from automatic cleanup, if anything.
 async fn worktree_cleanup_reason(check: &RemovalCheck) -> Result<Option<CleanupReason>> {
     Ok(if !off_runtime::is_dir(&check.workspace.path).await? {
         Some(CleanupReason::MissingDirectory)
@@ -51,8 +50,8 @@ async fn worktree_cleanup_reason(check: &RemovalCheck) -> Result<Option<CleanupR
     })
 }
 
-/// Whether a process `users` finds is active in the directory, besides the
-/// wrappers waiting to restore the idle agents of `executions`.
+/// Leaves out the wrappers waiting to restore the idle agents of
+/// `executions`.
 async fn directory_in_use(
     path: &Path,
     executions: &CleanupExecutions,
@@ -62,10 +61,9 @@ async fn directory_in_use(
     Ok(!users.activity_except(path, &wrappers).await?.is_empty())
 }
 
-/// What an inspection compares a worktree with: its repository's shared
-/// Git directory, and the default branch, `None` while that does not
-/// resolve. A removal, which inspects its worktree several times, reads
-/// them once.
+/// The repository's shared Git directory and the default branch, `None`
+/// while that does not resolve. A removal, which inspects its worktree
+/// several times, reads them once.
 pub struct Baseline {
     common_dir: CommonDir,
     default_branch: Option<DefaultBranch>,
@@ -77,7 +75,6 @@ impl Baseline {
     }
 }
 
-/// The workspace's executions as cleanup sees them.
 pub struct CleanupExecutions {
     /// Those other than the idle restores, which keep the workspace.
     running: usize,
@@ -85,7 +82,6 @@ pub struct CleanupExecutions {
     idle: Vec<IdleRestore>,
 }
 
-/// HEAD of the worktree at `path`.
 async fn head(path: &Path) -> Result<String> {
     git::revision(path, "HEAD", git::run).await
 }
@@ -102,7 +98,6 @@ impl Spaces {
         (self.inspect_removal_against(workspace, policy, executions, &baseline)).await
     }
 
-    /// What inspections of `workspace` compare it with.
     pub async fn inspection_baseline(
         &self,
         daemon: &dyn Daemon,
@@ -119,8 +114,6 @@ impl Spaces {
         })
     }
 
-    /// Inspect `workspace` as [`Self::inspect_removal`] does, comparing it
-    /// with `baseline`.
     pub async fn inspect_removal_against(
         &self,
         workspace: Workspace,
@@ -145,10 +138,9 @@ impl Spaces {
         .await
     }
 
-    /// The workspace's executions, telling the restores of idle agents, which
-    /// keep it from no cleanup, from the others. `cancelled` are the idle
-    /// restores a removal stopped, whose records and exiting wrappers it
-    /// still disregards.
+    /// Tells the restores of idle agents, which keep it from no cleanup,
+    /// from the others. `cancelled` are the idle restores a removal stopped,
+    /// whose records and exiting wrappers it still disregards.
     pub async fn cleanup_executions(
         &self,
         daemon: &dyn Daemon,
@@ -183,11 +175,10 @@ impl Spaces {
         Ok(executions)
     }
 
-    /// HEAD of the worktree of `workspace` as an idle cleanup candidate, or
-    /// the first reason it keeps it, inspected under
-    /// `FileAccess::checked`: commands and leases, its Git state, then
-    /// the processes in it, read from `users`, since Git state rules out
-    /// most worktrees. `cancelled` are the restores a removal stopped.
+    /// HEAD, or the first reason the worktree keeps the workspace. Inspects
+    /// under `FileAccess::checked`: commands and leases, Git state, then the
+    /// processes in it, read from `users`, since Git state rules out most
+    /// worktrees. `cancelled` are the restores a removal stopped.
     pub async fn idle_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -223,12 +214,11 @@ impl Spaces {
             .await
     }
 
-    /// HEAD of the worktree of `workspace` as a merged cleanup candidate,
-    /// inspected under `FileAccess::checked`, or `None` when it is not
-    /// one: unused, merged into the default branch, with no Git operation
-    /// under way, no workspace stacked on it and any unsaved files left over
-    /// from merged work. `cancelled` are the restores a removal stopped, and
-    /// the processes in the worktree are read from `users`.
+    /// HEAD, inspected under `FileAccess::checked`. `None` unless the
+    /// worktree is unused, merged into the default branch, with no Git
+    /// operation under way, no workspace stacked on it, and any unsaved
+    /// files left over from merged work. `cancelled` are the restores a
+    /// removal stopped, and `users` gives the processes in the worktree.
     pub async fn merged_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -272,9 +262,8 @@ impl Spaces {
             .await
     }
 
-    /// HEAD of `worktree`, of the workspace `id`, whose idle timer runs,
-    /// inspected under `FileAccess::checked`, or `None` when its
-    /// commands, leases or a process `users` finds in it keep it.
+    /// Inspected under `FileAccess::checked`. `None` when its commands,
+    /// leases or a process `users` finds in it keep it.
     pub async fn idle_timer_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -298,13 +287,12 @@ impl Spaces {
             .await
     }
 
-    /// One walk of the files in `worktree`.
     pub async fn walk_worktree(&self, worktree: &Worktree) -> Result<Tree> {
         let path = worktree.path.clone();
         tokio::task::spawn_blocking(move || crate::cleanup::walk(&path)).await?
     }
 
-    /// Active commands and leases; saved stopped work and idle restores do
+    /// Active commands and leases. Saved stopped work and idle restores do
     /// not imply use.
     async fn usage_reason(
         &self,

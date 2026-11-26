@@ -19,8 +19,7 @@ impl Spaces {
         (self.find_space(id).await?).with_context(|| format!("no space {id}"))
     }
 
-    /// The idle cleanup snapshot of the space `id`, scanning the processes
-    /// in its worktree.
+    /// Scans the processes in its worktree.
     pub async fn cleanup_snapshot(
         &self,
         daemon: &dyn Daemon,
@@ -30,7 +29,6 @@ impl Spaces {
         (self.candidate_snapshot(daemon, &space, Rule::Idle, &[], &DirectoryUsers::default())).await
     }
 
-    /// The merged cleanup snapshot of the space `id`.
     pub async fn merged_snapshot(
         &self,
         daemon: &dyn Daemon,
@@ -47,8 +45,6 @@ impl Spaces {
         .await
     }
 
-    /// The idle cleanup snapshot of the space `id`, or why it is not a
-    /// candidate.
     pub async fn cleanup_candidacy(
         &self,
         daemon: &dyn Daemon,
@@ -58,7 +54,7 @@ impl Spaces {
         (self.idle_candidacy(daemon, &space, &DirectoryUsers::default())).await
     }
 
-    /// [`Manager::remove_unused`] of the space `selector` names.
+    /// [`Self::remove_unused`] of the space `selector` names.
     pub async fn remove_unused_by(
         &self,
         daemon: &dyn Daemon,
@@ -112,7 +108,7 @@ impl Spaces {
             .map(drop)
     }
 
-    /// [`Manager::remove_completed`] of the space `id`.
+    /// [`Self::remove_completed`] of the space `id`.
     pub async fn remove_completed_by(
         &self,
         daemon: &dyn Daemon,
@@ -125,7 +121,6 @@ impl Spaces {
             .await
     }
 
-    /// Remove the workspace `selector` names for `removal`.
     pub async fn remove(
         &self,
         daemon: &dyn Daemon,

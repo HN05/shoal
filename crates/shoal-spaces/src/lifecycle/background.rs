@@ -23,13 +23,11 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// Start removing the space `selector` names at `caller`'s request, as
-    /// [`Self::remove_selected`] removes it, or without `release_holds` as
-    /// [`Self::remove_unheld`] does. Returns the space once it is reserved
-    /// and passes the checks removal makes before changing anything; the
-    /// rest goes on in the background, which a daemon update waits for. A
-    /// failure from then on retains the space and reaches the agent of the
-    /// caller's space, or else the user.
+    /// Without `release_holds`, refuses as [`Self::remove_unheld`] does.
+    /// Returns the space once it is reserved and passes the checks removal
+    /// makes before changing anything. The rest goes on in the background,
+    /// which a daemon update waits for. A failure from then on retains the
+    /// space and reaches the agent of the caller's space, or else the user.
     pub async fn start_removal(
         &self,
         daemon: &Arc<dyn Daemon>,
@@ -80,8 +78,7 @@ impl Spaces {
             .context("the removal ended before its checks")?
     }
 
-    /// Tell the agent of `requester`, or else the user, that removing
-    /// `space` failed with `error` and the space stays. A requesting chat
+    /// Tells the agent of `requester`, or else the user. A requesting chat
     /// removed before it reads the message hands it to the user.
     async fn report_failed_removal(
         &self,
@@ -112,8 +109,7 @@ impl Spaces {
     }
 }
 
-/// A removal at a request that deletes only the `unsaved` work the caller
-/// confirmed.
+/// Deletes only the `unsaved` work the caller confirmed.
 fn manual(unsaved: &UnsavedWork, release_holds: bool) -> Removal<'_> {
     Removal::Manual {
         unsaved,
