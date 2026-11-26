@@ -115,8 +115,8 @@ impl Agents {
     /// while holding the decisions. It may skip the restart, record it until
     /// the agent's turn ends or in the line, begin it now or with the restart
     /// under way, or record it until the agent that restart started runs. A
-    /// recorded restart answers at once, since a long wait is the daemon's to
-    /// keep.
+    /// restart recorded until the turn ends or in the line answers at once,
+    /// since a long wait is the daemon's to keep.
     async fn decide_restart(
         &self,
         space: &Space,
