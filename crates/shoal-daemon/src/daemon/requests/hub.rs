@@ -97,7 +97,7 @@ async fn authorize(manager: &Manager, method: &HubMethod, caller: Option<&Caller
             let action = Action::new(PermissionKey::Daemon, "shoal hub update");
             manager.coordination.authorize_action(manager, Some(caller), action).await
         }
-        _ => Err(Refusal::new(
+        HubMethod::PairHub | HubMethod::JoinHub { .. } | HubMethod::LeaveHub | HubMethod::RevokeHubMember { .. } => Err(Refusal::new(
             Reason::NotReady,
             "only the user's own terminal pairs, joins, leaves and revokes the hub's machines",
         )

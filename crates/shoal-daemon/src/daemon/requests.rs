@@ -1,4 +1,7 @@
 //! Every request routed to the handler of its domain.
+// Every arm names its variants, so each classifier decides a new request
+// method or policy variant.
+#![deny(clippy::wildcard_enum_match_arm)]
 mod acting;
 mod agents;
 mod alerts;

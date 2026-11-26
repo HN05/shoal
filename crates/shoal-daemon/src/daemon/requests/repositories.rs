@@ -242,7 +242,17 @@ async fn administered_repository(
                 _ => None,
             }
         }
-        _ => None,
+        RepositoryMethod::ListRepositories
+        | RepositoryMethod::RepositoriesElsewhere
+        | RepositoryMethod::RegisterRepository { .. }
+        | RepositoryMethod::RegisterContribution { .. }
+        | RepositoryMethod::HoldContribution { .. }
+        | RepositoryMethod::PreviewRepositoryRemoval { .. }
+        | RepositoryMethod::PlanRepositoryMoves { .. }
+        | RepositoryMethod::MoveRepositories { .. }
+        | RepositoryMethod::SyncRepository { .. }
+        | RepositoryMethod::FailingSyncs
+        | RepositoryMethod::ReceiveCommits { .. } => None,
     })
 }
 
@@ -353,7 +363,20 @@ impl Scoped for RepositoryMethod {
                     .await?;
                 return Ok(None);
             }
-            _ => administered_repository(manager, caller, self).await?,
+            RepositoryMethod::RegisterRepository { .. }
+            | RepositoryMethod::RegisterContribution { .. }
+            | RepositoryMethod::RenameRepository { .. }
+            | RepositoryMethod::ShareRepository { .. }
+            | RepositoryMethod::LocalConfigPath { .. }
+            | RepositoryMethod::EditLocalConfig { .. }
+            | RepositoryMethod::PlanRepositoryMoves { .. }
+            | RepositoryMethod::MoveRepositories { .. }
+            | RepositoryMethod::ListBranches { .. }
+            | RepositoryMethod::KeptBranches { .. }
+            | RepositoryMethod::DeleteKeptBranches { .. }
+            | RepositoryMethod::KeepRepositoryAgentEnvironment { .. } => {
+                administered_repository(manager, caller, self).await?
+            }
         };
         // An edit that would give more than the caller holds is refused
         // before it asks for approval.

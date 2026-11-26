@@ -27,13 +27,10 @@ pub(super) async fn handle(
         Some(kept) => keeper(manager, kept).await?,
         None => Keeper::Here(Holder::Own),
     };
-    if keeper == Keeper::Hub && !matches!(method, AppMethod::WriteAppEntry { .. }) {
+    if keeper == Keeper::Hub && relayed_to_hub(&method) {
         let (manager, scope) = (manager.clone(), scope.cloned());
         return Ok(Answer::connection(move |stream, id, startup| async move {
-            // A watch goes on, and each of its writes takes an operation of
-            // its own; anything else holds its operation until answered.
-            let operation =
-                (!matches!(method, AppMethod::WatchAppEntries { .. })).then_some(startup);
+            let operation = holds_operation(&method).then_some(startup);
             let held = operation.is_some();
             manager
                 .relay_from_hub(stream, id, scope, method, held)
@@ -99,12 +96,39 @@ pub(super) async fn handle(
     }))
 }
 
+/// Whether this daemon relays `method` to the hub that keeps its entries
+/// whole: a write's bytes pass through this daemon, which sends them on.
+fn relayed_to_hub(method: &AppMethod) -> bool {
+    match method {
+        AppMethod::ReadAppConfig { .. }
+        | AppMethod::ReadAppEntry { .. }
+        | AppMethod::ListAppEntries { .. }
+        | AppMethod::DeleteAppEntry { .. }
+        | AppMethod::WatchAppEntries { .. } => true,
+        AppMethod::WriteAppEntry { .. } => false,
+    }
+}
+
+/// Whether `method`, relayed to the hub, holds its operation until
+/// answered: a watch goes on, and each of its writes takes an operation of
+/// its own.
+fn holds_operation(method: &AppMethod) -> bool {
+    match method {
+        AppMethod::ReadAppConfig { .. }
+        | AppMethod::ReadAppEntry { .. }
+        | AppMethod::ListAppEntries { .. }
+        | AppMethod::WriteAppEntry { .. }
+        | AppMethod::DeleteAppEntry { .. } => true,
+        AppMethod::WatchAppEntries { .. } => false,
+    }
+}
+
 /// Who keeps the entries in `kept` this daemon's callers reach: the hub
 /// the shared ones, once this machine joined one, and else this daemon.
 async fn keeper(manager: &Manager, kept: AppScope) -> Result<Keeper> {
     Ok(match kept {
         AppScope::Shared if manager.shares_through_hub().await? => Keeper::Hub,
-        kept => Keeper::Here(Holder::own(kept)),
+        kept @ (AppScope::Shared | AppScope::Device) => Keeper::Here(Holder::own(kept)),
     })
 }
 

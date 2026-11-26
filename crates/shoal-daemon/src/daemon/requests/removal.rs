@@ -578,7 +578,28 @@ async fn moves_to_joined_machine(
         | RemovalMethod::SettleMove { space } => {
             manager.spaces.moves_to_joined_machine(space).await
         }
-        _ => Ok(false),
+        RemovalMethod::StopTargets
+        | RemovalMethod::StopSpace { .. }
+        | RemovalMethod::CheckStop { .. }
+        | RemovalMethod::StopProcesses { .. }
+        | RemovalMethod::CheckRemoval { .. }
+        | RemovalMethod::RemoveSpace { .. }
+        | RemovalMethod::StartRemoval { .. }
+        | RemovalMethod::AbsorbSpace(_)
+        | RemovalMethod::Cleanup { .. }
+        | RemovalMethod::RemovedSpaces
+        | RemovalMethod::RemovedSpace { .. }
+        | RemovalMethod::LocateRemovedSpace { .. }
+        | RemovalMethod::RestoreSpace { .. }
+        | RemovalMethod::DropRestoredSessions { .. }
+        | RemovalMethod::ExportRemovedSpace { .. }
+        | RemovalMethod::ImportPackage(_)
+        | RemovalMethod::ReadHeldPackage { .. }
+        | RemovalMethod::ReleaseHeldMove { .. }
+        | RemovalMethod::TakenRecords { .. }
+        | RemovalMethod::DeliverRemovedSpace { .. }
+        | RemovalMethod::SettleRemovedMove { .. }
+        | RemovalMethod::ReceiveMove { .. } => Ok(false),
     }
 }
 
@@ -592,7 +613,34 @@ async fn administer<'a>(
 ) -> Result<Option<&'a mut SpaceSelector>> {
     let importing = match method {
         RemovalMethod::ImportPackage(import) => import.repository.as_mut(),
-        _ => None,
+        RemovalMethod::StopTargets
+        | RemovalMethod::StopSpace { .. }
+        | RemovalMethod::CheckStop { .. }
+        | RemovalMethod::StopProcesses { .. }
+        | RemovalMethod::CheckRemoval { .. }
+        | RemovalMethod::RemoveSpace { .. }
+        | RemovalMethod::StartRemoval { .. }
+        | RemovalMethod::AbsorbSpace(_)
+        | RemovalMethod::Cleanup { .. }
+        | RemovalMethod::RemovedSpaces
+        | RemovalMethod::RemovedSpace { .. }
+        | RemovalMethod::LocateRemovedSpace { .. }
+        | RemovalMethod::RestoreSpace { .. }
+        | RemovalMethod::DropRestoredSessions { .. }
+        | RemovalMethod::ExportRemovedSpace { .. }
+        | RemovalMethod::CopySpace { .. }
+        | RemovalMethod::ExportMovingSpace { .. }
+        | RemovalMethod::EndMovedSpace { .. }
+        | RemovalMethod::AbandonMove { .. }
+        | RemovalMethod::DeliverMove { .. }
+        | RemovalMethod::DeliverCopy { .. }
+        | RemovalMethod::ReadHeldPackage { .. }
+        | RemovalMethod::ReleaseHeldMove { .. }
+        | RemovalMethod::SettleMove { .. }
+        | RemovalMethod::TakenRecords { .. }
+        | RemovalMethod::DeliverRemovedSpace { .. }
+        | RemovalMethod::SettleRemovedMove { .. }
+        | RemovalMethod::ReceiveMove { .. } => None,
     };
     let repository = match importing {
         Some(repository) => {
@@ -640,7 +688,25 @@ fn administered(method: &mut RemovalMethod) -> Option<&mut SpaceSelector> {
         | RemovalMethod::ReadHeldPackage { space, .. }
         | RemovalMethod::ReleaseHeldMove { space }
         | RemovalMethod::DropRestoredSessions { space } => Some(space),
-        _ => None,
+        RemovalMethod::StopTargets
+        | RemovalMethod::StopSpace { .. }
+        | RemovalMethod::CheckStop { .. }
+        | RemovalMethod::StopProcesses { .. }
+        | RemovalMethod::CheckRemoval { .. }
+        | RemovalMethod::RemoveSpace { .. }
+        | RemovalMethod::StartRemoval { .. }
+        | RemovalMethod::AbsorbSpace(_)
+        | RemovalMethod::Cleanup { .. }
+        | RemovalMethod::RemovedSpaces
+        | RemovalMethod::RemovedSpace { .. }
+        | RemovalMethod::LocateRemovedSpace { .. }
+        | RemovalMethod::RestoreSpace { .. }
+        | RemovalMethod::ExportRemovedSpace { .. }
+        | RemovalMethod::ImportPackage(_)
+        | RemovalMethod::TakenRecords { .. }
+        | RemovalMethod::DeliverRemovedSpace { .. }
+        | RemovalMethod::SettleRemovedMove { .. }
+        | RemovalMethod::ReceiveMove { .. } => None,
     }
 }
 

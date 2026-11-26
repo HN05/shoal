@@ -103,7 +103,11 @@ pub(in crate::daemon) async fn report(
                         .tell_move_after_turn(manager, id, &ended)
                         .await
                 }
-                _ => {}
+                OperationKind::Prepare
+                | OperationKind::OpenPull
+                | OperationKind::Merge
+                | OperationKind::Unmerge
+                | OperationKind::Push => {}
             }
         }
     }

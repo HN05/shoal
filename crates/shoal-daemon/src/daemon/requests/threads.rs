@@ -226,10 +226,26 @@ pub(super) async fn handle(
 /// Whether `method` writes the review of a review run that sends it: a
 /// thread without a kind, or a post.
 fn writes_review(method: &ThreadMethod) -> bool {
-    matches!(
-        method,
-        ThreadMethod::OpenThread { kind: None, .. } | ThreadMethod::Post { .. }
-    )
+    match method {
+        ThreadMethod::OpenThread { kind, .. } => kind.is_none(),
+        ThreadMethod::Post { .. } => true,
+        ThreadMethod::OpenComment { .. }
+        | ThreadMethod::CloseOpened { .. }
+        | ThreadMethod::ReopenOpened { .. }
+        | ThreadMethod::PostInChat { .. }
+        | ThreadMethod::RepliedInChat { .. }
+        | ThreadMethod::ForwardThread { .. }
+        | ThreadMethod::ResolveThread { .. }
+        | ThreadMethod::ListThreads { .. }
+        | ThreadMethod::ShowThread { .. }
+        | ThreadMethod::LinkThread { .. }
+        | ThreadMethod::UnlinkThread { .. }
+        | ThreadMethod::SwitchThread { .. }
+        | ThreadMethod::CurrentThread { .. }
+        | ThreadMethod::AddChanges { .. }
+        | ThreadMethod::RemoveChanges { .. }
+        | ThreadMethod::AwaitPost { .. } => false,
+    }
 }
 
 /// What a review run's `method` writes of its running review `review`,
@@ -262,7 +278,25 @@ async fn write_review(
             );
             (reviews.reopen_run_finding(&**manager, review, thread, post)).await
         }
-        _ => bail!("a review run only opens and reopens its findings"),
+        ThreadMethod::OpenThread { .. }
+        | ThreadMethod::OpenComment { .. }
+        | ThreadMethod::CloseOpened { .. }
+        | ThreadMethod::ReopenOpened { .. }
+        | ThreadMethod::PostInChat { .. }
+        | ThreadMethod::RepliedInChat { .. }
+        | ThreadMethod::ForwardThread { .. }
+        | ThreadMethod::ResolveThread { .. }
+        | ThreadMethod::ListThreads { .. }
+        | ThreadMethod::ShowThread { .. }
+        | ThreadMethod::LinkThread { .. }
+        | ThreadMethod::UnlinkThread { .. }
+        | ThreadMethod::SwitchThread { .. }
+        | ThreadMethod::CurrentThread { .. }
+        | ThreadMethod::AddChanges { .. }
+        | ThreadMethod::RemoveChanges { .. }
+        | ThreadMethod::AwaitPost { .. } => {
+            bail!("a review run only opens and reopens its findings")
+        }
     }
 }
 

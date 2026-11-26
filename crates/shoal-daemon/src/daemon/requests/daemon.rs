@@ -119,7 +119,7 @@ pub(in crate::daemon) async fn exit(
     }
     let (quiet, _operation) = match request.when {
         ExitWhen::Now => (None, Some(guard)),
-        when => {
+        when @ (ExitWhen::Idle | ExitWhen::IfIdle) => {
             // The exit's own request would keep the daemon from quiescing.
             drop(guard);
             let waiting =

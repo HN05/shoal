@@ -341,7 +341,23 @@ async fn administer<'a>(
                 .await?;
             Some(manager.repositories.repository(&*repository).await?.id)
         }
-        _ => None,
+        WorkspaceMethod::OpenBranch { .. }
+        | WorkspaceMethod::CreateWorkspace { .. }
+        | WorkspaceMethod::ReopenWorkspace { .. }
+        | WorkspaceMethod::CreateChild { .. }
+        | WorkspaceMethod::CreateCommitWorkspace { .. }
+        | WorkspaceMethod::OpenPullHead { .. }
+        | WorkspaceMethod::RenameBranch { .. }
+        | WorkspaceMethod::UntrackedWorktrees
+        | WorkspaceMethod::SetBaseWorkspace { .. }
+        | WorkspaceMethod::InspectWorkspace { .. }
+        | WorkspaceMethod::CopyOrigin { .. }
+        | WorkspaceMethod::VerifyWorkspace { .. }
+        | WorkspaceMethod::FastForwardWorkspace { .. }
+        | WorkspaceMethod::RefreshWorkspace { .. }
+        | WorkspaceMethod::KeepAgentEnvironment { .. }
+        | WorkspaceMethod::CreatePendingWorktree { .. }
+        | WorkspaceMethod::WorkspaceHook { .. } => None,
     };
     manager
         .coordination
@@ -367,6 +383,22 @@ async fn administer<'a>(
 fn administered(method: &mut WorkspaceMethod) -> Option<&mut SpaceSelector> {
     match method {
         WorkspaceMethod::ReopenWorkspace { workspace } => Some(workspace),
-        _ => None,
+        WorkspaceMethod::OpenBranch { .. }
+        | WorkspaceMethod::CreateWorkspace { .. }
+        | WorkspaceMethod::CreateChild { .. }
+        | WorkspaceMethod::CreateCommitWorkspace { .. }
+        | WorkspaceMethod::OpenPullHead { .. }
+        | WorkspaceMethod::AdoptWorkspace { .. }
+        | WorkspaceMethod::RenameBranch { .. }
+        | WorkspaceMethod::UntrackedWorktrees
+        | WorkspaceMethod::SetBaseWorkspace { .. }
+        | WorkspaceMethod::InspectWorkspace { .. }
+        | WorkspaceMethod::CopyOrigin { .. }
+        | WorkspaceMethod::VerifyWorkspace { .. }
+        | WorkspaceMethod::FastForwardWorkspace { .. }
+        | WorkspaceMethod::RefreshWorkspace { .. }
+        | WorkspaceMethod::KeepAgentEnvironment { .. }
+        | WorkspaceMethod::CreatePendingWorktree { .. }
+        | WorkspaceMethod::WorkspaceHook { .. } => None,
     }
 }
