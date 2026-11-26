@@ -11,7 +11,7 @@ use shoal_protocol::{
     threads::{
         Finding, MAX_POST_LEN, NewPost, OutcomeKind, Sender, Side, Thread, ThreadKind, ThreadSpace,
     },
-    validate::{MAX_MESSAGE_LEN, shorten},
+    validate::MAX_MESSAGE_LEN,
 };
 use shoal_refs::CommitId;
 
@@ -52,7 +52,7 @@ pub struct AwaitedPost {
 /// pointing at its code, holding its posts until its review is submitted;
 /// the thread's record ID.
 pub fn open(tx: &Transaction<'_>, finding: &FindingThread<'_>) -> Result<i64> {
-    let name = shorten(one_line(finding.title), MAX_MESSAGE_LEN);
+    let name = shoal_text::cut_bytes(one_line(finding.title), MAX_MESSAGE_LEN);
     let new = NewThread {
         kind: ThreadKind::Review,
         finding: Some(Finding {
@@ -240,5 +240,5 @@ fn post_text(text: &str) -> String {
             c => c,
         })
         .collect();
-    shorten(text.trim().to_owned(), MAX_POST_LEN)
+    shoal_text::cut_bytes(text.trim().to_owned(), MAX_POST_LEN)
 }

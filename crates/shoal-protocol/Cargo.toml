@@ -44,6 +44,7 @@ shoal-ids.workspace = true
 shoal-refs.workspace = true
 shoal-schedule.workspace = true
 shoal-states.workspace = true
+shoal-text.workspace = true
 shoal-time.workspace = true
 tokio = { workspace = true, features = ["io-util"] }
 toml.workspace = true

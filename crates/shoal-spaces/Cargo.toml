@@ -33,6 +33,7 @@ shoal-refs = { workspace = true, features = ["rusqlite"] }
 shoal-schedule = { workspace = true, features = ["rusqlite"] }
 shoal-store.workspace = true
 shoal-subprocess.workspace = true
+shoal-text.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }
 

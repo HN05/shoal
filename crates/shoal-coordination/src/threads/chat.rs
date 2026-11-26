@@ -46,7 +46,7 @@ fn chat_text(message: Option<&str>, fallback: &str) -> String {
         .collect();
     match text.trim() {
         "" => fallback.to_owned(),
-        text => crate::validate::shorten(text.to_owned(), shoal_protocol::threads::MAX_POST_LEN),
+        text => shoal_text::cut_bytes(text.to_owned(), shoal_protocol::threads::MAX_POST_LEN),
     }
 }
 

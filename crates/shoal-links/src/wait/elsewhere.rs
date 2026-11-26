@@ -5,7 +5,7 @@ use anyhow::Result;
 use shoal_daemon_base::{alerts::MAX_UNREAD_BYTES, log};
 use shoal_forge_types::updates::Update;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::{model::SpaceRef, validate::shorten};
+use shoal_protocol::model::SpaceRef;
 
 use super::changes::acknowledge_deliveries;
 use crate::{Links, daemon::Daemon};
@@ -124,5 +124,5 @@ fn activity_message(updates: Vec<Update>) -> String {
         update.workspace = None;
         update.to_string()
     });
-    shorten(lines.collect::<Vec<_>>().join("\n"), EVENT_LIMIT)
+    shoal_text::cut_bytes(lines.collect::<Vec<_>>().join("\n"), EVENT_LIMIT)
 }

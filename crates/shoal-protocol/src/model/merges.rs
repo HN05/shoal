@@ -272,7 +272,7 @@ impl MergePreview {
 
     /// [`Self::description`] on one line, cut to fit an approval reason.
     pub fn reason(&self) -> String {
-        crate::validate::shorten(self.sentences().join(" "), crate::validate::MAX_REASON_LEN)
+        shoal_text::cut_bytes(self.sentences().join(" "), crate::validate::MAX_REASON_LEN)
     }
 
     fn sentences(&self) -> Vec<String> {

@@ -734,7 +734,7 @@ impl Thread {
             }
         }
         text.push_str(&format!(" (reply with shoal send {number})"));
-        crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN)
+        shoal_text::cut_bytes(text, crate::validate::MAX_MESSAGE_LEN)
     }
 }
 

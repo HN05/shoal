@@ -256,7 +256,7 @@ pub fn shown(text: &str) -> String {
     let printable: String = (text.chars())
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
-    shoal_protocol::validate::shorten(printable, SHOWN_TEXT)
+    shoal_text::cut_bytes(printable, SHOWN_TEXT)
 }
 
 #[cfg(test)]

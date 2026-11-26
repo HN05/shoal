@@ -90,7 +90,7 @@ impl Hub {
         let message = format!(
             "Your alert {from} is alert {to} now, since an alert on another machine of the hub took {from} first; withdraw it as {to}: {message}"
         );
-        let message = shoal_protocol::validate::shorten(message, 512);
+        let message = shoal_text::cut_bytes(message, 512);
         let kind = AlertKind::AlertRenumbered;
         let told = match daemon.find_space(&sender).await {
             Ok(Some(_)) => daemon.message_next_turn(&sender, kind, message).await,

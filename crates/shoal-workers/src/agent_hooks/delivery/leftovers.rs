@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use shoal_protocol::{processes::Leftover, time::UnixTime};
 
-/// The longest command a notice shows of a leftover.
+/// The most bytes of a leftover's command a notice shows.
 const COMMAND_LIMIT: usize = 80;
 
 /// The notice about `leftovers` of the `space`, "workspace" or "chat", at
@@ -15,7 +15,7 @@ pub(super) fn notice(space: &str, leftovers: &[Leftover], now: UnixTime) -> Stri
         .map(|leftover| {
             format!(
                 "{} (PID {}, {})",
-                shortened(&leftover.command),
+                shoal_text::cut_bytes(leftover.command.clone(), COMMAND_LIMIT),
                 leftover.pid,
                 running_time(now.duration_since(leftover.started_at))
             )
@@ -30,14 +30,6 @@ pub(super) fn notice(space: &str, leftovers: &[Leftover], now: UnixTime) -> Stri
             "{} processes from this {space} are still running after their parent exited: {listed}. Stop them with shoal stop --leftovers.",
             leftovers.len()
         ),
-    }
-}
-
-/// `command` cut to [`COMMAND_LIMIT`] characters.
-fn shortened(command: &str) -> String {
-    match command.char_indices().nth(COMMAND_LIMIT) {
-        Some((end, _)) => format!("{} …", command[..end].trim_end()),
-        None => command.to_owned(),
     }
 }
 

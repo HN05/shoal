@@ -26,7 +26,7 @@ const FAILURE_REPORT_INTERVAL: Duration = Duration::from_secs(600);
 /// The failed jobs a finished run's update names; `view ci` lists them all.
 pub(crate) const MAX_LISTED_JOBS: usize = 10;
 
-/// The characters of a failed job's name or step its run's update keeps.
+/// The bytes of a failed job's name or step its run's update keeps.
 const MAX_JOB_TEXT: usize = 120;
 
 /// The comment source of an item's discussion, where Shoal posts comments.
@@ -550,7 +550,7 @@ impl Snapshot {
 
 /// The failed jobs of a run and the steps that failed, after a colon.
 /// Only the first [`MAX_LISTED_JOBS`] are named, each name and step cut to
-/// [`MAX_JOB_TEXT`] characters, so the update fits a protocol frame however
+/// [`MAX_JOB_TEXT`] bytes, so the update fits a protocol frame however
 /// many jobs failed.
 fn failed_jobs_text(jobs: &[FailedJob]) -> String {
     if jobs.is_empty() {
@@ -560,9 +560,12 @@ fn failed_jobs_text(jobs: &[FailedJob]) -> String {
         .iter()
         .take(MAX_LISTED_JOBS)
         .map(|job| {
-            let name = shortened(&job.name);
+            let name = shoal_text::cut_bytes(job.name.clone(), MAX_JOB_TEXT);
             match &job.step {
-                Some(step) => format!("{name} (failed step: {})", shortened(step)),
+                Some(step) => format!(
+                    "{name} (failed step: {})",
+                    shoal_text::cut_bytes(step.clone(), MAX_JOB_TEXT)
+                ),
                 None => name,
             }
         })
@@ -571,14 +574,6 @@ fn failed_jobs_text(jobs: &[FailedJob]) -> String {
         listed.push(format!("and {} more", jobs.len() - MAX_LISTED_JOBS));
     }
     format!(": {}", listed.join(", "))
-}
-
-/// `text` cut to [`MAX_JOB_TEXT`] characters, marking the cut.
-fn shortened(text: &str) -> String {
-    match text.char_indices().nth(MAX_JOB_TEXT) {
-        Some((end, _)) => format!("{}…", &text[..end]),
-        None => text.to_owned(),
-    }
 }
 
 /// A forge ID as text: strings without JSON quotes, numbers as digits.

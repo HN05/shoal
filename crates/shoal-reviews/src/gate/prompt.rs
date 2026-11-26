@@ -101,7 +101,7 @@ pub fn request(request: &Request) -> String {
     if let Some(commits) = request.commits {
         let commits = match commits.trim() {
             "" => "None.",
-            commits => truncated(commits, LOG_LIMIT),
+            commits => shoal_text::prefix_bytes(commits, LOG_LIMIT),
         };
         let _ = write!(text, "\n### Its commits\n\n```\n{commits}\n```\n");
     }
@@ -160,20 +160,12 @@ pub fn item(relation: &str, details: &crate::forge::activity::view::Details, url
             pr.review.map_or("none", |review| review.as_str())
         );
     }
-    let _ = writeln!(text, "\n{}\n", truncated(details.body.trim(), BODY_LIMIT));
+    let _ = writeln!(
+        text,
+        "\n{}\n",
+        shoal_text::prefix_bytes(details.body.trim(), BODY_LIMIT)
+    );
     text
-}
-
-/// `text` cut to at most `limit` bytes at a character boundary.
-fn truncated(text: &str, limit: usize) -> &str {
-    if text.len() <= limit {
-        return text;
-    }
-    let mut end = limit;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
 }
 
 #[cfg(test)]

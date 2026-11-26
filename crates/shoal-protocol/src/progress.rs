@@ -251,7 +251,7 @@ pub fn step_name(value: &str) -> Option<String> {
         .collect();
     let line = line.trim();
     (!line.is_empty())
-        .then(|| crate::validate::shorten(line.to_owned(), crate::validate::MAX_MESSAGE_LEN))
+        .then(|| shoal_text::cut_bytes(line.to_owned(), crate::validate::MAX_MESSAGE_LEN))
 }
 
 #[cfg(test)]

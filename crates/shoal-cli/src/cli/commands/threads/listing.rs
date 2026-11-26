@@ -138,7 +138,7 @@ pub(super) fn header(lines: impl Iterator<Item = String>, number: ItemNumber) ->
     let mut shown = Vec::new();
     let mut used = 0;
     for line in lines {
-        let line = shoal_protocol::validate::shorten(line, MAX_HEADER_BYTES / 2);
+        let line = shoal_text::cut_bytes(line, MAX_HEADER_BYTES / 2);
         if used + line.len() + 1 + rest.len() > MAX_HEADER_BYTES {
             shown.push(rest);
             return shown.join("\n");

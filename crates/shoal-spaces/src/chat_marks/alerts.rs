@@ -62,7 +62,7 @@ fn alert_text(to: &AlertTarget, message: Option<&str>) -> String {
     };
     match text.as_str() {
         "" => super::WROTE_IN_CHAT.to_owned(),
-        _ => crate::validate::shorten(text, max),
+        _ => shoal_text::cut_bytes(text, max),
     }
 }
 

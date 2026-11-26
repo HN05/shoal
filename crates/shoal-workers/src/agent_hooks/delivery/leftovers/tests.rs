@@ -26,7 +26,7 @@ fn a_notice_names_each_leftover_and_how_to_stop_them() {
     );
     for part in [
         "2 processes from this workspace",
-        "sh -c xxxxxxxxxxxxxxxxxxxxxxxxxxxx … (PID 4121, 41 min), sh (PID 4125, under 1 min).",
+        "sh -c xxxxxxxxxxxxxxxxxxxxxxxxx… (PID 4121, 41 min), sh (PID 4125, under 1 min).",
     ] {
         assert!(several.contains(part), "{part:?} in {several}");
     }

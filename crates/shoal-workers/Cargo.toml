@@ -25,6 +25,7 @@ shoal-ids.workspace = true
 shoal-protocol.workspace = true
 shoal-proxy.workspace = true
 shoal-refs.workspace = true
+shoal-text.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-std", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
 uuid = { workspace = true, features = ["serde", "v4"] }

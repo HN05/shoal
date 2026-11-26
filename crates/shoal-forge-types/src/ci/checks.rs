@@ -51,7 +51,7 @@ impl CheckLog {
         let mut lines = Vec::new();
         let mut size = 0;
         for line in self.text.split_inclusive('\n').rev() {
-            let line = shortened(line);
+            let line = shoal_text::cut_middle(line, LINE_BYTES);
             if size + line.len() > TAIL_BYTES {
                 break;
             }
@@ -71,20 +71,6 @@ impl CheckLog {
             ..self
         }
     }
-}
-
-/// What stands for the middle a long line's tail leaves out.
-const ELLIPSIS: &str = " … ";
-
-/// `line` within [`LINE_BYTES`], its middle left out when it is longer.
-fn shortened(line: &str) -> std::borrow::Cow<'_, str> {
-    if line.len() <= LINE_BYTES {
-        return line.into();
-    }
-    let kept = (LINE_BYTES - ELLIPSIS.len()) / 2;
-    let start = line.floor_char_boundary(kept);
-    let end = line.ceil_char_boundary(line.len() - kept);
-    format!("{}{ELLIPSIS}{}", &line[..start], &line[end..]).into()
 }
 
 #[cfg(test)]

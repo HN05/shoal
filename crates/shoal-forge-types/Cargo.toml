@@ -26,6 +26,7 @@ serde_json.workspace = true
 shoal-forge-derive.workspace = true
 shoal-refs.workspace = true
 shoal-states.workspace = true
+shoal-text.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

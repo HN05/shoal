@@ -106,7 +106,7 @@ impl Coordination {
         let space = daemon.space(selector).await?;
         let about = About::space(&space.name, &space.id);
         let error = error.replace(char::is_control, " ");
-        let message = crate::validate::shorten(
+        let message = shoal_text::cut_bytes(
             format!("agent state report failed; {error}"),
             crate::validate::MAX_MESSAGE_LEN,
         );

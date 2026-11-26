@@ -30,6 +30,7 @@ shoal-ids.workspace = true
 shoal-protocol = { workspace = true, features = ["clap"] }
 shoal-refs.workspace = true
 shoal-schedule.workspace = true
+shoal-text.workspace = true
 shoal-workers.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-std", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }

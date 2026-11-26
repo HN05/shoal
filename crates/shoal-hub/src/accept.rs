@@ -614,7 +614,7 @@ fn claimed_version(opening: &Value) -> String {
         .collect();
     match version.is_empty() {
         true => "of another release".into(),
-        false => shoal_protocol::validate::shorten(version, 32),
+        false => shoal_text::cut_bytes(version, 32),
     }
 }
 

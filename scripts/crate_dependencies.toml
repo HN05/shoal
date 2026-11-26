@@ -34,6 +34,7 @@ dependencies = [
     "shoal-protocol",
     "shoal-refs",
     "shoal-schedule",
+    "shoal-text",
     "shoal-workers",
 ]
 
@@ -54,6 +55,7 @@ dependencies = [
     "shoal-protocol",
     "shoal-refs",
     "shoal-store",
+    "shoal-text",
 ]
 
 [shoal-core]
@@ -115,6 +117,7 @@ dependencies = [
     "shoal-refs",
     "shoal-states",
     "shoal-subprocess",
+    "shoal-text",
     "shoal-time",
 ]
 
@@ -122,7 +125,7 @@ dependencies = [
 dependencies = []
 
 [shoal-forge-types]
-dependencies = ["shoal-forge-derive", "shoal-refs", "shoal-states", "shoal-time"]
+dependencies = ["shoal-forge-derive", "shoal-refs", "shoal-states", "shoal-text", "shoal-time"]
 
 [shoal-hub]
 dependencies = [
@@ -132,6 +135,7 @@ dependencies = [
     "shoal-protocol",
     "shoal-schedule",
     "shoal-store",
+    "shoal-text",
 ]
 
 [shoal-ids]
@@ -157,6 +161,7 @@ dependencies = [
     "shoal-protocol",
     "shoal-refs",
     "shoal-store",
+    "shoal-text",
 ]
 
 [shoal-power]
@@ -170,6 +175,7 @@ dependencies = [
     "shoal-refs",
     "shoal-schedule",
     "shoal-states",
+    "shoal-text",
     "shoal-time",
 ]
 
@@ -201,6 +207,7 @@ dependencies = [
     "shoal-protocol",
     "shoal-refs",
     "shoal-store",
+    "shoal-text",
 ]
 
 [shoal-runner]
@@ -231,6 +238,7 @@ dependencies = [
     "shoal-schedule",
     "shoal-store",
     "shoal-subprocess",
+    "shoal-text",
 ]
 
 [shoal-states]
@@ -257,5 +265,6 @@ dependencies = [
     "shoal-protocol",
     "shoal-proxy",
     "shoal-refs",
+    "shoal-text",
 ]
 dev-dependencies = ["shoal-daemon"]

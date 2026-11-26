@@ -220,7 +220,7 @@ impl Texts {
             kind: AlertKind::ThreadPosted,
             agent: fitted(thread, agent, actions, &tail),
             user: match changed {
-                Some((size, _)) => crate::validate::shorten(
+                Some((size, _)) => shoal_text::cut_bytes(
                     format!("{} [{size}]", thread.notice()),
                     crate::validate::MAX_MESSAGE_LEN,
                 ),
@@ -241,11 +241,11 @@ impl Texts {
         let agent = format!("{text}{}", code_lines(post, Some(linker)));
         Self {
             kind: AlertKind::ThreadPosted,
-            user: crate::validate::shorten(
+            user: shoal_text::cut_bytes(
                 text.replace(['\n', '\t'], " "),
                 crate::validate::MAX_MESSAGE_LEN,
             ),
-            agent: crate::validate::shorten(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
+            agent: shoal_text::cut_bytes(agent, crate::validate::MAX_AGENT_MESSAGE_LEN),
         }
     }
 
@@ -274,7 +274,7 @@ impl Texts {
         let tail = format!("\n{}", hint(thread, side));
         Self {
             kind: AlertKind::ThreadForwarded,
-            user: crate::validate::shorten(
+            user: shoal_text::cut_bytes(
                 format!(
                     "{} (shoal view thread {number})",
                     heading.replace('\n', " ")
@@ -307,8 +307,8 @@ impl Texts {
     pub(super) fn notice(text: String) -> Self {
         Self {
             kind: AlertKind::ThreadResolved,
-            agent: crate::validate::shorten(text.clone(), crate::validate::MAX_AGENT_MESSAGE_LEN),
-            user: crate::validate::shorten(text, crate::validate::MAX_MESSAGE_LEN),
+            agent: shoal_text::cut_bytes(text.clone(), crate::validate::MAX_AGENT_MESSAGE_LEN),
+            user: shoal_text::cut_bytes(text, crate::validate::MAX_MESSAGE_LEN),
         }
     }
 }
@@ -387,8 +387,8 @@ fn fitted(thread: &Thread, body: String, actions: Vec<String>, tail: &str) -> St
     let room = max
         .saturating_sub(answering.len() + tail.len() + rest.len())
         .max(MIN_BODY);
-    let body = crate::validate::shorten(body, room);
-    crate::validate::shorten(format!("{body}{rest}{answering}{tail}"), max)
+    let body = shoal_text::cut_bytes(body, room);
+    shoal_text::cut_bytes(format!("{body}{rest}{answering}{tail}"), max)
 }
 
 /// The first of `lines` that fit `room` bytes once indented under a post.
