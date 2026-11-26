@@ -60,6 +60,27 @@ account IDs, declining a PR closes it, and `--method rebase` rebases and
 fast-forwards. CI checks are the builds reported on the PR, and reviews are
 participants' approvals and change requests.
 
+### Rate limits and retries
+
+A forge limits an account when it refuses a request for its rate limit, with
+`429`, or `403` with `Retry-After` or no requests remaining. It also does when
+it reports no requests remaining. Shoal then sends nothing to that forge as
+that account until its `Retry-After` or reset time, at most an hour away.
+Meanwhile [watches](links.md#failed-lookups) wait instead of reporting lookup
+failures, and the daemon records a `forge_limited` alert.
+
+The daemon repeats a REST read as a conditional request. It sends the `ETag`
+and `Last-Modified` of the last response it got for that URL as the same
+account, and takes `304 Not Modified` to mean that response still holds. It
+keeps these in memory only.
+
+The daemon sends every forge API read up to three more times, waiting longer
+each time, while:
+
+- its connection fails or breaks,
+- it times out, or
+- the forge answers with a 5xx other than a rate limit.
+
 ## Issue and PR actions
 
 ```sh
@@ -172,7 +193,7 @@ then updated to show them; Shoal first refuses a file the instance's attachment
 settings would refuse, by type or size. It resends an upload up to three times
 while the connection fails before sending it or the forge answers 503, and a
 comment's update also after a broken connection or another 5xx; a 429 is the
-forge's [rate limit](links.md), which holds back requests until it ends.
+forge's [rate limit](#rate-limits-and-retries), which holds back requests until it ends.
 GitHub needs write access to the repository and Forgejo
 a token.
 `reply`, `resolve` and `unresolve` take the ID of any comment in a review

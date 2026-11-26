@@ -81,7 +81,7 @@ exit hook, without waiting for the next poll.
 
 A workspace goes once its work is kept:
 
-- With a watched PR, it goes once the PR's merge requirements are met.
+- With a watched PR, it goes once its [PRs have merged](#watched-prs).
 - Without one, its files must be clean and every commit pushed, as
   [automatic cleanup](removal.md#what-keeps-a-workspace) means it, unless the
   completion is integrated.
@@ -96,6 +96,22 @@ A failed cleanup keeps the space and its ownership, and `status` shows the
 error with the completion's choice. To review the work in a space,
 [hold](removal.md#holds) it. Removal, except of a disposable workspace, can
 be undone with [`shoal restore`](removal.md#restore-a-removed-space).
+
+### Watched PRs
+
+A done workspace with watched PRs goes once every one has merged and either:
+
+- at least one contains the current HEAD, or
+- the freshly fetched default branch has HEAD's changes, as after a rebase
+  that followed the merge.
+
+Shoal looks the PRs up only after `done`. A confirmed set survives a restart
+without another lookup. An invalid PR registration keeps the workspace.
+`status` shows lookup and removal errors, which its JSON gives in
+`pr_cleanup`.
+
+[`[cleanup.pr] enabled = false`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#cleanup)
+pauses this, apart from idle cleanup. Linking and unlinking still work.
 
 ### Without cleanup
 
