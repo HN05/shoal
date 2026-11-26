@@ -853,6 +853,34 @@ fn booking() -> Surface {
 }
 
 #[test]
+fn an_input_s_bound_reads_the_value_the_answer_gives_its_data() {
+    let range = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["start", "end", "book"]},
+            {"id": "start", "component": "DateTimeInput", "enableDate": true,
+             "value": {"@path": "/start"}},
+            {"id": "end", "component": "DateTimeInput", "enableDate": true,
+             "min": {"@path": "/start"}, "value": {"@path": "/end"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book",
+                 "context": {"start": {"@path": "/start"}, "end": {"@path": "/end"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"start": "2026-12-10", "end": ""}),
+    );
+    let answer = |start: &str, end: &str| {
+        range.resolve(
+            "book",
+            values(&[("start", json!(start)), ("end", json!(end))]),
+        )
+    };
+    // The end may fall before the start the surface began with.
+    answer("2026-12-01", "2026-12-05").unwrap();
+    // It may not fall before the start the answer gives.
+    assert!(answer("2026-12-20", "2026-12-15").is_err());
+}
+
+#[test]
 fn a_button_in_a_list_over_absolute_data_keeps_its_outer_item_s_bounds() {
     let booking = surface(
         json!([
