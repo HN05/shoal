@@ -1,14 +1,17 @@
 //! The preparation of migration 301, which rewrites the choices thread
 //! posts offered into the surfaces `shoal send --choice` builds, and each
-//! pick of one, by a post or by resolving the thread, into an answer to it.
+//! pick of one, by a post or by resolving the thread, into an answer to it,
+//! in the thread tables and in the requests and summaries the hub keeps.
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use serde_json::{Map, Value, json};
 use shoal_protocol::{surfaces::Surface, threads::Answer};
 
 pub(super) fn rewrite_choices(db: &Connection) -> Result<()> {
     offer_surfaces(db)?;
     answer_picks(db)?;
-    answer_resolved_picks(db)
+    answer_resolved_picks(db)?;
+    rewrite_hub_payloads(db)
 }
 
 /// Give each post that offered choices, or a recommendation or reason
@@ -180,4 +183,132 @@ fn unjournaled(db: &Connection, names: &[&str], change: impl FnOnce() -> Result<
         db.execute_batch(&sql)?;
     }
     Ok(())
+}
+
+/// The hub's columns that hold requests or space summaries as JSON, which
+/// may carry posts, threads and resolutions in their old shape.
+const HUB_PAYLOADS: &[(&str, &str)] = &[
+    ("hub_queue", "call"),
+    ("hub_outbox", "call"),
+    ("hub_spaces", "summary"),
+    ("hub_space_copies", "summary"),
+];
+
+/// Rewrite the posts, threads and resolutions the hub's requests and space
+/// summaries hold, as the thread tables are rewritten.
+fn rewrite_hub_payloads(db: &Connection) -> Result<()> {
+    for (table, column) in HUB_PAYLOADS {
+        let rows = {
+            let mut reading = db.prepare(&format!("SELECT rowid,{column} FROM {table}"))?;
+            reading
+                .query_map([], |row| {
+                    Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (rowid, text) in rows {
+            let Ok(mut payload) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            if rewritten(&mut payload) {
+                db.execute(
+                    &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
+                    params![rowid, serde_json::to_string(&payload)?],
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The fields an old post's choices took, beside its text.
+const OLD_POST_FIELDS: &[&str] = &["choices", "recommendation", "reason", "choice"];
+
+/// Rewrite every old post, thread and resolution in `value`; whether any
+/// was.
+fn rewritten(value: &mut Value) -> bool {
+    let mut changed = false;
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                changed |= rewritten(item);
+            }
+        }
+        Value::Object(fields) => {
+            if let Some(Value::Array(posts)) = fields.get_mut("posts") {
+                changed |= answer_listed_picks(posts);
+            }
+            changed |= offer_surface(fields);
+            changed |= drop_resolution_choice(fields);
+            for value in fields.values_mut() {
+                changed |= rewritten(value);
+            }
+        }
+        _ => {}
+    }
+    changed
+}
+
+/// Make each post of a thread's `posts` that picked a choice the answer to
+/// the latest earlier post from the other side that offered choices, as
+/// the thread tables' picks become; one with no such post picks nothing.
+fn answer_listed_picks(posts: &mut [Value]) -> bool {
+    let mut changed = false;
+    let mut offers: Vec<(Value, i64)> = Vec::new();
+    for post in posts.iter_mut().filter_map(Value::as_object_mut) {
+        let side = post.get("side").cloned().unwrap_or(Value::Null);
+        if let Some(choice) = post.remove("choice") {
+            changed = true;
+            let offer = (offers.iter().rev())
+                .find(|(offered, _)| !side.is_null() && *offered != side)
+                .map(|(_, id)| *id);
+            if let (Some(offer), Some(choice)) = (offer, choice.as_i64()) {
+                post.insert(
+                    "answer".into(),
+                    json!({"post": offer, "action": choice.to_string()}),
+                );
+            }
+        }
+        let offered = post
+            .get("choices")
+            .and_then(Value::as_array)
+            .is_some_and(|c| !c.is_empty());
+        if let (true, Some(id)) = (offered, post.get("id").and_then(Value::as_i64)) {
+            offers.push((side, id));
+        }
+    }
+    changed
+}
+
+/// Give a post in its old shape, its text with any of [`OLD_POST_FIELDS`],
+/// the surface that shows its choices and the answer its pick makes to the
+/// latest surface the other side posted.
+fn offer_surface(fields: &mut Map<String, Value>) -> bool {
+    if !fields.contains_key("text") || !OLD_POST_FIELDS.iter().any(|key| fields.contains_key(*key))
+    {
+        return false;
+    }
+    let choices: Vec<String> = (fields.remove("choices"))
+        .and_then(|choices| serde_json::from_value(choices).ok())
+        .unwrap_or_default();
+    let text = |value: Option<Value>| value.and_then(|value| value.as_str().map(str::to_owned));
+    let recommendation = text(fields.remove("recommendation"));
+    let reason = text(fields.remove("reason"));
+    if !choices.is_empty() || recommendation.is_some() || reason.is_some() {
+        let surface = Surface::choices(&choices, recommendation.as_deref(), reason.as_deref());
+        fields.insert("ui".into(), surface.as_json().clone());
+    }
+    if let Some(choice) = fields.remove("choice").as_ref().and_then(Value::as_i64) {
+        fields.insert("answer".into(), json!({"action": choice.to_string()}));
+    }
+    true
+}
+
+/// Drop the choice of a resolution as answered, as a thread's outcome or
+/// a request to resolve one names it, which the thread tables keep as an
+/// answer post instead; a summary's or request's resolution has no posts
+/// to keep it in.
+fn drop_resolution_choice(fields: &mut Map<String, Value>) -> bool {
+    fields.get("outcome").and_then(Value::as_str) == Some("answered")
+        && fields.remove("choice").is_some()
 }

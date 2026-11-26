@@ -382,6 +382,50 @@ fn a_resolving_pick_answers_the_latest_choices_of_either_side() -> Result<()> {
 }
 
 #[test]
+fn the_hub_s_requests_and_summaries_take_the_new_shape_too() -> Result<()> {
+    let mut db = at_floor()?;
+    let summary = serde_json::json!({"threads": [{
+        "posts": [
+            {"id": 1, "side": "holder", "text": "Which?", "choices": ["A", "B"]},
+            {"id": 2, "side": "opener", "text": "B", "choice": 2},
+        ],
+        "resolution": {"outcome": {"outcome": "answered", "choice": 2}},
+    }]});
+    let queued = serde_json::json!({"post": {"text": "", "choice": 2}});
+    db.execute_batch(&format!(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('laptop','machine','laptop','key',1);
+        INSERT INTO hub_spaces(space_id,member_id,summary,reported_at)
+            VALUES ('w1','laptop','{summary}',1);
+        INSERT INTO hub_queue(member_id,sender_id,call,summary,queued_at,expires_at)
+            VALUES ('laptop','desk','{queued}','send',1,2);
+        INSERT INTO hub_outbox(call,queued_at) VALUES ('{queued}',1);"
+    ))?;
+    migrate(&mut db)?;
+    let read = |sql: &str| -> Result<serde_json::Value> {
+        let text: String = db.query_row(sql, [], |row| row.get(0))?;
+        Ok(serde_json::from_str(&text)?)
+    };
+    let summary = read("SELECT summary FROM hub_spaces")?;
+    let thread = &summary["threads"][0];
+    let built = shoal_protocol::surfaces::Surface::choices(&["A".into(), "B".into()], None, None);
+    assert_eq!(&thread["posts"][0]["ui"], built.as_json());
+    assert_eq!(thread["posts"][0].get("choices"), None);
+    assert_eq!(
+        thread["posts"][1]["answer"],
+        serde_json::json!({"post": 1, "action": "2"})
+    );
+    assert_eq!(
+        thread["resolution"]["outcome"],
+        serde_json::json!({"outcome": "answered"})
+    );
+    let answer = serde_json::json!({"post": {"text": "", "answer": {"action": "2"}}});
+    assert_eq!(read("SELECT call FROM hub_queue")?, answer);
+    assert_eq!(read("SELECT call FROM hub_outbox")?, answer);
+    Ok(())
+}
+
+#[test]
 fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
     let mut db = at_floor()?;
     thread_with_picks(&db)?;
