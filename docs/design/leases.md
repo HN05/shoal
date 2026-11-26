@@ -1,139 +1,249 @@
 # Leases
 
-This file covers `shoal-leases`: secrets, ports, simulators, resource permits
-and containers, and the verbs that lease them.
+This file covers `shoal-leases`: the ports, simulators, resource permits,
+containers and secrets that workspaces lease. The
+[resources reference](../reference/resources.md) says what the lease commands
+do, and [agent secrets](../reference/agents.md#agent-secrets) how agents
+receive secrets.
 
-`[secrets]` gives values the CLI reads, for an agent's environment at launch or,
-for listed tools, through private PATH launchers each time the tool runs, which
-take a written one from the daemon so no file holds it; the daemon reads only a
-webhook trigger's, to check each request's signature, and no state keeps a
-value: a value may cross the hub link to the joined machine that asked for it,
-which keeps it only in memory; hooks drop them. A tool secret may require
-approval: the launcher reads it only after the daemon confirms a workspace grant
-bound to its value, a written one as its digest, and tools, and fails instead of
-waiting. Environment secrets cannot require approval, since they are fetched
-before the agent can ask. A setting that takes its value from outside the
-config, such as a secret or a proxy's upstream key, shares one form: as written,
-`{ env }` from the agent's environment, or `{ cmd }` run when the agent starts,
-and Shoal prints no written value. A `{ cmd }` with `on` runs on the joined
-machine it names, so a credential set up there serves every machine: only a
-machine's daemon asks for it through the hub, never a device, and a scoped
-process asks its own daemon by the setting, whose config gives the command. The
-machine that asked keeps the last value in memory for while the named machine
-cannot be reached, and drops it when its daemon exits, it leaves the hub or
-learns it was revoked, or the forge refuses it. The hub, which routes every
-request, records which setting each machine fetched from which, so that revoking
-a machine names the settings to rotate even while the machines that served them
-are offline. A machine that should not use a shared credential sets the key in
-its own file, which overrides `shared.toml` per key; one not trusted with
-credentials is not joined, since joined machines run agents as the user on each
-other.
+## Principles
 
-Reservations and leases belong to a worktree, survive command exit, restarts,
-and failed removal, are allocated atomically with idempotent lease names, and
-are released explicitly or by successful removal. Resources are lazy, never
-claimed at creation.
+A lease belongs to a workspace, not to the command that acquired it. It
+outlives that command, daemon restarts and a failed removal. An explicit
+release or a successful removal ends it.
 
-Ports are cooperative TCP reservations: probe, record, export to later
-executions, never hold a socket. Simulator leases are exclusive over
-Shoal-created devices only: persist claims before mutating, keep them after
-failure, never preempt active leases, count external devices toward capacity,
-preserve device state on handoff, require `--clean --reason` for erasure with
-an audit record written before the destructive step, and delete devices on
-removal or idle expiry. Workspace lookups index the JSON record's current owner,
-falling back to its last owner only when unclaimed; SQLite maintains the index
-on every write and rejects malformed ownership fields, and journals a lease when
-its record enters or leaves the leased state, or goes while leased. Allocation planning is pure
-over recorded devices and inventory; its executor revalidates ownership and live capacity under the simulator
-gate before ordered audit, claim and simctl operations. Native simulator states
-use an adapter enum of their own that keeps unfamiliar strings and simctl's
-spellings; only a confirmed shutdown frees running capacity. An omitted runtime selects
-the latest installed, available iOS version compatible with the requested device;
-explicit runtimes stay pinned and existing leases keep their runtime. Generic permits consume
-pool and member capacity in one transaction; rwlock members allow unlimited readers sharing one slot or one
-writer, default to write, and require release to change mode. Definition drift
-blocks new claims but never revokes permits. `kind = "repo"` resources name a registered repository, or a remote URL matching
-one, and return its checkout's path with cooperative read access; readers share one slot.
-A URL keeps tracked config independent of each machine's registration names.
-The lease binds its repository ID and path, including for approval, survives
-restart, and prevents repository deletion while borrowed by another repository's
-workspace. Release and workspace cleanup only drop the lease; they never modify
-the borrowed checkout. The view is live, with no automatic fetch or pinned ref.
-Optional daemon hooks run after a
-permit is persisted and before it is released; failure retains ownership.
-Repeated acquisition reruns its hook against the same lease, so scripts must be
-idempotent. Hooks receive lease JSON, use normal config precedence and executable
-path rules, and cannot overlap permit or lifecycle transitions in their workspace.
-Release hooks also run in the shared removal path while the worktree exists;
-all permits remain owned until removal succeeds.
-Simulator leases and permits record their acquirer: the user for an unscoped
-caller, else the space whose agent the caller runs or was started by, not its
-execution. An agent's lease ends once that space's agent ends for good, since
-capacity it no longer uses would otherwise keep other workspaces waiting and its
-workspace from removal, but not when it sleeps, restores in a new execution or
-restarts: an agent that sleeps after most turns would otherwise keep giving up
-and reacquiring slow resources. One daemon operation releases an acquirer's
-leases through each kind's release once a demo's execution's end is recorded,
-or once an agent's space has no agent execution, queued restore or restart
-left. An asleep agent's lease that keeps something running, a booted
-simulator or started containers, still costs the machine, so the cleanup
-sweep stops it once the agent has slept past `[sleep] keep_leases_minutes`,
-counted from when its restore entered the agent queue, which it leaves only as
-the agent runs again; permits cost nothing while held and stay. Under memory
-pressure, overload protection stops one such lease, the lowest-ranked asleep
-agent's first, wherever it would stop an agent, and stops an agent only once
-no asleep agent holds one: an asleep agent loses less than a running one. A request that capacity keeps busy
-takes a permit or simulator an asleep agent keeps instead of waiting for an
-agent that may sleep for hours: the claim's transaction names the sets of held
-permits any of which would grant it, a single permit or every reader on one
-member, a simulator request every leased device the limit it met counts, and the
-request takes the set wholly held by asleep agents that may yield to it whose
-highest-ranked holder ranks lowest, releases it through the normal release and
-claims again, a simulator under the lock its allocation holds, so the request
-plans over the released device before any other. An agent yields to a request for a space of no lower priority, and
-to any of the user's. The agent reads
-each lease Shoal took back in a message that waits for its next turn without
-waking it. A lease whose workspace another lifecycle or resource operation holds then, such
-as the stop that ended the agent or a resource hook, waits for it to end; the
-stop then releases the leases of the agents that ended in its space or hold
-leases there, and the cleanup sweep, which also runs as the daemon starts, in
-every workspace. A failed release hands the lease to
-the user, so a failing hook does not rerun on every sweep. The user's lease
-stays until released; the user's acquire takes an agent's lease over, never the
-reverse. A demo outlives the agent that starts it, so a simulator demo takes
-over the lease an agent acquired for it, and what a demo's command acquires is
-the demo's; both end with the demo. A workspace's container project is such a
-lease: recorded with its runtime before any `compose` call, so Shoal only ever
-stops or removes a project it recorded, stopped on release with its volumes
-kept, and taken down in the shared removal path. Each call reads the file,
-with the workspace's ports in their variables, while the worktree has it, as
-podman-compose needs; a stop or removal that fails with it runs again by the
-project's name, so a deleted worktree or a broken file never keeps a project.
+Shoal allocates each lease atomically. A lease's name makes acquiring it
+idempotent: repeating the request returns the lease already held.
+
+A workspace claims nothing when Shoal creates it. It acquires each lease when
+its work needs one.
+
+Shoal records and counts what it hands out, and use is cooperative. User
+scripts own the integration with the underlying resources.
+
+Chats have no leases, since they run nothing on the machine, as
+[chats](chats.md) says.
+
+## Commands
+
+Leases follow AGENTS.md's grammar for cross-kind verbs. `acquire`, `release`
+and `leases` take the kind first, such as `acquire sim`, so no kind has a group
+of its own. A command selects the workspace with `--space`, never a positional
+space. Like `unlink`, `release` without an item or a kind releases every lease
+of that kind or of the workspace.
+
+Holds share these verbs. A hold keeps a space from cleanup instead of sharing
+capacity, so `release` without a kind leaves holds.
+
+`leases` shows the leases and the usage that limits new ones. `catalog` shows
+the configuration and the machine's inventory they draw from, secrets without
+their commands. `history` shows a kind's audit trail, such as the simulators'
+clean-device requests.
+
+A listing that covers every workspace reads them with bounded concurrency. It
+keeps their order and reports every failure.
+
+## Ports
+
+A port reservation is cooperative. Shoal probes the port, records it and
+exports it to later executions. It never holds a socket, so the workspace's own
+server can bind the port.
+
+## Simulators
+
+A simulator lease is exclusive. Shoal leases only devices it created. Devices
+it did not create still count toward capacity.
+
+Shoal records a claim before it changes a device, so a crash leaves the device
+owned. A claim stays after a failure, so Shoal retries the operation.
+
+An allocation never takes a leased device. A busy request takes a device only
+from an asleep agent, through that agent's release, as
+[taking a lease from an asleep agent](#taking-a-lease-from-an-asleep-agent)
+says.
+
+A handoff keeps the device's state, so the next workspace reuses its installed
+apps. Erasing a device needs `--clean` with a reason. Shoal writes the audit
+record before the erase, so even an interrupted erase leaves one.
+
+Shoal deletes its devices when their workspace is removed or their idle timer
+expires.
+
+### Allocation
+
+Allocation plans over the recorded devices and the inventory alone, without
+side effects. The executor then takes the simulator gate. Under it, the
+executor checks ownership and live capacity again, since both may have changed
+since the plan. It then writes the audit record, records the claim and runs
+`simctl`, in that order.
+
+Only a confirmed shutdown frees running capacity. A device in any other state
+may still run.
+
+A runtime named explicitly stays pinned. An existing lease keeps its runtime
+when a newer one is installed.
+
+## Resource permits
+
+A permit takes pool and member capacity in one transaction.
+
+A changed resource definition never revokes a permit held under the old one.
+Definitions that conflict only refuse new permits.
+
+Resource hooks run in the daemon after Shoal records a permit and before it
+frees one. A failed hook keeps the permit, so Shoal never loses track of a
+resource the hook may have left in use.
+[Resource hooks](../reference/resources.md#resource-hooks) says when they run
+and what they receive.
+
+### Related repositories
+
+A resource of kind `repo` lends a registered repository's live checkout for
+reading. It may name the repository by a remote URL, which keeps tracked config
+independent of each machine's registration names.
+[Related repositories](../reference/resources.md#related-repositories) says
+what the lease binds and what Shoal leaves to the reader.
+
+## Containers
+
+A workspace's container project is a lease. Shoal records the project with its
+runtime before any `compose` call. It thus only ever stops or removes a
+project it recorded.
+
+Each call reads the Compose file while the worktree has it, with the
+workspace's ports in their variables, as podman-compose needs. A stop or
+removal that fails with the file runs again by the project's name. A deleted
+worktree or a broken file thus never keeps a project running.
+
 A project that is not stopped keeps its workspace from cleanup, since a failed
-`up` can leave some services running. Chats have no containers, since they run
-nothing on the machine. One setup starts for
-the workspace's own agent stays the user's until that agent starts and takes
-it over. Ports, holds and secret grants keep their own lifetimes. User scripts own integrations
-with the underlying resources.
+`up` can leave some services running. Removal takes the project down in the
+[removal path](cleanup.md#the-removal-path).
 
-Busy resource and simulator requests may queue. The daemon keeps queued lease names
-in arrival order per pool, and one queue for simulators; while any remain, only the
-earliest may claim new capacity, so every other request is busy even when capacity
-is free. Strict order lets a request for a busy member or a writer hold back requests
-that could proceed, so no request starves. Renewals and approval requests ignore the
-queue; grants, approval outcomes and errors give up the place. Queued commands poll,
-and a place lasts while a request is in progress or polled within 30 seconds. The
-queue lives in memory, so a daemon restart loses the order; commands still polling
-join again.
+## Secrets
 
-Leases use top-level verbs that take the kind first: `acquire <kind>`,
-`release [kind [item]]` and `leases [kind]`, with `--space` instead of a
-positional space. Like `unlink`, omitting the item or kind widens release
-to every lease of that kind or in the workspace. Holds use the same verbs but
-keep a space, a workspace or a chat, rather than share capacity; releasing leases without a kind
-preserves holds. `leases` shows leases and the usage that limits new ones;
-`catalog [kind]` shows the configuration and machine inventory they draw from,
-secrets without their commands; `history <kind>` shows a kind's audit trail,
-starting with clean-device requests. There is no separate `sim` group.
-All-workspace overviews that need independent per-workspace reads use bounded
-concurrency, retain workspace order and report every failure.
+`[secrets]` gives values to agents. The process that launches an agent reads
+them. A value goes into the agent's environment, or for listed tools through
+private `PATH` launchers on each run of the tool. A launcher takes a written
+value from the daemon, so no file holds it.
+
+Of these values, the daemon reads only a
+[webhook trigger's](../reference/triggers.md), to check each request's
+signature. No state keeps a value.
+
+A tool's secret can require approval. The workspace's grant binds the
+secret's value, a written one as its digest, and its tools, so a changed secret
+needs a new grant. [Secret approval](../reference/agents.md#secret-approval)
+says how a launcher checks it.
+
+### Values from outside the config
+
+Every setting that takes its value from outside the config, such as a secret
+or a proxy's upstream key, takes the same
+[value forms](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#values).
+Shoal prints no written value.
+
+A `{ cmd }` with `on` runs on the joined machine it names. A credential set up
+on one machine thus serves every machine.
+[Settings from another machine](../reference/hub.md#settings-from-another-machine)
+says how a value travels.
+
+- Only a machine's daemon asks the hub for a value, never a device.
+- A scoped process asks its own daemon by the setting's name. That daemon runs
+  only the command its own config gives.
+- A value may cross the hub link to the machine that asked for it. That machine
+  keeps the last value in memory only, for while the named machine cannot be
+  reached.
+- It drops the value when its daemon exits, when it leaves the hub or learns
+  that it was revoked, and when the forge refuses the value.
+- The hub routes every request, so it records which settings each machine
+  fetched from which. Revoking a machine thus names the settings to rotate,
+  even while the machines that served them are offline.
+
+A machine that should not use a shared credential sets the key in its own
+file, which overrides `shared.toml` key by key. A machine not trusted with
+credentials is not joined, since joined machines run agents as the user on
+each other.
+
+## Who holds a lease
+
+Simulator, container and permit leases record their acquirer, as
+[who holds a lease](../reference/resources.md#who-holds-a-lease) says. A
+scoped caller acquires for the space whose agent it runs or that agent
+started, never for its execution, so a lease survives the agent's restore in a
+new execution.
+
+Ports, holds and secret grants keep lifetimes of their own.
+
+### An agent's leases
+
+An agent's lease ends once the space's agent ends for good. Capacity the agent
+no longer uses would otherwise keep other workspaces waiting and its workspace
+from removal.
+
+The lease outlives the agent's sleep, a restore and a restart. An agent that
+sleeps after most turns would otherwise keep giving up slow resources and
+acquiring them again.
+
+One daemon operation releases an acquirer's leases, through each kind's own
+release. It runs once a demo's execution has ended, or once an agent's space
+has no agent execution, queued restore or restart left.
+
+A release waits while another lifecycle or resource operation holds the
+lease's workspace, such as the stop that ended the agent or a resource hook.
+That stop then releases the leases of the agents that ended in its space or
+hold leases there. The cleanup sweep, which also runs as the daemon starts,
+does the same in every workspace.
+
+A failed release hands the lease to the user. A failing hook thus does not
+run again on every sweep.
+
+### Demos
+
+A demo outlives the agent that starts it. A simulator demo therefore takes
+over the lease an agent acquired for it. What a demo's command acquires
+belongs to the demo. Both end with the demo.
+
+## Leases of asleep agents
+
+An asleep agent's simulator or containers keep running and cost the machine.
+The cleanup sweep stops them once the agent has slept past
+[`[sleep] keep_leases_minutes`](../reference/resources.md#leases-while-asleep).
+A permit costs nothing while held, so it stays.
+
+Under memory pressure, overload protection stops such a lease before it stops
+an agent, since an asleep agent loses less than a running one.
+[Leases of asleep agents](../reference/load.md#leases-of-asleep-agents) gives
+the order.
+
+### Taking a lease from an asleep agent
+
+A request that capacity keeps busy takes a permit or simulator an asleep agent
+keeps. It does not wait for an agent that may sleep for hours.
+
+The claim's transaction names the sets of held leases any of which would grant
+it. For a permit, a set is a single permit or every reader on one member. For
+a simulator, it is every leased device the limit it met counts.
+
+The request takes the set that asleep agents wholly hold and that may yield to
+it, choosing the set whose highest-ranked holder ranks lowest. It releases
+that set through the normal release, then claims again. A simulator request
+does this under the lock its allocation holds, so it plans over the released
+device before any other request.
+
+An agent yields to a request for a space of no lower priority, and to any of
+the user's. Shoal does not wake it to say so: its next turn's message
+[names the lease](../reference/resources.md#leases-taken-back).
+
+## Queued requests
+
+A busy resource or simulator request may queue. The daemon keeps the queued
+requests in arrival order: one queue per pool, and one for simulators.
+
+While any request is queued, only the earliest claims new capacity, even when
+capacity is free for another. A request for a busy member, or a writer, thus
+holds back requests that could proceed, so no request starves.
+
+The queue lives in memory. A daemon restart loses the order, and the commands
+still polling join again.
+[Queued requests](../reference/resources.md#queued-requests) says which
+requests ignore the queue and how long a place lasts.
