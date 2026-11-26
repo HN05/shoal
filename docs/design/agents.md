@@ -97,8 +97,8 @@ configured `agent.dirs`, `/tmp` by default, as working directories, so it reads 
 tools it runs leave there without a permission prompt. A workspace's agent also
 gets the repository's workspaces directory as one, so it works in the children it
 splits there without leaving its sandbox or permission rules; chats get only
-their temporary directory, plus the local config directory when a
-chat sets up local config. Both trust the repository's checkout,
+their temporary directory, plus the global config's directory for a
+setup chat without a repository. Both trust the repository's checkout,
 which Claude Code keys every worktree's trust by, and its shared Shoal workspaces
 directory, or an explicitly placed workspace outside it, and Claude launches each
 other working directory none of those covers, which Claude Code asks about, in their
