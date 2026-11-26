@@ -545,8 +545,8 @@ on stdin with a `session_id`, as Claude Code and Codex hooks pass, names the ses
 to [resume](load.md). The command reads only that first event, and stops waiting after
 two seconds without input. `list` and `status` show
 `working`, `needs input` for `waiting`, or `waiting` for `idle`, since an idle
-agent waits for the user or for activity that [wakes it](alerts.md#wake-an-idle-agent); `status`,
-`inspect` and `list --json` give `agent_state` with `state` and the Unix-seconds
+agent waits for the user or for activity that [wakes it](alerts.md#wake-an-idle-agent);
+`status --json` and `list --json` give `agent_state` with `state` and the Unix-seconds
 `since` it began. An idle report that ends a turn starts the agent's prompt cache
 lifetime: until the agent works again, `status` shows `Prompt cache` with when
 the cache expires, and the JSON adds `prompt_cache_expires_at` in Unix seconds.

@@ -293,7 +293,7 @@ the mode its labels call for.
 ## Scoped workspace commands
 
 A process that carries a Shoal scope token is confined to its own worktree for
-`status`, inspect, execute, `diff`, `setup` and resources. It may still run
+`status`, `diff`, `setup` and resources. It may still run
 these on its own workspace: PR watches, merge acknowledgements, `send`,
 `alert list`, `thread`, `ready`, `stop --processes`, `stop --leftovers`,
 `internal agent-state` and `internal turn-failed`.

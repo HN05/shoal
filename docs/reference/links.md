@@ -227,8 +227,8 @@ Once every linked PR has merged and at least one contains current HEAD, or the
 freshly fetched default branch has its changes, as after a rebase that followed
 the merge, a workspace marked `done` is cleaned up; PRs are looked up only after `done`. A
 confirmed set survives restart without querying again. Cleanup uses normal branch retention and resource release, retaining dirty
-or newer work. `inspect` shows lookup and removal
-errors in `pr_cleanup`. Invalid registrations retain the workspace.
+or newer work. `status` shows lookup and removal
+errors, which its JSON gives in `pr_cleanup`. Invalid registrations retain the workspace.
 
 `shoal unlink <relation>` removes the relation's items; `unlink pr <relation>`,
 `unlink issue <relation>` or `unlink ci <relation>` removes one kind, and an explicit number or URL removes
