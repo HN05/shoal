@@ -110,8 +110,9 @@ readings, one restore per interval, for one load or disk space stopped mid-turn,
 which the daemon marks in the record before the stop; and a free slot for any
 other stop. A restore of an agent stopped between turns holds no slot and
 holds back nothing, since that agent has nothing to do until an update
-arrives; until then it also keeps its workspace from no cleanup, whose
-removal cancels it and keeps the agent stopped for `shoal restore`. Woken, it
+arrives; until then it also keeps its workspace from no cleanup, unless a
+`shoal sleep` timer or a turn retry will wake it with work. Cleanup's removal
+cancels the restore and keeps the agent stopped for `shoal restore`. Woken, it
 is admitted like a launch once free disk space has recovered, and an update's
 admission holds through later stops. A restore waiting for healthy readings in
 its wrapper keeps the agent's slot, so fixed limits let it take that slot back

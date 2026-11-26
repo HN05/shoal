@@ -439,7 +439,7 @@ spaces had something to do.
 A shutdown is no silence. Every machine joined to a hub hands its spaces over
 as it shuts down, whatever its availability. This is not a setting.
 
-The [save-first stop](power.md) runs first. Once it ends, the machine sends the
+The [save-first stop](power.md#the-save-first-stop) runs first. Once it ends, the machine sends the
 final package of every space at once, one stream each, with the start its
 agent would make. Only the sending has to fit in the shutdown's window. Under
 logind that is its delay limit. For a signal it is a budget of its own, which
