@@ -425,7 +425,7 @@ async fn run(
             if matches!(subject, Subject::Pull { .. }) {
                 ensure_at_pull_head(ctx, &workspace).await?;
             }
-            super::super::configured::run(ctx, MANUAL, Some(workspace.clone()), args).await
+            super::super::configured::run(ctx, MANUAL, Some(workspace.clone()), false, args).await
         }
     }
 }

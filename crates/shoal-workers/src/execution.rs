@@ -1,5 +1,6 @@
 //! The tracked execution wrapper, which runs a command in its space and
 //! reports it to the daemon. See `docs/design/execution.md`.
+mod admission;
 mod agent_git;
 mod cancellation;
 mod completion;
@@ -27,12 +28,15 @@ use shoal_protocol::space_names::SpaceSelector;
 use std::{ffi::OsString, path::PathBuf};
 
 use crate::{client::connection::CommandPaths, env};
+use admission::Admission;
+pub use admission::CommandRun;
 pub use cancellation::{cancel, cancellation};
 pub use completion::SetupVerificationFailure;
 use launch::{run_taken_over, run_tracked};
 use mode::Mode;
 pub use restore::{Restored, resolve};
 use shoal_core::execution::{clear_terminal, recovery};
+use shoal_protocol::runs::AdmitAs;
 
 /// `agent` names the agent the command runs; the daemon tells the user when it exits.
 pub async fn run(
@@ -60,21 +64,41 @@ pub async fn run(
     result
 }
 
-/// A command the user chose, recorded when `shoal stop` interrupts it.
+/// A command the user chose, recorded when `shoal stop` interrupts it. A
+/// `shoal run` command, `run`, waits for the daemon to admit it by its
+/// memory, and runs again after protection stops it, up to
+/// [`admission::STOPS`] times; one inside an admitted command runs at once,
+/// since that command's admission counts it.
 pub async fn run_command(
     paths: &CommandPaths,
     workspace: SpaceSelector,
     command: Vec<OsString>,
+    run: Option<CommandRun>,
 ) -> Result<i32> {
     ensure!(!command.is_empty(), "a command is required after --");
-    run_tracked(
-        paths,
-        workspace,
-        command,
-        Mode::Command { record: true },
-        None,
-    )
-    .await
+    let run = run.filter(|_| std::env::var_os(env::ADMITTED_RUN).is_none());
+    let Some(run) = run else {
+        let mode = Mode::Command { record: true };
+        return run_tracked(paths, workspace, command, mode, None).await;
+    };
+    let mut admit_as = AdmitAs::New;
+    let mut stops = 0;
+    loop {
+        let admission = Admission::wait(paths, &workspace, &run, admit_as.clone()).await?;
+        let mode = Mode::Admitted {
+            admission: admission.clone(),
+        };
+        let code = run_tracked(paths, workspace.clone(), command.clone(), mode, None).await?;
+        let Some(reason) = admission.stopped() else {
+            return Ok(code);
+        };
+        stops += 1;
+        eprintln!("{}", admission::stopped_message(&run.key, &reason, stops));
+        if stops == admission::STOPS {
+            return Ok(if code == 0 { 1 } else { code });
+        }
+        admit_as = AdmitAs::AfterStop;
+    }
 }
 
 /// Consume the selected recovery records only after the replacement process is

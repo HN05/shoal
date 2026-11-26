@@ -25,7 +25,7 @@ pub(in crate::cli::commands) async fn edit(
     let settings =
         shoal_workers::settings::of(&ctx.paths, ConfigTarget::Space(workspace.clone())).await?;
     if settings.commands.contains_key(EDIT) {
-        return configured::run(ctx, EDIT, Some(workspace.clone()), args).await;
+        return configured::run(ctx, EDIT, Some(workspace.clone()), false, args).await;
     }
     let mut command = editor([std::env::var_os("VISUAL"), std::env::var_os("EDITOR")])?;
     command.push(
@@ -38,7 +38,7 @@ pub(in crate::cli::commands) async fn edit(
             .into(),
     );
     command.extend(args);
-    shoal_workers::execution::run_command(&ctx.paths, workspace, command).await
+    shoal_workers::execution::run_command(&ctx.paths, workspace, command, None).await
 }
 
 /// Split on whitespace, as in `code --wait`, unless it is not UTF-8.

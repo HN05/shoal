@@ -740,3 +740,23 @@ fn unsaved() -> Saving<'static, fn(&Halt)> {
         ending: |_| {},
     }
 }
+
+#[test]
+fn a_command_a_signal_ended_was_interrupted_rather_than_ran_whole() {
+    use std::os::unix::process::ExitStatusExt as _;
+    let interrupted = Outcome::ended(ExitStatus::from_raw(libc::SIGINT), None);
+    assert!(
+        matches!(interrupted, Outcome::Interrupted(130)),
+        "{interrupted:?}"
+    );
+    let failed = Outcome::ended(ExitStatus::from_raw(1 << 8), None);
+    assert!(matches!(failed, Outcome::Exited(1)), "{failed:?}");
+}
+
+#[tokio::test]
+async fn a_command_inside_an_admitted_one_stays_in_its_scope() {
+    // SAFETY: nextest runs each test in a process of its own, and a tokio
+    // test runs on this thread alone.
+    unsafe { std::env::set_var(crate::env::ADMITTED_RUN, "1") };
+    assert!(launcher(&Mode::Command { record: true }).await.is_empty());
+}

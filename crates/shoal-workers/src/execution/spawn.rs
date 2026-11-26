@@ -362,6 +362,9 @@ pub(super) fn spawn(
         super::agent_git::git_credential::strip(&mut process);
     }
     export_execution(&mut process, paths, plan);
+    if mode.admission().is_some() {
+        process.env(env::ADMITTED_RUN, "1");
+    }
     // A demo is the user's, so the agent's output setting stays behind, and
     // its own port or device wins over a reservation exported as `PORT`.
     if let Mode::Demo { launch } = mode {

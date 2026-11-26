@@ -354,8 +354,9 @@ fn dispatch(
         Command::Run {
             name,
             workspace,
+            now,
             args,
-        } => Box::pin(dispatch::run::run(ctx, name, workspace, args)),
+        } => Box::pin(dispatch::run::run(ctx, name, workspace, now, args)),
         Command::Internal { command } => Box::pin(dispatch::internal::run(ctx, command)),
         Command::Approvals { command, args } => {
             Box::pin(dispatch::approvals::run(ctx, command, args))

@@ -21,6 +21,7 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::{alerts::AlertKind, files::Attacher};
 use std::{fs, future::Future, os::unix::fs::PermissionsExt, time::Duration};
 
+mod admitted_commands;
 mod agent_restart;
 mod idle_cleanup;
 mod idle_stop;
@@ -658,6 +659,7 @@ async fn tracked_command_child() {
             "-c".into(),
             "trap 'exit 0' TERM; touch command-started; while :; do sleep 1; done".into(),
         ],
+        None,
     )
     .await
     .unwrap();

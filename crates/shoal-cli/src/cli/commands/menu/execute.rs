@@ -75,6 +75,7 @@ pub(super) async fn execute_command(
         ExecuteChoice::Shell => Command::Run {
             name: None,
             workspace,
+            now: false,
             args: vec![
                 "sh".into(),
                 "-c".into(),

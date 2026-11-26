@@ -280,6 +280,10 @@ impl Runner {
         let mut command = self.forge_job_command(claim, job).await?;
         let environment = preset_job_environment(daemon, claim.workspace).await?;
         command.env.extend(environment);
+        // The job's own admission counts its `shoal run` commands, which
+        // would otherwise wait for the memory it holds.
+        let admitted = (shoal_protocol::env::ADMITTED_RUN.to_owned(), "1".to_owned());
+        command.env.extend([admitted]);
         Ok(command)
     }
 

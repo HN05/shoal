@@ -53,6 +53,10 @@ pub const SPACE: &str = "SHOAL_SPACE";
 pub const SCOPE_TOKEN: &str = "SHOAL_SCOPE_TOKEN";
 /// Execution marker used to discover owned processes during recovery.
 pub const EXECUTION_ID: &str = "SHOAL_EXECUTION_ID";
+/// Set for the processes of a `shoal run` command that holds an admission,
+/// whose own `shoal run` commands take none: its reads count what they
+/// hold, and waiting for memory it holds itself would never end.
+pub const ADMITTED_RUN: &str = "SHOAL_ADMITTED_RUN";
 /// The directory name of the worktree of the space, set only for a space
 /// with one.
 pub const WORKSPACE_NAME: &str = "SHOAL_WORKSPACE";

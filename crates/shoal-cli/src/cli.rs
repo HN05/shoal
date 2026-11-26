@@ -90,6 +90,9 @@ pub enum Command {
         /// Workspace to use; defaults to the current workspace or picker.
         #[arg(short = 'w', long)]
         workspace: Option<SpaceSelector>,
+        /// Run it now, without waiting for the memory its earlier runs used.
+        #[arg(long)]
+        now: bool,
         #[arg(last = true)]
         args: Vec<OsString>,
     },

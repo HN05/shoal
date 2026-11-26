@@ -534,6 +534,17 @@ fn job_variable<'a>(command: &'a JobCommand, name: &str) -> Option<&'a str> {
 }
 
 #[tokio::test]
+async fn a_job_s_shoal_run_commands_run_under_its_own_admission() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let manager = &fixture.manager;
+    admit_and_claim(manager).await;
+    let claimed = manager.runner.claimed_jobs().await.unwrap();
+    let (command, _) = launched(claimed[0].workspace_id.as_str());
+    let admitted = job_variable(&command, shoal_protocol::env::ADMITTED_RUN);
+    assert_eq!(admitted, Some("1"));
+}
+
+#[tokio::test]
 async fn the_cargo_presets_jobs_build_incrementally_as_its_seed_did() {
     let fixture = fixture(vec![job("h1", 4, 1)], "").await;
     let manager = &fixture.manager;

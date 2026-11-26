@@ -34,6 +34,7 @@ use crate::{
 };
 use shoal_protocol::approvals::Undecided;
 use shoal_protocol::protocol::ScopeMemory;
+use shoal_protocol::runs::RunReport;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// A tracked execution the daemon recorded, with the command it runs next and
@@ -66,6 +67,19 @@ pub(super) async fn run_tracked(
         .transpose()?;
     let launch = prepare_tracked_launch(paths, workspace, command, &mode, agent).await?;
     launch.run_to_end(paths, &mode).await
+}
+
+/// The end of an admitted command's run that ended with `outcome` after
+/// `took`, its scope or tree having recorded `memory`: whole only when the
+/// command ended on its own.
+fn ran(outcome: &Outcome, memory: Option<ScopeMemory>, took: Duration) -> RunReport {
+    let memory = memory.unwrap_or_default();
+    RunReport::Ran {
+        peak: memory.peak,
+        duration_ms: took.as_millis().try_into().unwrap_or(u64::MAX),
+        whole: matches!(outcome, Outcome::Exited(_)),
+        oom_killed: memory.oom_kills > 0,
+    }
 }
 
 /// Restore the agent of a wrapper that continues from this binary.
@@ -140,6 +154,10 @@ impl TrackedLaunch {
         let _waker = wake.map(|wake| wake::start(paths, &self.plan, wake));
         let _input = self.input(paths);
         let (plan, recovery) = (&self.plan, self.recovery.as_ref());
+        if let Some(admission) = mode.admission() {
+            admission.runs_as(&plan.id);
+        }
+        let started = Instant::now();
         let (outcome, memory) = supervise(
             &mut self.link,
             paths,
@@ -153,6 +171,11 @@ impl TrackedLaunch {
             },
         )
         .await?;
+        if let Some(admission) = mode.admission() {
+            admission
+                .end(ran(&outcome, memory, started.elapsed()))
+                .await;
+        }
         self.add_run_memory(memory);
         Ok(outcome)
     }
@@ -176,10 +199,12 @@ impl TrackedLaunch {
         ran: Duration,
     ) -> Result<Option<i32>> {
         match outcome {
-            Outcome::Exited(code) if matches!(mode, Mode::Demo { .. }) => {
+            Outcome::Exited(code) | Outcome::Interrupted(code)
+                if matches!(mode, Mode::Demo { .. }) =>
+            {
                 self.restart_demo(code, restarts.after(ran)).await
             }
-            Outcome::Exited(code) => Ok(Some(code)),
+            Outcome::Exited(code) | Outcome::Interrupted(code) => Ok(Some(code)),
             Outcome::Stopped { code, reason } => {
                 self.report_stopped(&reason);
                 Ok(Some(code))
@@ -229,7 +254,7 @@ impl TrackedLaunch {
         stop: &Halt,
     ) -> Result<bool> {
         let Some(recovery) = &self.recovery else {
-            if matches!(mode, Mode::Command { record: true }) {
+            if mode.records_stopped_command() {
                 record_stopped_command(paths, &self.plan, &self.command, stop);
             }
             return Ok(false);

@@ -35,6 +35,9 @@ use shoal_protocol::protocol::ScopeMemory;
 #[derive(Debug)]
 pub(super) enum Outcome {
     Exited(i32),
+    /// The wrapper stopped the command, as an interrupt, a cancellation or
+    /// protection's stop of an admitted command has it do.
+    Interrupted(i32),
     /// The daemon stopped the command without saving it.
     Stopped {
         code: i32,
@@ -50,17 +53,22 @@ impl Outcome {
     /// The code the command ended with.
     pub(super) fn code(&self) -> i32 {
         match self {
-            Self::Exited(code) | Self::Stopped { code, .. } | Self::Paused { code, .. } => *code,
+            Self::Exited(code)
+            | Self::Interrupted(code)
+            | Self::Stopped { code, .. }
+            | Self::Paused { code, .. } => *code,
         }
     }
 
     /// A command that ended by itself or by a signal, paused when `halt`
-    /// names the end of the session it ran in.
+    /// names the end of the session it ran in, and interrupted by any other
+    /// signal, such as one its terminal sent its process group.
     fn ended(status: ExitStatus, halt: Option<Halt>) -> Self {
         let code = exit_code(status);
-        match halt {
-            Some(stop) => Self::Paused { code, stop },
-            None => Self::Exited(code),
+        match (halt, status.signal()) {
+            (Some(stop), _) => Self::Paused { code, stop },
+            (None, Some(_)) => Self::Interrupted(code),
+            (None, None) => Self::Exited(code),
         }
     }
 
@@ -140,17 +148,18 @@ pub(super) async fn supervise(
     auth: Option<&AgentLaunch>,
     saving: Saving<'_, impl Fn(&Halt)>,
 ) -> Result<(Outcome, Option<ScopeMemory>)> {
-    let signals = ExecutionSignals::new()?;
+    let signals = ExecutionSignals::new(mode)?;
     let launcher = launcher(mode).await;
     // Before the launch, so a kill before its scope is found still shows.
     let baseline = (!launcher.is_empty()).then(scope_memory::Baseline::read);
     let (mut child, group, _terminal, _scope) =
         spawn_registered_child(paths, plan, command, mode, auth, launcher, link.status())?;
-    let watch = baseline.map(|baseline| baseline.watch(group.pid()));
+    let using = mode.admission().map(|admission| admission.usage());
+    let watch = baseline.map(|baseline| baseline.watch(group.pid(), using));
     register_child(link, plan, mode, &group, saving.restored_from).await?;
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
-    if let Outcome::Exited(code) = outcome {
+    if let Outcome::Exited(code) | Outcome::Interrupted(code) = outcome {
         link.status().agent_exited(code).await;
     }
     // A command owns its process group; descendants do not outlive its lease.
@@ -160,9 +169,11 @@ pub(super) async fn supervise(
 }
 
 /// The command the child of `mode` starts through: Shoal's work runs in
-/// the work slice, where a scope can start.
+/// the work slice, where a scope can start, but a command inside an
+/// admitted one stays in that command's scope, whose reads count it.
 async fn launcher(mode: &Mode) -> &'static [OsString] {
-    match mode.is_work() {
+    let nested = std::env::var_os(crate::env::ADMITTED_RUN).is_some();
+    match mode.is_work() && !nested {
         true => shoal_core::service::work::launcher().await,
         false => &[],
     }
@@ -308,11 +319,12 @@ async fn wait_for_child(
             biased;
             _ = signals.hangup.recv() => return end_session(child, group, libc::SIGHUP, &ending, &report).await,
             _ = signals.terminate.recv() => return end_session(child, group, libc::SIGTERM, &ending, &report).await,
-            _ = signals.interrupt.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGINT).await?, None)),
-            _ = signals.quit.recv() => return Ok(Outcome::ended(stop(child, group, libc::SIGQUIT).await?, None)),
+            _ = signals.interrupt.recv() => return interrupted(child, group, libc::SIGINT).await,
+            _ = signals.quit.recv() => return interrupted(child, group, libc::SIGQUIT).await,
             _ = signals.cancelled.wait_for(|cancelled| *cancelled) => {
-                return Ok(Outcome::ended(stop(child, group, libc::SIGTERM).await?, None));
+                return interrupted(child, group, libc::SIGTERM).await;
             }
+            () = memory_stop(&mut signals.stopped) => return interrupted(child, group, libc::SIGTERM).await,
             status = child.wait() => {
                 let status = status?;
                 return Ok(Outcome::ended(status, status.signal().and_then(Halt::ended_by)));
@@ -356,24 +368,46 @@ async fn end_session(
     Ok(Outcome::ended(status, halt))
 }
 
+/// Stop the command with `signal` as the wrapper's own choice.
+async fn interrupted(child: &mut Child, group: &ProcessGroup, signal: i32) -> Result<Outcome> {
+    Ok(Outcome::Interrupted(exit_code(
+        stop(child, group, signal).await?,
+    )))
+}
+
 struct ExecutionSignals {
     hangup: Signal,
     terminate: Signal,
     interrupt: Signal,
     quit: Signal,
     cancelled: watch::Receiver<bool>,
+    /// Protection's stop of an admitted command.
+    stopped: Option<watch::Receiver<Option<String>>>,
 }
 
 impl ExecutionSignals {
-    fn new() -> Result<Self> {
+    fn new(mode: &Mode) -> Result<Self> {
         Ok(Self {
             hangup: signal(SignalKind::hangup())?,
             terminate: signal(SignalKind::terminate())?,
             interrupt: signal(SignalKind::interrupt())?,
             quit: signal(SignalKind::quit())?,
             cancelled: super::cancellation(),
+            stopped: mode.admission().map(|admission| admission.stops()),
         })
     }
+}
+
+/// Resolves once protection stops the admitted command `stopped` follows,
+/// never without one.
+async fn memory_stop(stopped: &mut Option<watch::Receiver<Option<String>>>) {
+    // The admission keeps its sender while the command runs.
+    if let Some(stopped) = stopped
+        && stopped.wait_for(Option::is_some).await.is_ok()
+    {
+        return;
+    }
+    std::future::pending().await
 }
 
 /// The command's process group; killed when dropped.

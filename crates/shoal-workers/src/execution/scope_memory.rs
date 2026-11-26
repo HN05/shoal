@@ -9,6 +9,7 @@ use std::{
 
 use shoal_core::process::{control_group, oom};
 use shoal_protocol::protocol::ScopeMemory;
+use tokio::sync::watch;
 
 /// How often a running command's scope is read.
 const INTERVAL: Duration = Duration::from_secs(1);
@@ -31,13 +32,14 @@ impl Baseline {
     }
 
     /// Read the scope of the command `pid`, this process's child, which it
-    /// moves into once its launcher has started it.
-    pub(super) fn watch(self, pid: u32) -> Watch {
+    /// moves into once its launcher has started it, telling `using` what
+    /// the scope holds after each read.
+    pub(super) fn watch(self, pid: u32, using: Option<watch::Sender<u64>>) -> Watch {
         let read = Read {
             slice_kills: self.slice_kills,
             ..Read::default()
         };
-        Watch::start(pid, read)
+        Watch::start(pid, read, using)
     }
 }
 
@@ -53,6 +55,8 @@ struct Read {
     /// The scope, once the command has moved into it.
     scope: Option<PathBuf>,
     memory: ScopeMemory,
+    /// What the scope held at the latest read.
+    held: u64,
     /// The slice's count of kills at the latest read.
     slice_kills: Option<u64>,
 }
@@ -67,7 +71,7 @@ impl Drop for Watch {
 
 impl Watch {
     /// Read the scope of the command `pid` from `read`, the reads so far.
-    fn start(pid: u32, read: Read) -> Self {
+    fn start(pid: u32, read: Read, using: Option<watch::Sender<u64>>) -> Self {
         let read = Arc::new(Mutex::new(read));
         let reading = read.clone();
         let task = tokio::spawn(async move {
@@ -76,7 +80,11 @@ impl Watch {
                 interval.tick().await;
                 let mut read = reading.lock().expect("scope reads do not panic");
                 read.find_scope(pid);
-                read.update();
+                if read.update()
+                    && let Some(using) = &using
+                {
+                    using.send_replace(read.held);
+                }
             }
         });
         Self { read, task }
@@ -135,7 +143,8 @@ impl Read {
             return false;
         };
         self.memory.oom_kills = kills;
-        self.memory.peak = self.memory.peak.max(held.unwrap_or(0));
+        self.held = held.unwrap_or(0);
+        self.memory.peak = self.memory.peak.max(self.held);
         self.slice_kills = slice_count();
         true
     }

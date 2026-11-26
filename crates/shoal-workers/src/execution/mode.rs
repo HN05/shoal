@@ -9,6 +9,11 @@ pub(super) enum Mode {
     /// An arbitrary command chosen by the caller; `record` keeps it for
     /// `shoal resume` to report when `shoal stop` interrupts it.
     Command { record: bool },
+    /// A `shoal run` command that holds `admission` while it runs, kept
+    /// for `shoal resume` as a recorded command is.
+    Admitted {
+        admission: super::admission::Admission,
+    },
     /// A restored agent session; `records` are consumed once it starts.
     /// `source` says what made a restore the user runs here.
     Recovery {
@@ -42,6 +47,7 @@ impl Mode {
     pub(super) fn kind(&self) -> ExecutionKind {
         match self {
             Self::Command { .. }
+            | Self::Admitted { .. }
             | Self::Recovery { .. }
             | Self::Detached { .. }
             | Self::Publish
@@ -69,6 +75,20 @@ impl Mode {
     /// unmerge depend on gates the daemon holds.
     pub(super) fn reattaches(&self) -> bool {
         self.kind() == ExecutionKind::Command
+    }
+
+    /// The admission of the `shoal run` command this mode runs.
+    pub(super) fn admission(&self) -> Option<&super::admission::Admission> {
+        match self {
+            Self::Admitted { admission } => Some(admission),
+            _ => None,
+        }
+    }
+
+    /// Whether `shoal resume` reports its command once `shoal stop`
+    /// interrupts it.
+    pub(super) fn records_stopped_command(&self) -> bool {
+        matches!(self, Self::Command { record: true } | Self::Admitted { .. })
     }
 
     /// What made the restore this mode runs, if it says.

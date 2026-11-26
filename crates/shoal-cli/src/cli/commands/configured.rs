@@ -5,7 +5,8 @@ use std::ffi::{OsStr, OsString};
 
 use anyhow::Result;
 
-use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::{runs::CommandKey, space_names::SpaceSelector};
+use shoal_workers::execution::CommandRun;
 
 use crate::client::output::configured::CommandDefinition;
 use crate::{
@@ -173,20 +174,23 @@ async fn defining_workspaces(
     defining
 }
 
+/// Run `name` once the daemon admits it by its memory, at once with `now`.
 pub(crate) async fn run(
     ctx: &Context,
     name: &str,
     workspace: Option<SpaceSelector>,
+    now: bool,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let definition = definition(ctx, name, workspace).await?;
-    run_defined(ctx, name, definition, args).await
+    run_defined(ctx, name, definition, now, args).await
 }
 
 async fn run_defined(
     ctx: &Context,
     name: &str,
     definition: Definition,
+    now: bool,
     args: Vec<OsString>,
 ) -> Result<i32> {
     let running = super::exec::running();
@@ -213,10 +217,15 @@ async fn run_defined(
         args,
     )
     .await?;
+    let run = CommandRun {
+        key: CommandKey::Named(name.to_owned()),
+        now,
+    };
     shoal_workers::execution::run_command(
         &ctx.paths,
         SpaceSelector::Id(inspection.workspace.id),
         command,
+        Some(run),
     )
     .await
 }
