@@ -213,7 +213,7 @@ impl Surface {
                 let path = scoped(&button.scope, binding(value)?);
                 let (at, input) =
                     (self.tree_order().into_iter().enumerate()).find_map(|(at, component)| {
-                        let scope = self.scope_toward(component, &path)?;
+                        let scope = self.scope_toward(component, &path, &button.scope)?;
                         let placed = Placed {
                             component,
                             scope,
@@ -235,22 +235,29 @@ impl Surface {
 
     /// The scope `component` is placed in where its data could be at
     /// `path`: for each list that repeats it, the item `path` names in
-    /// that list's data; none when `path` lies in no item of one. An
-    /// absolute binding reads the same data in every item, so any scope
-    /// serves it.
-    fn scope_toward(&self, component: Component<'_>, path: &str) -> Option<String> {
-        if component
+    /// that list's data; none when `path` lies in no item of one. An input
+    /// that binds absolute data reads it in every item, so it takes the
+    /// item of `button`'s scope where that lies in the list, else the
+    /// first, for what else it reads in its item, such as its bounds.
+    fn scope_toward(&self, component: Component<'_>, path: &str, button: &str) -> Option<String> {
+        let absolute = component
             .binding("value")
-            .is_some_and(|bound| bound.starts_with('/'))
-        {
-            return Some(String::new());
-        }
+            .is_some_and(|bound| bound.starts_with('/'));
         let mut scope = String::new();
         for list in self.lists_above(component) {
             let items = scoped(&scope, list.template()?.1);
-            let rest = path.strip_prefix(&items)?.strip_prefix('/')?;
-            let item = rest.split('/').next()?;
-            item.parse::<usize>().ok()?;
+            let within = |path: &str| {
+                let item = path
+                    .strip_prefix(&items)?
+                    .strip_prefix('/')?
+                    .split('/')
+                    .next()?;
+                item.parse::<usize>().ok().map(|_| item.to_owned())
+            };
+            let item = match absolute {
+                true => within(button).unwrap_or_else(|| "0".to_owned()),
+                false => within(path)?,
+            };
             scope = format!("{items}/{item}");
         }
         Some(scope)

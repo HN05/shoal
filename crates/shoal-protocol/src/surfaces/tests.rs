@@ -784,3 +784,28 @@ fn a_list_input_bound_absolutely_is_an_action_s_input() {
         json!({"shared": "each", "float": 2, "bound": 11})
     );
 }
+
+/// A booking list whose date input binds `/day` absolutely, with each
+/// slot's own minimum.
+fn booking() -> Surface {
+    surface(
+        json!([
+            {"id": "root", "component": "List", "children": {"componentId": "slot", "path": "/slots"}},
+            {"id": "slot", "component": "Column", "children": ["day", "book"]},
+            {"id": "day", "component": "DateTimeInput", "enableDate": true,
+             "min": {"@path": "opens"}, "value": {"@path": "/day"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"day": {"@path": "/day"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"day": "", "slots": [{"opens": "2026-12-01"}, {"opens": "2026-12-10"}]}),
+    )
+}
+
+#[test]
+fn a_list_input_bound_absolutely_keeps_its_item_s_bounds() {
+    let booking = booking();
+    let answer = |id: &str, day: &str| booking.resolve(id, values(&[("day", json!(day))]));
+    assert!(answer("book#2", "2026-12-05").is_err());
+    answer("book#1", "2026-12-05").unwrap();
+}
