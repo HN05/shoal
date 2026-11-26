@@ -165,7 +165,7 @@ works as its space's [`limits` permission](modes.md#permitted-actions)
 allows.
 
 A chat whose place fails to start its agent stays, as a new workspace does.
-Its [failed start](queue.md) is reported the same way as its link warnings.
+Its [failed start](queue.md#failed-starts) is reported the same way as its link warnings.
 
 ### Stop and resume
 

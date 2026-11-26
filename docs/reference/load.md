@@ -236,7 +236,7 @@ no limit.
 
 ### Protection under a limit
 
-With memory protection on, protection and [dynamic admission](queue.md) count
+With memory protection on, protection and [dynamic admission](queue.md#dynamic-admission) count
 the limit as the machine's memory too. Shoal then warns agents, holds back
 starts and stops work before the kernel throttles it.
 
@@ -354,7 +354,7 @@ After a protection stop, the wrapper stays connected while its agent is
 stopped. It runs the restore command once both of these hold:
 
 - Healthy readings have lasted for the recovery interval.
-- The [agent queue](queue.md) admits the restore.
+- The [agent queue](queue.md#restores) admits the restore.
 
 Readings are healthy when each enabled signal is below its recovery threshold.
 On Linux, memory in use and the memory stall of some task over the last minute
@@ -474,7 +474,7 @@ terminal, logging out and shutting down send such signals. The wrapper saves
 the agent before it stops it.
 
 Once its execution has ended, the agent's restore waits in the
-[agent queue](queue.md). The agent thus comes back after a reboot without a
+[agent queue](queue.md#restores-without-a-wrapper). The agent thus comes back after a reboot without a
 command. Run `shoal stop --all` first to keep agents down.
 
 ### System shutdown
@@ -702,7 +702,7 @@ A workspace whose setup failed, or never started, is refused. The refusal names
 when that failed too. The agent waiting for it in the queue then starts as the
 queue admits it.
 
-A named space whose agent's launch [failed to start](queue.md) queues that
+A named space whose agent's launch [failed to start](queue.md#failed-starts) queues that
 launch again exactly as it was, with its task, prompt and permissions. It
 starts as the queue admits it, or at once with `--now`.
 

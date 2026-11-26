@@ -7,7 +7,7 @@ gives the reasons.
 ## Asleep and stopped
 
 An agent is asleep when Shoal stopped it on its own and will bring it back on
-its own. It comes back through the [agent queue](queue.md) once what it waits
+its own. It comes back through the [agent queue](queue.md#restores) once what it waits
 for arrives. These stops put an agent to sleep:
 
 - [overload and disk protection](load.md),

@@ -33,8 +33,8 @@ A workspace has at most one queued or running review. Running `review run`
 again returns the queued one, and is refused while one runs. A queued review
 takes the workspace's HEAD when it starts.
 
-A queued review waits in the [agent queue](queue.md) for the memory and disk
-that an agent's start needs, but takes no slot. `shoal queue` does not list it. When the machine goes to sleep, Shoal stops each
+A queued review waits in the [agent queue](queue.md#reviews).
+`shoal queue` does not list it. When the machine goes to sleep, Shoal stops each
 running reviewer and queues its review again, which starts over once the
 machine wakes. A daemon that starts again queues each review that was running.
 

@@ -617,7 +617,7 @@ and rules Shoal ships. `worker` always starts in a workspace, and the built-in
   it.
 - `weight` decides how the mode's agents take the machine's capacity, in a
   workspace or a chat. A `light` agent starts at once, holds no
-  [heavy slot](../../../../../../docs/reference/queue.md), and is never
+  [heavy slot](../../../../../../docs/reference/queue.md#heavy-slots), and is never
   stopped for load or on idle. A `heavy` agent waits for a heavy slot. The
   built-in chat modes are light, also when set to `kind = "workspace"`. A chat
   without a repository takes its mode's weight from the global config.

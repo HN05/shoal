@@ -354,7 +354,7 @@ A workspace's status is its lifecycle state while it is not ready. A ready
 workspace shows the first of these that holds:
 
 - `queued (N)` while nothing Shoal started runs there and an agent, other than
-  one asleep there, waits at place N in the [agent queue](queue.md) to start in
+  one asleep there, waits at place N in the [agent queue](queue.md#list-the-queue) to start in
   it, or `starting` once the queue admits it. Each is followed by what else it
   waits for, as `shoal queue` shows. Another status names such agents after
   it, as in `process running, queued (2)`.

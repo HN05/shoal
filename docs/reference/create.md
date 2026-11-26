@@ -161,7 +161,7 @@ its space in `workspace`.
 
 A child with an agent of its own receives its own activity and its subtree's
 instead. An agent of its own is one that reports its turn state, any agent
-Shoal tracks there, or one whose restore waits in the [agent queue](queue.md).
+Shoal tracks there, or one whose restore waits in the [agent queue](queue.md#restores).
 
 ## Coordinators
 

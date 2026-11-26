@@ -54,7 +54,7 @@ that names what a new space starts as or on is refused, such as `--parent`,
 `--name`, a repository or `--issue`. The refusal of `--issue` names
 `shoal link issue <number> assigned --space <workspace>`.
 
-A workspace has one such agent, which the [agent queue](queue.md) enforces. A
+A workspace has one such agent, which the [agent queue](queue.md#one-agent-per-workspace) enforces. A
 workspace's agent starts this way only the agent of a workspace below its own
 space.
 
