@@ -177,7 +177,7 @@ impl Spaces {
         })
     }
 
-    /// Waits for a checkpoint to keep what it holds. Refuses a worktree whose
+    /// Keeps what it holds in a checkpoint first. Refuses a worktree whose
     /// HEAD is no longer the source's, which the files copied now would not
     /// fit.
     async fn reuse_copied_worktree(

@@ -101,7 +101,7 @@ impl Spaces {
         }
     }
 
-    /// Waits until nothing but the execution `own` runs in the workspace.
+    /// Refuses while anything but the execution `own` runs in the workspace.
     async fn refresh_reserved(
         &self,
         daemon: &dyn Daemon,
