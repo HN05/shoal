@@ -55,6 +55,7 @@ fn a_ci_jobs_workspace_lists_under_the_workspace_its_run_links() {
     job.usage = Some(crate::model::WorkspaceUsage {
         cpu_percent: Some(250.0),
         memory_bytes: 3 << 29,
+        command_memory_bytes: 0,
         processes: 4,
     });
     job.job = Some(Box::new(

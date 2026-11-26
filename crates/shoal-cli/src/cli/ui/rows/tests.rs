@@ -208,6 +208,7 @@ fn usage_shows_cpu_once_measured_and_memory_in_binary_units() {
     let usage = |cpu_percent, memory_bytes| WorkspaceUsage {
         cpu_percent,
         memory_bytes,
+        command_memory_bytes: 0,
         processes: 3,
     };
     assert_eq!(usage_label(&usage(None, 640 << 20)), "640 MiB");

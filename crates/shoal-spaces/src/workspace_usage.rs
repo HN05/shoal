@@ -1,5 +1,6 @@
 //! What each space's processes and containers use, sampled on a fixed
-//! cadence, and the memory of one-shot agent runs, which belong to no space.
+//! cadence, with what of it its commands hold, and the memory of one-shot
+//! agent runs, which belong to no space.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::{HashMap, HashSet},
@@ -46,6 +47,10 @@ pub struct Sample {
     pub in_work_slice: HashSet<Identity>,
     /// One-shot agent runs, such as reviewers, belong to no space.
     pub oneshots: Oneshots,
+    /// The PIDs of the commands Shoal runs in spaces besides their agents,
+    /// such as `shoal run` commands and demos, whose processes and what
+    /// they start count as the commands' memory.
+    pub commands: HashSet<u32>,
 }
 
 /// In bytes.
@@ -258,11 +263,16 @@ pub fn usage(
 ) -> HashMap<SpaceId, WorkspaceUsage> {
     let mut usage: HashMap<SpaceId, WorkspaceUsage> = HashMap::new();
     let mut used: HashMap<&SpaceId, u64> = HashMap::new();
+    let commands = command_processes(current);
     for (identity, (workspace, reading)) in &current.processes {
         let entry = usage.entry(workspace.clone()).or_default();
         if !current.unreaped.contains(identity) {
             entry.processes += 1;
             entry.memory_bytes = entry.memory_bytes.saturating_add(reading.memory);
+            if commands.contains(&identity.pid) {
+                entry.command_memory_bytes =
+                    entry.command_memory_bytes.saturating_add(reading.memory);
+            }
         }
         let before = previous
             .and_then(|previous| previous.processes.get(identity))
@@ -302,6 +312,30 @@ pub fn usage(
         entry.cpu_percent = (elapsed > 0.0).then(|| used as f64 * 100.0 / elapsed);
     }
     usage
+}
+
+/// The PIDs of `current`'s commands and of the processes below them in
+/// their space.
+fn command_processes(current: &Sample) -> HashSet<u32> {
+    let parents: HashMap<u32, (&SpaceId, u32)> = (current.processes.iter())
+        .map(|(identity, (space, reading))| (identity.pid, (space, reading.parent)))
+        .collect();
+    let mut below = HashSet::new();
+    for (&pid, &(space, _)) in &parents {
+        // Each step reaches another process, unless a reused PID makes a cycle.
+        let mut at = pid;
+        for _ in 0..=parents.len() {
+            let Some(&(_, parent)) = parents.get(&at).filter(|(owner, _)| *owner == space) else {
+                break;
+            };
+            if current.commands.contains(&at) {
+                below.insert(pid);
+                break;
+            }
+            at = parent;
+        }
+    }
+    below
 }
 
 /// The containers' CPU counts only once the processes' is `measured` over
@@ -416,13 +450,15 @@ fn reaper<'a>(
 }
 
 /// Also reads the processes of `tracked` that exited unreaped, whose
-/// environment no scan can read.
+/// environment no scan can read, and which processes are commands'.
 pub async fn sample(
     store: &crate::Store,
     tracked: Vec<(SpaceId, Identity)>,
     oneshot_runs: HashSet<String>,
 ) -> Result<Sample> {
-    let ids = store.read(|db| crate::spaces::space_ids(db)).await?;
+    let (ids, commands) = store
+        .read(|db| Ok((crate::spaces::space_ids(db)?, command_pids(db)?)))
+        .await?;
     let running = identity::scan_workspaces(ids).await?;
     let oneshots = identity::scan_oneshot_runs(oneshot_runs).await?;
     let found: HashSet<&Identity> = running.iter().map(|(_, identity)| identity).collect();
@@ -432,6 +468,7 @@ pub async fn sample(
         .collect();
     let reading = move || {
         let mut sample = read(running, missed, usage::read, state)?;
+        sample.commands = commands;
         let holds = crate::service::work::holds;
         sample.mark_work_slice(holds);
         sample.oneshots = Oneshots::read(&oneshots, usage::read, holds)?;
@@ -497,5 +534,14 @@ pub fn read(
         unreaped,
         in_work_slice: HashSet::new(),
         oneshots: Oneshots::default(),
+        commands: HashSet::new(),
     })
+}
+
+/// The PIDs of the commands Shoal runs in spaces besides their agents.
+fn command_pids(db: &rusqlite::Connection) -> Result<HashSet<u32>> {
+    Ok((shoal_store::all_executions(db)?.into_iter())
+        .filter(|execution| execution.agent.is_none())
+        .filter_map(|execution| Some(execution.child?.pid))
+        .collect())
 }

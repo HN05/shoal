@@ -213,7 +213,23 @@ pub struct WorkspaceUsage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_percent: Option<f64>,
     pub memory_bytes: u64,
+    /// What of `memory_bytes` the space's commands hold, such as its
+    /// `shoal run` commands and demos, with what they started.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub command_memory_bytes: u64,
     pub processes: usize,
+}
+
+impl WorkspaceUsage {
+    /// What the space's agent uses itself: its AI tool, language servers
+    /// and shells, without the commands its space runs.
+    pub fn agent_memory_bytes(&self) -> u64 {
+        self.memory_bytes.saturating_sub(self.command_memory_bytes)
+    }
+}
+
+fn is_zero(bytes: &u64) -> bool {
+    *bytes == 0
 }
 
 /// The commit a workspace without a branch started at, and what named it.

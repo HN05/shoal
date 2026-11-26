@@ -54,6 +54,7 @@ fn sample(
         unreaped: HashSet::new(),
         in_work_slice: HashSet::new(),
         oneshots: Oneshots::default(),
+        commands: HashSet::new(),
     }
 }
 
@@ -94,6 +95,30 @@ async fn cpu_counts_new_and_reaped_processes_once() {
     assert_eq!(usage["a"].cpu_percent, Some(40.0));
     assert_eq!(usage["b"].cpu_percent, Some(0.0));
     assert_eq!(usage.len(), 2);
+}
+
+#[test]
+fn a_space_s_commands_and_what_they_start_count_apart_from_its_agent() {
+    // The agent 10 runs a shell 11, whose `shoal run` wrapper 12 runs the
+    // command 13, which starts 14; 30 runs in another space under 13's PID
+    // tree by a reused parent.
+    let mut current = sample(
+        Instant::now(),
+        [
+            process(10, 1, "a", 0),
+            process(11, 10, "a", 0),
+            process(12, 11, "a", 0),
+            process(13, 12, "a", 0),
+            process(14, 13, "a", 0),
+            process(30, 13, "b", 0),
+        ],
+    );
+    current.commands = HashSet::from([13]);
+    let usage = usage(None, &current, &mut HashMap::new());
+    assert_eq!(usage["a"].memory_bytes, 5 * 1024);
+    assert_eq!(usage["a"].command_memory_bytes, 2 * 1024);
+    assert_eq!(usage["a"].agent_memory_bytes(), 3 * 1024);
+    assert_eq!(usage["b"].command_memory_bytes, 0);
 }
 
 #[tokio::test(start_paused = true)]

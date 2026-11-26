@@ -945,11 +945,13 @@ impl Agents {
                 let activity = if waiting.contains(&id) {
                     Activity::Stopped
                 } else {
+                    // An agent counts at its base, without the commands its
+                    // space runs, which take admission of their own.
                     Activity::Running {
                         age,
                         memory: daemon
                             .workspace_usage(&workspace)
-                            .map(|usage| usage.memory_bytes),
+                            .map(|usage| usage.agent_memory_bytes()),
                     }
                 };
                 (id, (workspace, activity))
