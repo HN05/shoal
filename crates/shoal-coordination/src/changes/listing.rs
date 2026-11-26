@@ -1,6 +1,5 @@
-//! Reading changes: a space's latest, or a thread's, those made since one
-//! of its posts with a post named, which a caller reads where it reads the
-//! space or the thread.
+//! Reading changes. A caller reads them where it reads the space or the
+//! thread.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result};
 use rusqlite::Connection;

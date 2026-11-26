@@ -1,5 +1,4 @@
-//! The rows of threads and their posts: reading them as protocol records,
-//! and recording a thread, a post, a new holder and a resolution.
+//! The rows of threads and their posts.
 use std::collections::HashMap;
 
 use anyhow::{Context as _, Result};

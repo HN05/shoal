@@ -1,7 +1,5 @@
-//! The spaces a scope reaches: the caller's own space and those below it,
-//! on every joined machine, or, for a chat without a repository, which
-//! manages the spaces of every repository, every space. Another machine
-//! vouches for its own callers' reach.
+//! The spaces a scope reaches. Another machine vouches for its own callers'
+//! reach.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;

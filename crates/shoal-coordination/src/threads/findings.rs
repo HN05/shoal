@@ -1,10 +1,6 @@
-//! The `review` threads of reviews: those Shoal opens for a local review's
-//! findings, held by the reviewed workspace, opening one with its finding
-//! as the opening post, which holds its posts until the review is
-//! submitted, and reopening one a later review found still present; reading a review's threads, releasing those of a review its
-//! writer submitted and dropping those of one it cancelled, each in the
-//! review's own transaction, telling no one, since the review's one alert
-//! names its threads.
+//! The `review` threads of reviews. Each operation runs in the review's own
+//! transaction and tells no one, since the review's one alert names its
+//! threads.
 use anyhow::{Context as _, Result};
 use rusqlite::{Connection, Transaction, params};
 use shoal_ids::space_ids::SpaceId;

@@ -1,6 +1,4 @@
-//! Posting in a thread: the post's checks, the surface it offers and the
-//! one it answers, and recording and delivering it from the poster's side,
-//! or from a participant on neither.
+//! Posting in a thread.
 use crate::{Coordination, daemon::Daemon};
 use std::collections::{BTreeMap, BTreeSet};
 

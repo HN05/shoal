@@ -1,5 +1,4 @@
-//! Reading alerts: listing those for the user, a space or every recipient a
-//! caller may read, marking those a caller read, and clearing the user's.
+//! Reading and clearing alerts.
 use crate::{Coordination, daemon::Daemon};
 use shoal_daemon_base::notifications::{chosen, merged};
 use shoal_daemon_base::permitted_actions::Action;

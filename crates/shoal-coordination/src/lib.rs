@@ -1,10 +1,6 @@
-//! Coordination between spaces and the user: the alerts one sends another,
-//! the threads they hold conversations in and the changes an agent makes
-//! for a thread, the approval requests a scoped caller makes and where they
-//! go to be decided, the permissions each space holds, and the scope a
-//! caller's token reaches. [`Coordination`] holds what they keep in memory
-//! and offers their operations; what they need of the rest of the daemon is
-//! the interface in [`daemon`].
+//! Coordination between spaces and the user, as
+//! `docs/design/coordination.md` and `docs/design/permissions.md` describe
+//! it.
 use shoal_daemon_base::operations::Operations;
 use std::sync::Arc;
 
@@ -30,7 +26,6 @@ pub mod permissions;
 pub mod scope;
 pub mod threads;
 
-/// The coordination service, which `Manager` holds.
 pub struct Coordination {
     store: Store,
     gates: Arc<Gates>,

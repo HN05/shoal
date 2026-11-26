@@ -1,9 +1,4 @@
-//! Forwarding a thread: the current party of either side gives its role
-//! to a space its scope reaches, or up to its coordinator or the user, with
-//! a note, and the new party hears what the thread says so far. The
-//! forwarder's space stays linked to it, hearing its later posts, unless it
-//! unlinks. A new opener numbers the thread in its own space, and the
-//! holder and the linkers hear its new number.
+//! Forwarding a thread's role to another party.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::Transaction;

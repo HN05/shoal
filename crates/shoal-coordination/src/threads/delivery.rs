@@ -1,10 +1,6 @@
-//! How a thread's posts, forwards and resolutions reach the parties: as
-//! alerts, queued in the transaction that records the change, to the
-//! user, a space's agent or, for a holder on another machine, passed up
-//! there once it commits. Every alert about a thread names it as its
-//! subject, so withdrawing the thread takes back those still unread. A
-//! thread that holds its posts, as a pending review's does, reaches nobody;
-//! submitting the review tells its holder of them all at once.
+//! How a thread's posts, forwards and resolutions reach the parties. Every
+//! alert about a thread names it as its subject, so withdrawing the thread
+//! takes back those still unread.
 use crate::{Coordination, daemon::Daemon};
 
 use anyhow::Result;

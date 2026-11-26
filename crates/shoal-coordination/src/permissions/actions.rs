@@ -1,7 +1,4 @@
-//! Actions a permission key governs: a scoped caller takes one at once
-//! where its space's permission for the key is `direct`, once a decision
-//! approves it where it is `propose`, and not at all where it is `deny`.
-//! The user takes every one.
+//! Actions a permission key governs.
 use crate::approvals::ApprovalRequestExt;
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;

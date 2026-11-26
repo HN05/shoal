@@ -1,6 +1,4 @@
-//! The rows of code references: reading them as protocol records,
-//! recording one, moving one to where it was followed, and the file
-//! versions a space's references keep.
+//! The rows of code references.
 use std::collections::HashMap;
 
 use anyhow::Result;

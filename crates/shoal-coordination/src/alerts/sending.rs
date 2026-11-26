@@ -1,5 +1,4 @@
-//! Sending an alert from the user or a space, up to a coordinator or the
-//! user, or down to the agents of spaces, and withdrawing an unread one.
+//! Sending alerts and withdrawing unread ones.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{OptionalExtension as _, Transaction, params};

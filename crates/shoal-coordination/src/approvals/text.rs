@@ -1,5 +1,4 @@
-//! The text shown for a request: the user's notifications and the agent
-//! messages that ask for or report a decision.
+//! The text shown for a request.
 use super::{ApprovalRequest, DecisionStatus, GateStep};
 
 /// The text shown for a request to the user and to agents.

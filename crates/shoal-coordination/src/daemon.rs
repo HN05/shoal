@@ -1,10 +1,4 @@
-//! What coordination needs of the rest of the daemon, which implements it:
-//! the spaces and workspaces it routes between and their attached files,
-//! the agents that receive alerts and the queue that starts them, the
-//! callers scope tokens stand for, the machines of the hub the tree goes on
-//! to, the registered repositories, the reviews whose findings are threads,
-//! the pushes and proposals approvals decide, and, in its own transactions,
-//! the removals under way and the holds approvals place.
+//! What coordination needs of the rest of the daemon.
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -403,8 +397,6 @@ pub trait Links: Send + Sync {
     fn prune_proposal_files<'a>(&'a self, request: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
 }
 
-/// Everything coordination needs of the daemon, which each of its
-/// operations that reaches beyond it takes.
 pub trait Daemon:
     Spaces + Files + Agents + Callers + Hub + Repositories + Reviews + Links + Coordinators
 {

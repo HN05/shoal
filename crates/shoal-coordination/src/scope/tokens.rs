@@ -1,8 +1,6 @@
-//! Scope tokens: resolving the one a caller presents, and the tokens a
-//! space keeps, which act for it until revoked or the space goes: a chat's
-//! own, which its agent carries, and each one a space issues on request. An
-//! execution's own token, which the executions table keeps for its
-//! wrapper's reattachment, acts for it only while the wrapper is connected.
+//! Scope tokens. An execution's own token, which the executions table keeps
+//! for its wrapper's reattachment, acts for it only while the wrapper is
+//! connected.
 use super::Caller;
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;

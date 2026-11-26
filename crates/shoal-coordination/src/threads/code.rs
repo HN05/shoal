@@ -1,6 +1,4 @@
-//! The places in code posts point at: made from paths in worktrees,
-//! followed as the code changes, with the file versions they keep in the
-//! repository.
+//! The places in code that posts point at.
 use std::collections::{BTreeMap, BTreeSet};
 
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};

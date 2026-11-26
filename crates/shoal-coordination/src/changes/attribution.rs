@@ -1,8 +1,5 @@
-//! Saying who made a change and which thread it is for: the agent claims
-//! the changes it made and unclaims those it did not, switches the thread
-//! its changes go to, and moves changes into a thread or out of one. A
-//! change belongs to at most one thread, an open one its space takes part
-//! in.
+//! Saying who made a change and which thread it is for. A change belongs to
+//! at most one thread, an open one its space takes part in.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Result, ensure};
 use shoal_ids::space_ids::SpaceId;

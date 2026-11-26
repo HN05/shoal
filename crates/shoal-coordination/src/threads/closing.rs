@@ -1,10 +1,5 @@
 //! Closing a space's threads when it finishes or goes, and reopening them
-//! when that is undone: `done` and removal close every open thread the
-//! space is numbered in, opened or holds, and tell the opener of one it
-//! holds that the holder finished; `done --undo` and a restore reopen the
-//! threads closed for that cause that nothing resolved otherwise since.
-//! Another machine closes and reopens those it keeps of the space, its
-//! comments of the reviews kept there and those it holds there, when told.
+//! when that is undone.
 use crate::daemon::Records;
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;

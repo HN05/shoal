@@ -1,11 +1,5 @@
 //! Agents' changes: the hunks Shoal records as the agents it runs change
-//! the files of their worktrees. An edit tool's hook passes its edit,
-//! whose hunks are the agent's; a command's hooks snapshot the worktree
-//! before and after it, and what changed between is the agent's, or mixed
-//! where an editor reported the user edited the same file meanwhile. What
-//! changed between the agent's tool calls is someone else's. Each change
-//! is numbered in its space's own sequence and goes to the thread the
-//! agent works for.
+//! their worktrees, as `docs/design/coordination.md` describes them.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;
 use shoal_protocol::changes::{Change, ChangeAuthor, ChangeKind, ToolChange};

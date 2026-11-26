@@ -1,6 +1,4 @@
-//! The requests the gate decides: handing one to it, those it is deciding,
-//! and recording that it allowed one, denied one, which a retry asks again
-//! after, or passed one on, which then takes the normal route.
+//! The requests the gate decides.
 use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, Transaction};
 

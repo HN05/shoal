@@ -1,7 +1,6 @@
-//! Posts an agent makes in its conversation: the turn it marks with the
-//! thread (see [`crate::chat_marks`]) posts its final message
-//! there. A prompt the user submits in that conversation answers the post:
-//! Shoal records it as the user's reply.
+//! Posts an agent makes in its conversation, through the turn it marks with
+//! the thread (see [`crate::chat_marks`]). Shoal records a prompt the user
+//! submits there as the user's reply.
 use crate::daemon::Records;
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Result, ensure};

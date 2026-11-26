@@ -1,10 +1,7 @@
 //! A stand-in for the rest of the daemon, which coordination's tests build
-//! the service over: a temporary store with the spaces a test records and
-//! the repositories it registers, each with a local config a test may set,
-//! the agents a test says run, and the alerts queued for them as the
-//! agents' queue records them. Nothing runs on another machine, no file is
-//! attached and no review or proposal is pending; a test that needs one of
-//! those drives a whole daemon instead.
+//! the service over. Nothing runs on another machine, no file is attached
+//! and no review or proposal is pending; a test that needs one of those
+//! drives a whole daemon instead.
 use shoal_daemon_base::operations::Operations;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
@@ -292,8 +289,8 @@ pub(crate) struct StandIn {
     store: Store,
     /// The global config, which the service shares.
     config: Arc<ConfigState>,
-    /// The service, which routes the alerts the base's notifications pass
-    /// to a coordinator.
+    /// The service, which routes the alerts that the base's notifications
+    /// pass to a coordinator.
     coordination: OnceLock<Arc<Coordination>>,
     spaces: Mutex<Vec<Space>>,
     /// The spaces whose agent runs.

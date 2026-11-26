@@ -1,9 +1,4 @@
-//! Who takes part in a thread and what each may do: a caller posts from
-//! the side it took part on, or on neither as a participant that reads the
-//! thread; the opener resolves, or the holder when Shoal opened the thread,
-//! and either side's current party forwards its role. A space reads a
-//! thread it took part in, or one a space its scope reaches took part in;
-//! the user reads every thread and acts for either side.
+//! Who takes part in a thread and what each may do.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;

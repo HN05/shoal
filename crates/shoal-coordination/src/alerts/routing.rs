@@ -1,6 +1,4 @@
-//! Whom an alert reaches, the decision every alert takes: up from a space
-//! to its coordinator or the user ([`Coordination::route_up`]), or down to the
-//! agents of spaces ([`Coordination::route`]).
+//! Whom an alert reaches. Every alert takes this decision.
 use crate::{Coordination, daemon::Daemon};
 use std::collections::HashSet;
 

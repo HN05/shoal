@@ -1,11 +1,8 @@
-//! An edit tool's change: the hunks its hook passes are the agent's, of
-//! the file version on disk when the hook runs; a hunk whose lines the
-//! file no longer holds where it put them is mixed, since someone else
-//! edited the file too. What changed in the file since the agent's last
-//! tool call, the file before the edit against the snapshot base, is
-//! someone else's, or the agent's while one of its commands runs. The
-//! version then goes into the base, so a later diff takes neither for a
-//! new change.
+//! An edit tool's change. The hunks its hook passes are the agent's, of the
+//! file version on disk when the hook runs. A hunk whose lines the file no
+//! longer holds where it put them is mixed, since someone else edited the
+//! file too. That version then goes into the snapshot base, so a later diff
+//! takes neither for a new change.
 use crate::Coordination;
 use std::path::Path;
 

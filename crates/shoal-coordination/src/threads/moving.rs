@@ -1,8 +1,4 @@
-//! Handing a space's open threads to the space that absorbs its work: the
-//! threads numbered in it take the absorbing space's next numbers, and
-//! those it holds go to that space, whose agent goes on with them. A
-//! thread between the two spaces stays, and closes with the absorbed
-//! space's removal.
+//! Handing a space's open threads to the space that absorbs its work.
 use crate::daemon::Records;
 use crate::{Coordination, daemon::Daemon};
 use std::collections::HashMap;

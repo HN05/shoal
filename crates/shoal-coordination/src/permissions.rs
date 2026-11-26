@@ -1,9 +1,6 @@
-//! A space's effective permissions: those of its agent's mode, narrowed by
-//! the effective permissions of the space above it, up to a top-level
-//! space, with each key the `--permission` given to its agent sets as given.
-//! They are computed at each check from current config, the recorded modes
-//! and the tree, so a config change reaches running agents; another joined
-//! machine vouches for its own spaces' permissions.
+//! A space's effective permissions, as `docs/design/permissions.md`
+//! describes them. They are computed at each check, never stored, so a
+//! config change reaches running agents.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;

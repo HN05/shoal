@@ -1,15 +1,5 @@
-//! Threads: conversations between whoever opened one, the user, a space or
-//! Shoal, and whoever holds it now, the user or a space. A space opens a
-//! thread with its coordinator, else the user, or with a space below it;
-//! the user opens one with a space. A thread is numbered in its opener's
-//! space, or in the space the user opened it with, sharing that space's
-//! numbers with approval requests, and keeps its number until that space
-//! goes. Posts from either side reach the other as alerts, and the spaces
-//! that linked the thread; the holder forwards it, and the opener resolves
-//! it with a typed outcome. A thread its opener opens towards a workspace
-//! it has a pending review of joins that review and holds its posts until
-//! the review is submitted; the workspace's machine keeps the review and
-//! numbers such a comment in the workspace when the opener runs elsewhere.
+//! Threads: conversations between whoever opened one and whoever holds it
+//! now, as `docs/design/coordination.md` describes them.
 use crate::{
     Coordination,
     daemon::{Daemon, Records},

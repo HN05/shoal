@@ -1,6 +1,4 @@
-//! Alerts: one-way notices from the user, a space or Shoal, for the user or
-//! a space's agent. Shoal's own reach a space's coordinator instead of the
-//! user where it has one; [`routing`] decides whom every alert reaches.
+//! Alerts: one-way notices from the user, a space or Shoal.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;

@@ -1,6 +1,5 @@
-//! Human decisions authorize cooperative allocations; they never reserve capacity.
-//! Its submodules store, route, word and deliver the requests subsystems
-//! make.
+//! Approval requests and their decisions. A decision authorizes a
+//! cooperative allocation and never reserves capacity.
 mod delivery;
 pub mod gated;
 pub mod proposals;

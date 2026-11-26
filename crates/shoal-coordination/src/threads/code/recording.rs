@@ -1,6 +1,5 @@
-//! Making a code reference from a path in a worktree: the space whose
-//! worktree it is in, which the caller's scope must reach, the version of
-//! its file, the snippet of its lines and HEAD.
+//! Making a code reference from a path in a worktree, which the caller's
+//! scope must reach.
 use crate::{Coordination, daemon::Daemon};
 use std::path::{Path, PathBuf};
 

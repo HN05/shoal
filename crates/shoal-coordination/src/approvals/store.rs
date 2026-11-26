@@ -1,5 +1,4 @@
-//! The request store: recording, reading, withdrawing, releasing and retiring
-//! approval requests.
+//! The store of approval requests.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};

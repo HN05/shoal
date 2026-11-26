@@ -1,7 +1,6 @@
-//! Cooperative caller scope: the caller a scope token stands for, the
-//! spaces its scope reaches, and what it sees of the rest. The daemon
-//! confines every scoped request with them; this is not a security boundary
-//! against the OS user.
+//! Caller scope: the caller a scope token stands for, the spaces its scope
+//! reaches, and what it sees of the rest. Scope is cooperative, not a
+//! security boundary against the OS user.
 mod access;
 mod reach;
 pub mod tokens;

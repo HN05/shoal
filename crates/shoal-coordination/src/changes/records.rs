@@ -1,6 +1,5 @@
-//! The rows of changes: recording them in their space's sequence, reading
-//! them as protocol records, and the snapshot base and running commands
-//! their recording diffs against.
+//! The rows of changes, and the snapshot base and running commands their
+//! recording diffs against.
 use std::collections::HashMap;
 
 use anyhow::Result;
