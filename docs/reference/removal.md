@@ -69,7 +69,7 @@ Shoal deletes a [kept branch](#kept-branches) later, once a remote or the
 default branch has all its commits. It leaves the branch when it moved, is
 checked out, belongs to a workspace again or a workspace builds on it.
 
-A [workspace at a commit](create.md) has no branch to delete or keep. The
+A [workspace at a commit](create.md#workspaces-at-a-commit) has no branch to delete or keep. The
 commit it started at counts as kept, so a fork PR's head or a local commit it
 was created at never keeps it from cleanup. Commits made on top of it, and
 uncommitted changes, are unsaved work, as on a detached HEAD. `shoal restore`

@@ -47,7 +47,7 @@ workspace you have a pending review of is that review's comment, and any other
 thread is a question. `--severity` marks a review comment.
 
 From a space, the thread goes to the space's
-[coordinator](create.md), or else to you. `--space` sends it to a space the
+[coordinator](create.md#coordinators), or else to you. `--space` sends it to a space the
 caller's scope reaches instead. From your terminal, it goes to the space
 `--space` names, else the current space, else one you pick.
 

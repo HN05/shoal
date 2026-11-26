@@ -40,7 +40,7 @@ Each alert records:
 
 From a space, `shoal send` without `--space` sends the alert up. It goes to
 the agent of the nearest space above with an agent, the
-[coordinating agent](create.md), on this machine or another
+[coordinating agent](create.md#coordinators), on this machine or another
 [joined machine](hub.md). Without one, it goes to the user.
 
 An alert sent up is one line of at most 512 bytes, without control
@@ -328,7 +328,7 @@ both.
 A chat registers the same alert and [turn-state](agents.md#agent-state) hooks,
 and for Claude Code the wake hook. A chat's agent runs outside any workspace
 scope. Its hooks and `shoal alert list` deliver the chat's alerts about the
-workspaces it [coordinates](create.md), and those Shoal sends it for the user.
+workspaces it [coordinates](create.md#coordinators), and those Shoal sends it for the user.
 A Codex chat receives them after its next tool call or prompt.
 
 ## Settle alerts

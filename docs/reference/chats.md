@@ -213,7 +213,7 @@ below the chat once they clear. `--now` and `--focus` are refused there.
 ### Coordination
 
 While the chat's agent runs, or waits to come back on its own, the chat
-[coordinates](create.md) the spaces below it. It receives the activity of
+[coordinates](create.md#coordinators) the spaces below it. It receives the activity of
 those without an agent of their own.
 
 While the chat is stopped otherwise, their events go on up, to you at the top.

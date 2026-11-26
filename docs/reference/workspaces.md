@@ -58,7 +58,7 @@ terminal picks among the open PRs, those carrying the `label` of the mode
 branch, and links the PR once the workspace is ready. A refused link only warns.
 
 A PR from a fork has no branch in the repository. It opens in a
-[workspace at a commit](create.md) at its head, below the space running
+[workspace at a commit](create.md#workspaces-at-a-commit) at its head, below the space running
 `shoal start`, or else top-level. The workspace takes the PR's title as its
 name and `pr-<number>` as its directory. Shoal fetches the head from the ref
 the forge serves it under, `refs/pull/<number>/head`, or

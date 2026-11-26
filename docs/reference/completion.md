@@ -6,7 +6,7 @@ This file says what `shoal done` and `shoal ready` do.
 ## Assignment completion
 
 `shoal done [space]` records that the space's work is finished at its HEAD. It
-notifies the space's [coordinator](create.md), or else the user.
+notifies the space's [coordinator](create.md#coordinators), or else the user.
 Completion does not check or claim that the work merged.
 
 Only `done` completes an assignment. Closing an issue or merging a PR does
