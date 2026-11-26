@@ -155,9 +155,10 @@ fn error_code(error: &anyhow::Error) -> ErrorCode {
     }
 }
 
-/// Write the reply to `request_id`, a list in pages when it takes more than
-/// one frame, or an error saying another reply does not fit in a frame; the
-/// oversized reply still fails the connection, for the log.
+/// Write the reply to `request_id` in the frames it takes: a list in pages,
+/// another reply too large for one frame in pieces of its JSON. Should a
+/// frame still not fit, the client gets an error saying so, and the reply
+/// fails the connection, for the log.
 pub(super) async fn reply(
     stream: &mut (impl AsyncWrite + Unpin),
     request_id: u64,

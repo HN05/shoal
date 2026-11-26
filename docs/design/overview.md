@@ -31,8 +31,10 @@ directory has one daemon shared across repositories, with a private Unix socket
 and a versioned JSON protocol; the ordinary installation is per user. Each
 protocol message is one frame of at most 64 KiB. A list too large for one frame
 is sent in pages, each frame but the last marked as continued; streamed listings
-send their frames, then `ok`; the daemon answers any other reply that would not
-fit with an error saying so. The protocol is the one protocol for the CLI and
+send their frames, then `ok`. Any other reply too large for one frame, even in
+pages, such as a thread whose surfaces outgrew one, is sent as pieces of its
+JSON, marked as continued in the same way, which the reader joins and parses.
+The protocol is the one protocol for the CLI and
 for apps. Apps use it through the `shoal-client` library, which holds the
 connection the CLI makes, an operation for each request and the handles that
 read from a connection. The requests and responses with the types they carry,
