@@ -1,111 +1,183 @@
 # Execution
 
-This file covers the execution wrapper and the processes Shoal starts:
+This file covers the execution wrapper and the processes Shoal starts: their
 terminals, reattachment, systemd scopes, process identity and configured
 commands.
 
-The execution wrapper owns terminal I/O, environment delivery, exit codes, and
-command process groups. It retains buffered daemon controls across start, stop,
-and recovery transitions so adjacent frames cannot be lost. A command takes the
-terminal as its foreground job before it runs, without waiting for its
-registration, so its first read or terminal setting never stops it. The wrapper
-starts it with the default stops for background terminal use, whatever the
-wrapper inherited, so a command that uses the terminal before it has it waits
-instead of failing. After commands it restores the caller's foreground group and
-OS terminal settings. When `TERM` is nonempty and not `dumb`, it also resets
-emulator input modes for the shell, writing best-effort cleanup directly to the
-terminal even when output is redirected. It registers through one request
-carrying its execution kind, and gives the entire command process group a shared
-grace period on stop requests, even after its leader exits. The daemon prepares
-each kind before shared registration. The daemon never proxies terminals, and a
-lost connection is not proof that an execution stopped or that its resources are
-free. Command wrappers outlive the daemon instead: on a lost connection or a
-shutdown's detach control they keep the command and terminal, retry the socket
-with capped backoff, and reattach with the execution ID, wrapper and child
-identities, process group and the execution's scope token. The daemon verifies
-these against the record, restores scope and agent metadata, and serves the
-connection as before; a command that exits meanwhile reports once reattached. A
-refusal stops the command as manual stop does. Reattachment is a permanent
-protocol method accepted at every version, and wrappers advertise it when they
-register: a restart or an update detaches those and stops the rest as manual
-stop does, within the workspace stop timeout. Setup and merges hold daemon
-gates, so they never reattach.
+## The execution wrapper
 
-Invoke external tools with argument arrays. Captured subprocesses share optional
-deadlines, whose error names the command line and directory, and a single
-diagnostic limit, terminate on cancellation, and drain output while sending
-input.
+The execution wrapper runs a command for Shoal. It owns the command's terminal
+I/O, environment, exit code and process group. The daemon never proxies a
+terminal, so terminal I/O stays in the process that has the terminal.
+[Process tracking](../reference/daemon.md#process-tracking) says how a stop
+ends the command's process group.
 
-The unit and every scope Shoal starts set `OOMPolicy=continue`, so an OOM kill
-ends only the process it chose and the daemon's own death alone fails the
-service, except that a CI job's scope has the kernel kill all of it with any one
-of its processes, as overload protection describes. Every process the daemon
-starts in a session of its own runs in a transient systemd scope of its own in
-the service's slice, which `workers::detached_command` adds through the launcher
-the managed daemon finds at startup, so that systemd's stop of the service after
-the daemon exited or failed to start leaves agents, places and CI jobs running
-for the next daemon. The command a wrapper starts for work runs in a scope of
-its own in `shoal-work.slice` instead, which the wrapper starts through
-`systemd-run --scope` wherever it runs, so an agent in a terminal host's place
-keeps that terminal yet leaves the host's control group for one Shoal controls:
-the slice holds Shoal's work, and only it, for the memory limit and the kernel's
-accounting. `systemd-run --scope` runs the command in its own place, so its PID,
-process group, terminal and environment stay as a direct start leaves them. The
-wrapper finds the launcher once, trying a scope; where none starts, it starts
-commands directly. It names each scope for the space whose work it runs, so what
-a command leaves there stays tied to the space after it ends. `KillMode=process`
-is rejected: it would leave them in the stopped service's control group, which
-the next start reports as left over, sharing its memory accounting and OOM
-kills. A live daemon's SIGTERM still stops agents. Where the daemon's startup
-finds that no scope can start, workers start directly; a start that
-`systemd-run` fails later is not retried directly, since its exit status cannot
-be told from the worker's own.
+A wrapper registers through one request that carries its execution kind. The
+daemon prepares each kind, then registers every kind the same way. The wrapper
+keeps the daemon's controls in a buffer across start, stop and recovery, so it
+never loses a control that arrives right after another.
 
-Every process Shoal starts, an execution, a hook, an export or a CI job's step,
-names its space in `SHOAL_SPACE` whatever its kind, and only a space with a
-worktree gets the worktree's variables, so a chat in a workspace's worktree
-carries none of the workspace's. Hooks are deliberately untracked user processes
-with the space identity but no scope token, because their purpose is to start or
-stop things that outlive the hook (a tmux session, say) without becoming
-execution survivors. Nothing outlives the workspace: removal stops every
-verified process that still carries its identity, including those hooks and
-exported environments started, and its leftovers. A leftover is a detached
-process, one whose parent exited and left it to launchd, init or the subreaper
-that takes the daemon's orphans (such as `systemd --user`), or a descendant of
-one, that the space's worktree, temporary directory, program, identity or, on
-Linux, the scope of its work ties to it, with everything it started: no live
-process outside the space keeps it, and the ties cover platform binaries whose
-hidden environment cannot show the identity and programs built in the worktree
-that run elsewhere. Exclusion follows live ancestry, not environment variables:
-the processes of tracked executions, those that started them, and terminal
-session servers are never untracked. `shoal stop` takes the same processes
-through the same operation after the executions, and `--processes` and
-`--leftovers` take them alone, so an agent stops what its own commands left
-behind without stopping itself. Automatic cleanup counts a leftover working in
-the worktree as use instead of stopping it, but stops a program built there and
-left running elsewhere. Leftovers are reported, not stopped on sight: the
-cleanup sweep finds every space's from one process listing and keeps them in
-memory, so no tool call waits for a scan, and the agent's hook names each new
-one once, since the agent knows whether its own test servers should keep
-running. They create no alert; `shoal status` lists them for the user. The same
-holds once an agent exits, whatever place it ran in: what its scope keeps is
-reported as the space's leftovers, since a restored agent may want its servers
-back, and goes with the space. A CI job's are stopped as it ends, and named in
-its workspace's log, since no agent is left to decide and the workspace goes.
+## The terminal
 
-Named `[commands]` are executable/argument arrays resolved per name from saved
-repository config, worktree config, then global config and built-in defaults at
-launch. They run through the tracked wrapper with workspace scope, terminal I/O,
-and literal extra arguments. `shoal run <name>` is their only name, so a
-configured command never competes with a built-in: there is no `shoal <name>`
-shorthand, and an unknown top-level name prints clap's error, with its
-suggestions of similar built-ins, followed by one fixed line pointing to `shoal
-run <name>`, without reading configuration. `run` lists the resolved arrays with
-their layers. Without a current or explicit workspace, repository-only commands
-pick from the workspaces whose configuration defines them. An unknown name
-reports a command error and never opens a picker. Workspace fields expand once
-within individual arguments; a standalone `{args}` places the caller's literal
-arguments. `{diff_base}` lazily uses `diff`'s daemon lookup. Built-in `edit`
-runs the `edit` command, otherwise `$VISUAL` or `$EDITOR` with the workspace
-path, through the same wrapper, so the editor gets scope and port variables and
-counts as activity.
+A command takes the terminal as its foreground job before it runs. It does not
+wait for its registration, so its first read or terminal setting never stops
+it.
+
+The wrapper starts the command with the default stops for background terminal
+use, whatever the wrapper inherited. A command that uses the terminal before it
+has it then waits instead of failing.
+
+After a command ends, the wrapper gives the caller back its foreground group
+and terminal settings. When `TERM` is set and is not `dumb`, it also resets the
+emulator's input modes for the shell. It writes that reset to the terminal
+itself, even when output is redirected, and ignores a failure.
+
+## Reattachment
+
+A lost connection does not prove that an execution stopped or that its
+resources are free. Wrappers therefore outlive the daemon. When the connection
+drops, or a shutdown tells them to detach, they keep the command and its
+terminal. They retry the socket with a capped backoff.
+
+A wrapper reattaches with what identifies its execution: the execution ID, the
+wrapper's and child's identities, the process group and the execution's scope
+token. The daemon checks these against its record. It then restores the scope
+and the agent's metadata and serves the connection as before. When it refuses
+the execution, the wrapper stops the command as a manual stop does.
+[Reattach to the next daemon](../reference/daemon.md#reattach-to-the-next-daemon)
+says what the user sees meanwhile.
+
+Reattachment is a permanent protocol method, which every version accepts, since
+an upgrade leaves wrappers of the previous release running. A wrapper says at
+registration that it can reattach. A restart or an update detaches those
+wrappers and stops the others as a manual stop does, within the workspace stop
+timeout.
+
+Setup and merges hold daemon gates, so they never reattach. The daemon waits
+for them before it restarts.
+
+## Subprocesses Shoal waits on
+
+Shoal runs the tools whose output it reads through one helper:
+
+- An optional deadline covers the whole exchange. Its error names the command
+  line and the directory, so it says what hung and where.
+- Errors keep one bounded amount of the tool's stderr, which fits in a protocol
+  frame.
+- Cancelling the caller kills the tool.
+- The helper drains the tool's output while it sends input, so a full pipe
+  never blocks either side.
+
+## Systemd scopes
+
+On Linux, each process Shoal starts runs in a transient systemd scope of its
+own. Who starts the process decides the slice the scope sits in.
+
+### Processes the daemon starts
+
+Every process the daemon starts in a session of its own, such as a worker, a
+place or a CI job, runs in a scope in the service's slice. The managed daemon
+finds the launcher for these scopes at startup. systemd's stop of the service,
+after the daemon exited or failed to start, then leaves agents, places and CI
+jobs running for the next daemon. A live daemon's SIGTERM still stops agents.
+
+The service does not set `KillMode=process` instead. That would leave these
+processes in the stopped service's control group. The next start would report
+them as left over, and they would share its memory accounting and OOM kills.
+
+Where the daemon's startup finds that no scope can start, it starts workers
+directly. When `systemd-run` fails a start later, the daemon does not retry it
+directly, since `systemd-run`'s exit status cannot be told from the worker's.
+
+### Work commands
+
+A wrapper starts the command it runs for work in a scope of its own in
+`shoal-work.slice`, through `systemd-run --scope`, wherever the wrapper runs.
+An agent in a terminal host's place thus keeps that terminal but leaves the
+host's control group for one Shoal controls. The slice holds Shoal's work, and
+only that, for the [memory limit](protection.md) and the kernel's accounting.
+
+`systemd-run --scope` runs the command in its own place. The command's PID,
+process group, terminal and environment stay as a direct start leaves them.
+
+The wrapper looks for the launcher once. Where no scope starts, it starts
+commands directly. It names each scope for the space whose work it runs, so
+what a command leaves there stays tied to the space after the command ends.
+[Work slice](../reference/load.md#work-slice) lists where scopes cannot start.
+
+### OOM kills
+
+The service and every scope Shoal starts set `OOMPolicy=continue`. An OOM kill
+then ends only the process the kernel chose, and only the daemon's own death
+fails the service. A CI job's scope is the exception: the kernel kills all of
+it with any one of its processes, as [overload protection](protection.md)
+explains.
+
+## Process identity
+
+Every process Shoal starts names its space in `SHOAL_SPACE`, whatever the
+space's kind. That covers executions, hooks, exported environments and the
+steps of CI jobs. Only a space with a worktree gives the worktree's variables,
+so a chat in a workspace's worktree carries none of the workspace's.
+
+Hooks run as untracked user processes. They carry the space's identity but no
+scope token. A hook exists to start or stop what outlives it, such as a tmux
+session, and what it starts must not become a survivor of an execution.
+
+Nothing outlives the workspace. Removal stops every verified process that still
+carries its identity, including what hooks and exported environments started,
+and its leftovers.
+
+## Leftovers
+
+A leftover is a detached process that its space's worktree, temporary
+directory, program, identity or, on Linux, work scope ties to the space.
+[What belongs to a space](../reference/daemon.md#what-belongs-to-a-space)
+defines it. The ties go beyond the identity because some processes cannot show
+it: a platform binary hides its environment, and a program built in the
+worktree may run elsewhere.
+
+Live ancestry, not environment variables, decides what is never untracked: the
+processes of tracked executions, the processes that started them, and terminal
+session servers. `shoal stop` stops a space's untracked processes through the
+same operation once its executions have stopped. `--processes` and
+`--leftovers` stop them alone, so an agent stops what its commands left behind
+without stopping itself.
+
+### Reported, not stopped
+
+Shoal reports leftovers instead of stopping them on sight. The agent knows
+whether its own test servers should keep running.
+
+The cleanup sweep finds every space's leftovers from one process listing and
+keeps them in memory, so no tool call waits for a scan. The agent's hook names
+each new leftover once. Leftovers raise no alert, and `shoal status` lists them
+for the user.
+
+The same holds once an agent exits, wherever it ran. What its scope keeps
+stays the space's leftovers, since a restored agent may want its servers back.
+They go with the space.
+
+### Cleanup and CI jobs
+
+Automatic cleanup counts a leftover that works in the worktree as use of the
+workspace. It stops a program built there that runs elsewhere.
+
+Shoal stops a CI job's leftovers as the job ends and names them in its
+workspace's log. No agent is left to decide, and the workspace goes.
+
+## Configured commands
+
+A `[commands]` entry is an argument array. Shoal resolves it by name from the
+configuration layers at launch. It runs through the tracked wrapper, with the
+workspace's scope, terminal I/O and the caller's literal extra arguments.
+[Configured commands](../reference/run.md) says what `shoal run` does with
+them.
+
+`shoal run <name>` is a configured command's only name, so it never competes
+with a built-in command. Shoal has no `shoal <name>` shorthand. An unknown
+top-level command prints clap's error and a line that points to
+`shoal run <name>`, without reading configuration.
+
+`shoal edit` runs through the same wrapper. The editor thus gets the
+workspace's scope and port variables, and counts as activity.
