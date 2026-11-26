@@ -458,6 +458,22 @@ fn images_by_reference_name_attached_files_too() {
         lines[0],
         "See [image: chart, attached file https://example.com/a.png] and [image: Map, attached file map.png]"
     );
+    // Brackets nest, and a backslash escapes one, in an image's text.
+    let nested = surface(
+        json!([{"id": "root", "component": "Text",
+            "text": "![a [b]](https://example.com/x.png) ![c \\]](https://example.com/y.png)"}]),
+        json!({}),
+    );
+    let refused = refusal(nested.clone(), &["https://example.com/y.png"]);
+    assert!(
+        refused.contains("image https://example.com/x.png"),
+        "{refused}"
+    );
+    let refused = refusal(nested, &["https://example.com/x.png"]);
+    assert!(
+        refused.contains("image https://example.com/y.png"),
+        "{refused}"
+    );
     // A bracket without a definition is text, not an image.
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),

@@ -38,34 +38,49 @@ fn image_at<'a>(
     defined: &BTreeMap<String, &'a str>,
 ) -> Option<Image<'a>> {
     let alt_start = start + 2;
-    let alt_end = alt_start + text[alt_start..].find(']')?;
+    let alt_end = closing(text, alt_start, '[', ']')?;
     let alt = &text[alt_start..alt_end];
-    let after = &text[alt_end + 1..];
-    let (target, end) = if let Some(inline) = after.strip_prefix('(') {
-        let close = inline.find(')')?;
-        let target = inline[..close]
-            .split_whitespace()
-            .next()
-            .unwrap_or_default();
-        (unbracketed(target), alt_end + 2 + close + 1)
-    } else if let Some(reference) = after.strip_prefix('[') {
-        let close = reference.find(']')?;
-        let label = match &reference[..close] {
-            "" => alt,
-            label => label,
-        };
-        (
-            *defined.get(&label.to_lowercase())?,
-            alt_end + 2 + close + 1,
-        )
-    } else {
-        (*defined.get(&alt.to_lowercase())?, alt_end + 1)
+    let after = alt_end + 1;
+    let (target, end) = match text[after..].chars().next() {
+        Some('(') => {
+            let close = closing(text, after + 1, '(', ')')?;
+            let target = text[after + 1..close].split_whitespace().next();
+            (unbracketed(target.unwrap_or_default()), close + 1)
+        }
+        Some('[') => {
+            let close = closing(text, after + 1, '[', ']')?;
+            let label = match &text[after + 1..close] {
+                "" => alt,
+                label => label,
+            };
+            (*defined.get(&label.to_lowercase())?, close + 1)
+        }
+        _ => (*defined.get(&alt.to_lowercase())?, after),
     };
     Some(Image {
         source: &text[start..end],
         alt,
         target,
     })
+}
+
+/// Where the `close` that ends what opens just before `from` in `text`
+/// is: past any nested `open` and `close` it pairs, and any of them a
+/// backslash escapes.
+fn closing(text: &str, from: usize, open: char, close: char) -> Option<usize> {
+    let mut depth = 0;
+    let mut escaped = false;
+    for (at, character) in text[from..].char_indices() {
+        match character {
+            _ if escaped => escaped = false,
+            '\\' => escaped = true,
+            c if c == open => depth += 1,
+            c if c == close && depth == 0 => return Some(from + at),
+            c if c == close => depth -= 1,
+            _ => {}
+        }
+    }
+    None
 }
 
 /// The targets of the reference definitions `[label]: target` in `text`,
