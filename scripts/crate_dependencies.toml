@@ -242,6 +242,9 @@ dependencies = ["shoal-core", "shoal-ids", "shoal-protocol", "shoal-refs"]
 [shoal-subprocess]
 dependencies = []
 
+[shoal-text]
+dependencies = []
+
 [shoal-time]
 dependencies = []
 

@@ -1,0 +1,11 @@
+[package]
+name = "shoal-text"
+version = "0.1.0"
+description = "Cutting text to a length in bytes or in terminal columns"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+unicode-width.workspace = true

@@ -47,12 +47,14 @@ shoal-spaces = { path = "crates/shoal-spaces" }
 shoal-states = { path = "crates/shoal-states" }
 shoal-store = { path = "crates/shoal-store" }
 shoal-subprocess = { path = "crates/shoal-subprocess" }
+shoal-text = { path = "crates/shoal-text" }
 shoal-time = { path = "crates/shoal-time" }
 shoal-workers = { path = "crates/shoal-workers" }
 tempfile = "3"
 tokio = "1"
 toml = "1.1.6"
 toml_edit = "0.25"
+unicode-width = "0.2"
 uuid = "1.26.1"
 
 [workspace.lints.clippy]
