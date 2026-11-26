@@ -1,19 +1,9 @@
 //! A reload's change to overload protection, which the daemon's config
 //! publication makes the agents' recovery start over for.
-use crate::daemon::overload::*;
-use std::time::Duration;
-use tokio::time::Instant;
-
-/// A hang guard on the paused clock, well past any recovery window.
-async fn wait_published(ready: &mut tokio::sync::watch::Receiver<Option<u64>>) {
-    tokio::time::timeout(Duration::from_secs(3600), ready.wait_for(Option::is_some))
-        .await
-        .expect("recovery was never published")
-        .unwrap();
-}
 
 /// Publish a calm config, then `tighten` it once recovery is ready: the
-/// reload withdraws readiness until a new window has passed.
+/// reload withdraws readiness before any agent can use it. The monitor's
+/// tests cover the new window it then waits for.
 async fn a_reload_withdraws_readiness(tighten: fn(&mut crate::config::Config)) {
     let (_root, manager) = crate::daemon::test_support::manager().await;
     let calm = || {
@@ -25,22 +15,15 @@ async fn a_reload_withdraws_readiness(tighten: fn(&mut crate::config::Config)) {
     let mut tightened = calm();
     tighten(&mut tightened);
     manager.publish_config(calm());
-    let mut ready = manager.agents.overload_recovery().watch();
-    tokio::time::pause();
-    let monitor = tokio::spawn(run(manager.agents.clone(), manager.clone()));
-    wait_published(&mut ready).await;
-    // Tightening withdraws readiness before any agent can use it.
+    let recovery = manager.agents.overload_recovery();
+    recovery.publish(Some(recovery.epoch()));
     manager.publish_config(tightened);
-    assert_eq!(*ready.borrow_and_update(), None);
-    let reloaded = Instant::now();
-    wait_published(&mut ready).await;
-    let window = Duration::from_secs(manager.config().machine.overload.recovery.sustained_seconds);
-    assert!(reloaded.elapsed() >= window);
-    monitor.abort();
+    assert_eq!(recovery.published(), None);
+    assert_eq!(*recovery.watch().borrow(), None);
 }
 
 #[tokio::test]
-async fn a_reload_of_a_threshold_withdraws_published_readiness_until_a_new_window() {
+async fn a_reload_of_a_threshold_withdraws_published_readiness() {
     a_reload_withdraws_readiness(|config| {
         config.machine.overload.recovery.memory_used_percent = 75;
     })
@@ -48,7 +31,7 @@ async fn a_reload_of_a_threshold_withdraws_published_readiness_until_a_new_windo
 }
 
 #[tokio::test]
-async fn a_reload_of_the_memory_limit_withdraws_published_readiness_until_a_new_window() {
+async fn a_reload_of_the_memory_limit_withdraws_published_readiness() {
     a_reload_withdraws_readiness(|config| {
         config.machine.memory_limit = crate::config::memory_limit::MemoryLimitSetting::Limit(
             crate::config::memory_limit::MemoryLimit::Bytes(8 << 30),

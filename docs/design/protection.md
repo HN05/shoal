@@ -24,7 +24,12 @@ only at a reading below the stop level, never because a sample came late: the
 kernel's ten-second average stays valid however late Shoal reads it, and a
 thrashing machine is where samples come late. A late sample does end the
 windows of CPU use and of health, since CPU use is a delta between samples and
-a starved daemon is no healthy one. Protection stops
+a starved daemon is no healthy one. The monitor samples and decides on an OS
+thread of its own, which reads no store, and hands each stop and warning to
+the async runtime without waiting on it: on a thrashing machine the runtime
+is starved too, and a decision that waited on store reads came too late. It
+hands over one stop at a time and, once that stop has stopped something,
+waits out the cooldown with fresh windows. Protection stops
 work in one stop order, by what a stop loses, which `shoal-schedule` computes
 beside the queue order from the same snapshot, so one policy defines both: CI
 jobs first, newest first, since a rerun loses nothing and the newest has done

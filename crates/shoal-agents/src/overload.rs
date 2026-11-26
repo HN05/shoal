@@ -1,10 +1,11 @@
 //! Stop work after sustained machine pressure, one entry of the stop order
 //! at a time, then let the machine recover before evaluating another. Work
 //! and leases stay owned.
+mod sampler;
 pub mod stops;
 
 use std::{sync::Arc, time::Duration};
-use tokio::time::Instant;
+use tokio::{sync::mpsc, time::Instant};
 
 use crate::process::load::{self, MemoryPressure};
 
@@ -43,55 +44,6 @@ impl Sustained {
         }
         now.duration_since(*self.since.get_or_insert(now)) >= Duration::from_secs(seconds)
     }
-}
-
-/// One sample's machine readings. A disabled protection reads as calm.
-struct Readings {
-    /// `None` with memory protection off or a failed reading.
-    memory: Option<MemoryPressure>,
-    /// `memory` counts Shoal's work against its memory limit.
-    limited: bool,
-    cpu: anyhow::Result<load::CpuTicks>,
-    disk_safe: bool,
-}
-
-impl Readings {
-    /// Take one sample, reading CPU ticks when `cpu`: for CPU protection or
-    /// dynamic job admission.
-    fn take(
-        settings: &crate::config::overload::Overload,
-        cpu: bool,
-        agents: &Agents,
-        daemon: &dyn Daemon,
-    ) -> Self {
-        let work = daemon.work_limit();
-        Self {
-            memory: memory_pressure(settings, work),
-            limited: work.is_some(),
-            cpu: if cpu {
-                load::cpu_ticks()
-            } else {
-                Ok(load::CpuTicks::default())
-            },
-            disk_safe: agents.config.disk_space_recovered(),
-        }
-    }
-}
-
-/// This sample's memory pressure against the configured levels, the
-/// machine's with that of Shoal's work against its `work` limit, `None` with
-/// memory protection off or a failed reading, which is logged.
-fn memory_pressure(
-    settings: &crate::config::overload::Overload,
-    work: Option<load::WorkLimit>,
-) -> Option<MemoryPressure> {
-    if !settings.memory.enabled {
-        return None;
-    }
-    load::memory(&settings.memory_levels(), work)
-        .map(|reading| reading.pressure)
-        .inspect_err(|error| log!("memory overload monitor: {error:#}"))
-        .ok()
 }
 
 /// What one sample means for the published recovery.
@@ -241,54 +193,49 @@ impl Monitor {
     }
 }
 
+/// Protect the machine: a thread of its own samples and decides, and this
+/// task stops work and warns agents as it hands over.
 pub async fn run(agents: Arc<Agents>, daemon: Arc<dyn Daemon>) {
-    let mut monitor = Monitor::default();
+    let (thread, handoff) = sampler::spawn(agents.clone(), daemon.clone())
+        .expect("start the overload monitor's thread");
+    tokio::join!(
+        stop_work(&agents, &*daemon, handoff.stops, handoff.outcomes),
+        warn_agents(&agents, handoff.warnings),
+    );
+    // The handoff ends only once the thread has, which it does only by
+    // panicking while this task runs; the panic restarts the monitor.
+    if let Ok(Err(panic)) = tokio::task::spawn_blocking(move || thread.join()).await {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+/// Stop work for each pressure the sampling thread hands over, telling it
+/// whether anything stopped.
+async fn stop_work(
+    agents: &Agents,
+    daemon: &dyn Daemon,
+    mut stops: mpsc::Receiver<Pressure>,
+    outcomes: std::sync::mpsc::Sender<bool>,
+) {
+    while let Some(pressure) = stops.recv().await {
+        let stopped = {
+            let _operation = agents.gates.operation().await;
+            agents.stop_for_overload(daemon, pressure).await
+        };
+        if outcomes.send(stopped).is_err() {
+            return;
+        }
+    }
+}
+
+/// Queue the warnings the sampling thread hands over.
+async fn warn_agents(agents: &Agents, mut warnings: mpsc::Receiver<sampler::Warned>) {
     // Outlives monitor resets, so a stop does not repeat earlier warnings.
     let mut warned = Warnings::default();
-    let mut config = agents.config.current();
-    loop {
-        // Keep publishing recovery with every protection off: an agent stopped
-        // before they were disabled still waits for it.
-        tokio::time::sleep(Duration::from_secs(config.machine.overload.poll_seconds)).await;
-        let operation = agents.gates.operation().await;
-        // Check after sleeping, so a reload during it cannot be sampled under
-        // the old thresholds. Publication already withdrew readiness, and
-        // earlier readings do not count toward the new thresholds.
-        let current = agents.config.current();
-        let changed = protection_changed(&config, &current);
-        config = current;
-        if changed {
-            monitor = Monitor::default();
-            continue;
-        }
-        let settings = &config.machine.overload;
-        let admission = config.machine.max_jobs == crate::config::MachineLimit::Dynamic;
-        let readings = Readings::take(
-            settings,
-            settings.cpu.enabled || admission,
-            &agents,
-            &*daemon,
-        );
-        let now = Instant::now();
-        publish_busy_cpu(&agents, now, settings, admission, &readings.cpu);
-        let pressure = monitor.reason(now, settings, readings.memory, readings.cpu);
-        // Decide before awaiting warnings, so a reload meanwhile cannot pair
-        // these readings with its new epoch.
-        let epoch = agents.overload_recovery.epoch();
-        match monitor.recovery(now, settings, epoch, readings.memory, readings.disk_safe) {
-            Recovery::Revoke => agents.overload_recovery.reset(),
-            Recovery::Publish(ready) => agents.overload_recovery.publish(ready),
-        }
-        for (signal, warning) in monitor.warnings(now, settings, readings.memory, readings.limited)
-        {
-            warned.warn(&agents, now, signal, &warning).await;
-        }
-        if let Some(pressure) = pressure
-            && agents.stop_for_overload(&*daemon, pressure).await
-        {
-            monitor = Monitor::default();
-            drop(operation);
-            tokio::time::sleep(Duration::from_secs(settings.cooldown_seconds)).await;
+    while let Some((now, signals)) = warnings.recv().await {
+        let _operation = agents.gates.operation().await;
+        for (signal, warning) in signals {
+            warned.warn(agents, now, signal, &warning).await;
         }
     }
 }
