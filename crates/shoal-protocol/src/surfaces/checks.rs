@@ -1,6 +1,7 @@
 //! What Shoal checks of a surface when a post brings one: that it is one
 //! static surface of the pinned spec and catalog, whose references name
 //! its own components and whose images name the post's attached files.
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Result, bail, ensure};
@@ -164,7 +165,7 @@ impl Surface {
     /// URL is literal so Shoal can tell, or one in Markdown, in a `Text` or
     /// in data a `Text` may bind.
     fn check_images(&self, attached: &[&str]) -> Result<()> {
-        let unattached = |image: &&str| !attached.contains(image);
+        let unattached = |image: &Cow<'_, str>| !attached.contains(&image.as_ref());
         for component in self.components() {
             ensure!(
                 component.kind != "Image" || component.literal("url").is_some(),
@@ -318,16 +319,18 @@ fn other_catalog(value: &Value) -> Option<&str> {
 
 /// The targets of the Markdown images in every text `value` holds, such
 /// as the data a `Text` may bind.
-fn data_images(value: &Value) -> Vec<&str> {
+fn data_images(value: &Value) -> Vec<Cow<'_, str>> {
     strings(value).into_iter().flat_map(targets).collect()
 }
 
 /// The images `component` shows by name: an `Image`'s URL, or the targets
 /// of the Markdown images in a `Text`'s text, its literal or any text a
 /// function that builds it takes.
-fn images(component: Component<'_>) -> Vec<&str> {
+fn images(component: Component<'_>) -> Vec<Cow<'_, str>> {
     match component.kind {
-        "Image" => component.literal("url").into_iter().collect(),
+        "Image" => (component.literal("url").into_iter())
+            .map(Cow::Borrowed)
+            .collect(),
         "Text" => component.get("text").map_or_else(Vec::new, data_images),
         _ => Vec::new(),
     }
@@ -404,8 +407,8 @@ fn strings(value: &Value) -> Vec<&str> {
 }
 
 /// What the Markdown images of `text` name.
-fn targets(text: &str) -> Vec<&str> {
+fn targets(text: &str) -> Vec<Cow<'_, str>> {
     (markdown::images(text).into_iter())
-        .map(|image| image.target)
+        .map(|image| Cow::Owned(image.target))
         .collect()
 }

@@ -236,7 +236,7 @@ impl<'a> Drawing<'a> {
 fn markdown(text: &str) -> Vec<String> {
     let mut shown = text.to_owned();
     for found in super::markdown::images(text) {
-        shown = shown.replace(found.source, &image(found.alt, found.target));
+        shown = shown.replace(found.source, &image(&found.alt, &found.target));
     }
     (shown.lines())
         .map(|line| line.trim_end().to_owned())

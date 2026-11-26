@@ -497,6 +497,18 @@ fn images_by_reference_name_attached_files_too() {
         );
         assert!(refusal(coded, &["shown.png"]).contains("image https://example.com/d.png"));
     }
+    // A quote or a list item defines what it holds.
+    for container in [
+        "> [ref]: https://example.com/e.png",
+        "- [ref]: https://example.com/e.png",
+    ] {
+        let text = format!("![chart][ref]\n\n{container}");
+        let contained = surface(
+            json!([{"id": "root", "component": "Text", "text": text}]),
+            json!({}),
+        );
+        assert!(refusal(contained, &[]).contains("image https://example.com/e.png"));
+    }
     // A bracket without a definition is text, not an image.
     let plain = surface(
         json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),
