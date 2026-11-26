@@ -58,7 +58,7 @@ own effective permission is `"direct"` for every key that governs it:
 | A [permitted action](modes.md#permitted-actions) | the key that governs it |
 
 It approves any other request only where it holds an approved grant with the
-same target and settings. A request to hold a workspace needs no grant.
+same target and settings. A request to hold a space needs no grant.
 Otherwise `--approve` is refused, citing the permission or the missing grant,
 and the space denies the request or passes it up.
 
@@ -325,7 +325,8 @@ outcome as an [alert](alerts.md).
 
 Unless `push` is `"direct"`, a scoped local `shoal merge` needs
 [approval](branches.md#approval-of-an-agents-merge). A scoped `shoal pr revert`
-through the forge is refused, since the forge pushes its branch at once.
+through the forge is refused unless both `pr_open` and `push` are `"direct"`,
+since the forge opens its PR and pushes its branch at once.
 
 ## The gate
 
