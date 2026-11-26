@@ -35,12 +35,12 @@ serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 shoal-forge.workspace = true
-shoal-forge-types = { workspace = true, features = ["clap", "rusqlite"] }
-shoal-protocol = { workspace = true, features = ["clap", "rusqlite"] }
+shoal-forge-types.workspace = true
+shoal-protocol.workspace = true
 shoal-proxy.workspace = true
-shoal-ids = { workspace = true, features = ["rusqlite"] }
-shoal-refs = { workspace = true, features = ["rusqlite"] }
-shoal-schedule = { workspace = true, features = ["rusqlite"] }
+shoal-ids.workspace = true
+shoal-refs.workspace = true
+shoal-schedule.workspace = true
 shoal-states.workspace = true
 shoal-subprocess.workspace = true
 tempfile.workspace = true
