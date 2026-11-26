@@ -42,14 +42,16 @@ pub fn prefix_bytes(text: &str, max: usize) -> &str {
 }
 
 /// `text` within `max` bytes, its middle replaced by [`MARK`] when it is
-/// longer, so that both its start and its end stay.
+/// longer, so that both its start and its end stay. The end keeps its line
+/// breaks, so cut lines still join as lines.
 pub fn cut_middle(text: &str, max: usize) -> Cow<'_, str> {
     if text.len() <= max {
         return text.into();
     }
     let kept = max.saturating_sub(MARK.len_utf8()) / 2;
     let start = prefix_bytes(text, kept);
-    format!("{}{}", marked(start), suffix_bytes(text, kept).trim_start()).into()
+    let end = suffix_bytes(text, kept).trim_start_matches([' ', '\t']);
+    format!("{}{end}", marked(start)).into()
 }
 
 /// How many terminal columns `text` takes: two for a wide grapheme, such as

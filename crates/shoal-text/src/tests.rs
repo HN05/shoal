@@ -36,6 +36,12 @@ fn cut_middle_keeps_both_ends() {
 }
 
 #[test]
+fn cut_middle_keeps_the_line_break_after_blanks() {
+    let line = format!("error{}\n", " ".repeat(1100));
+    assert_eq!(cut_middle(&line, 1024), "error…\n");
+}
+
+#[test]
 fn width_counts_wide_characters_twice() {
     assert_eq!(width("a漢😀\u{301}"), 5);
 }
