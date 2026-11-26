@@ -752,4 +752,7 @@ fn a_button_outside_a_list_takes_an_input_inside_it() {
         .resolve("save", values(&[("first", json!("Ann"))]))
         .unwrap();
     assert_eq!(Value::Object(resolved), json!({"first": "Ann"}));
+    // An item's button records its index as @index computes it.
+    let resolved = listed.resolve("pick#2", serde_json::Map::new()).unwrap();
+    assert_eq!(Value::Object(resolved), json!({"index": 2}));
 }

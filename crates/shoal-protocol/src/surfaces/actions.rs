@@ -160,7 +160,7 @@ impl Surface {
                 (Some(path), None) => {
                     (self.data(&scoped(&action.scope, path)).cloned()).unwrap_or(Value::Null)
                 }
-                (None, _) => entry.clone(),
+                (None, _) => evaluated(entry, &action.scope),
             };
             resolved.insert(key.clone(), value);
         }
@@ -277,6 +277,21 @@ impl SurfaceAction {
         let keys: Vec<&str> = self.inputs.iter().map(|input| input.key.as_str()).collect();
         keys.join(", ")
     }
+}
+
+/// A literal context `entry` of an action placed in `scope` as its event
+/// carries it: the item's index for a call of `@index`, which counts the
+/// innermost list's items from 0 plus its `offset`; any other entry as
+/// written, another function's call too, which only a renderer runs.
+fn evaluated(entry: &Value, scope: &str) -> Value {
+    if entry.get("@call").and_then(Value::as_str) != Some("@index") {
+        return entry.clone();
+    }
+    let item = (scope.rsplit('/').next()).and_then(|item| item.parse::<i64>().ok());
+    let offset = (entry.get("args").and_then(|args| args.get("offset")))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    item.map_or_else(|| entry.clone(), |item| Value::from(item + offset))
 }
 
 /// The component types that enter data, which their `value` binds.
