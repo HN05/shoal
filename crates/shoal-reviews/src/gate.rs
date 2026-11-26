@@ -174,13 +174,6 @@ impl Reviews {
         Ok(given)
     }
 
-    /// Have the gate look for the requests it decides, as handing it one
-    /// does.
-    #[cfg(any(test, feature = "test-support"))]
-    pub fn wake_gate(&self) {
-        self.gate.queued.notify_one();
-    }
-
     /// Carry out the requests the gate allowed whose approval a stopped
     /// daemon never started.
     pub async fn carry_out_stranded_allows(&self, daemon: &dyn GateDaemon) {

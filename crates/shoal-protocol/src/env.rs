@@ -159,12 +159,6 @@ pub fn claude_config_dir_from(
     absolute_dir(CLAUDE_CONFIG_DIR, variable(CLAUDE_CONFIG_DIR))
 }
 
-/// The configured Codex directory, if any, of a process whose environment
-/// adds `configured` to this one's; a relative override is an error.
-pub fn codex_home_with(configured: &BTreeMap<String, OsString>) -> Result<Option<PathBuf>> {
-    codex_home_from(|name| configured_var(configured, name))
-}
-
 /// The configured Codex directory, if any, of a process whose variables
 /// `variable` reads; a relative override is an error.
 pub fn codex_home_from(variable: impl Fn(&str) -> Option<OsString>) -> Result<Option<PathBuf>> {
