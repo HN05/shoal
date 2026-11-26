@@ -104,8 +104,9 @@ workflow file's URL also names the branch a run starts on. Forges hold the runs
 of fork and first-time contributors' PRs for approval, which leaves such a PR
 without checks; `view` and `status` report the waiting runs beside the checks,
 which stay exactly what the forge reports, so watches and their wake-ups do not
-change. Approving lets outside code run, so like merging it uses the user's
-login and is refused to workspace processes. Only GitHub has an approve API;
+change. Approving lets outside code run, so like merging it is the user's,
+with their own login, and a scoped process approves as the agent account only
+as its `ci_approve` permission allows. Only GitHub has an approve API;
 Forgejo approves through a web UI route, which Shoal does not use. Viewing a run
 reads every page of its jobs; the daemon sends them, and listed runs, in
 frame-sized pages, and each failed job's log, named by job ID, as one request,
