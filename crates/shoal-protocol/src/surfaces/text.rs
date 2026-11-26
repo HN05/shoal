@@ -234,8 +234,12 @@ impl<'a> Drawing<'a> {
 
 /// Markdown text as lines, each image shown as its alt text and file.
 fn markdown(text: &str) -> Vec<String> {
-    (text.lines())
-        .map(|line| with_images(line).trim_end().to_owned())
+    let mut shown = text.to_owned();
+    for found in super::markdown::images(text) {
+        shown = shown.replace(found.source, &image(found.alt, found.target));
+    }
+    (shown.lines())
+        .map(|line| line.trim_end().to_owned())
         .collect()
 }
 
@@ -253,15 +257,6 @@ fn checkbox(label: &str, value: Option<&Value>) -> String {
         " "
     };
     format!("[{mark}] {label}")
-}
-
-/// A line of Markdown with each image shown as its alt text and file.
-fn with_images(line: &str) -> String {
-    let mut shown = line.to_owned();
-    for (alt, target) in super::markdown_images(line) {
-        shown = shown.replace(&format!("![{alt}]({target})"), &image(alt, target));
-    }
-    shown
 }
 
 /// An image as text: what it shows and the attached file that holds it.

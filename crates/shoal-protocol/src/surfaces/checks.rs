@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use anyhow::{Result, bail, ensure};
 use serde_json::Value;
 
-use super::{CATALOG_ID, Component, MAX_SURFACE_BYTES, Surface, VERSION, schema};
+use super::{CATALOG_ID, Component, MAX_SURFACE_BYTES, Surface, VERSION, markdown, schema};
 
 /// Most schema complaints a refusal lists.
 const MAX_VIOLATIONS: usize = 3;
@@ -264,10 +264,7 @@ fn other_catalog(value: &Value) -> Option<&str> {
 /// `Text` may bind.
 fn data_images(data: &Value) -> Vec<&str> {
     match data {
-        Value::String(text) => super::markdown_images(text)
-            .into_iter()
-            .map(|(_, target)| target)
-            .collect(),
+        Value::String(text) => targets(text),
         Value::Array(values) => values.iter().flat_map(data_images).collect(),
         Value::Object(fields) => fields.values().flat_map(data_images).collect(),
         _ => Vec::new(),
@@ -279,10 +276,14 @@ fn data_images(data: &Value) -> Vec<&str> {
 fn images(component: Component<'_>) -> Vec<&str> {
     match component.kind {
         "Image" => component.literal("url").into_iter().collect(),
-        "Text" => (component.literal("text").into_iter())
-            .flat_map(super::markdown_images)
-            .map(|(_, target)| target)
-            .collect(),
+        "Text" => component.literal("text").map_or_else(Vec::new, targets),
         _ => Vec::new(),
     }
+}
+
+/// What the Markdown images of `text` name.
+fn targets(text: &str) -> Vec<&str> {
+    (markdown::images(text).into_iter())
+        .map(|image| image.target)
+        .collect()
 }

@@ -11,6 +11,7 @@ use serde_json::{Map, Value};
 mod actions;
 mod checks;
 mod dates;
+mod markdown;
 mod schema;
 mod shorthand;
 mod text;
@@ -192,25 +193,6 @@ fn scoped(base: &str, path: &str) -> String {
         true => path.to_owned(),
         false => format!("{base}/{path}"),
     }
-}
-
-/// The Markdown images `![alt](target)` in `text`, each its alt text and
-/// target.
-fn markdown_images(text: &str) -> Vec<(&str, &str)> {
-    let mut images = Vec::new();
-    let mut rest = text;
-    while let Some(start) = rest.find("![") {
-        rest = &rest[start + 2..];
-        let Some((alt, after)) = rest.split_once("](") else {
-            break;
-        };
-        let Some((target, after)) = after.split_once(')') else {
-            break;
-        };
-        images.push((alt, target.trim()));
-        rest = after;
-    }
-    images
 }
 
 #[cfg(test)]

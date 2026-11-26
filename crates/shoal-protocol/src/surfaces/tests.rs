@@ -434,3 +434,29 @@ fn context_data_no_input_enters_is_taken_as_it_is() {
             .is_err()
     );
 }
+
+#[test]
+fn images_by_reference_name_attached_files_too() {
+    let referenced = surface(
+        json!([{"id": "root", "component": "Text",
+            "text": "See ![chart][latency] and ![Map]\n\n[latency]: https://example.com/a.png\n[map]: map.png"}]),
+        json!({}),
+    );
+    assert!(refusal(referenced.clone(), &["map.png"]).contains("image https://example.com/a.png"));
+    let attached = ["https://example.com/a.png", "map.png"];
+    let lines = referenced
+        .clone()
+        .checked(&attached)
+        .unwrap()
+        .layout_lines();
+    assert_eq!(
+        lines[0],
+        "See [image: chart, attached file https://example.com/a.png] and [image: Map, attached file map.png]"
+    );
+    // A bracket without a definition is text, not an image.
+    let plain = surface(
+        json!([{"id": "root", "component": "Text", "text": "![not an image]"}]),
+        json!({}),
+    );
+    plain.checked(&[]).unwrap();
+}
