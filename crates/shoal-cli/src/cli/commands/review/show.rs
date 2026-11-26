@@ -161,9 +161,9 @@ pub(in crate::cli::commands) fn render(review: &Review, palette: Palette) {
         );
     }
     if let Some(started) = review.started_at {
-        let took = review
-            .duration()
-            .map_or_else(String::new, |took| format!(", took {}", duration(took)));
+        let took = review.duration().map_or_else(String::new, |took| {
+            format!(", took {}", crate::cli::ui::duration_label(took))
+        });
         outln!("Started:  {}{took}", started.local_minutes());
     }
     if let Some(verdict) = review.verdict {
@@ -244,14 +244,6 @@ fn state_style(review: &Review) -> Style {
     }
 }
 
-/// A duration in minutes and seconds, such as `3m 12s`.
-fn duration(took: std::time::Duration) -> String {
-    match took.as_secs() {
-        seconds @ ..60 => format!("{seconds}s"),
-        seconds => format!("{}m {}s", seconds / 60, seconds % 60),
-    }
-}
-
 fn print_indented(text: &str, indent: usize) {
     for line in text.trim_end().lines() {
         if line.trim().is_empty() {
@@ -261,6 +253,3 @@ fn print_indented(text: &str, indent: usize) {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

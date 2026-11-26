@@ -18,6 +18,7 @@ pub use tree::{Elsewhere, Listing, space_tree_rows};
 use anyhow::Result;
 use futures_util::future::join_all;
 
+pub use crate::client::output::queue::{held_by_label, size_label};
 use crate::{
     cli::{
         list_status::{ListStatus, ListStatusStyle},
@@ -25,12 +26,12 @@ use crate::{
     },
     config::modes::ModeName,
     model::{
-        AgentRestart, Asleep, Chat, HeldBy, PreparationWait, QueueEntry, Repository, ReviewMark,
-        SpaceKind, Workspace, WorkspaceUsage,
+        AgentRestart, Asleep, Chat, PreparationWait, QueueEntry, Repository, ReviewMark, SpaceKind,
+        Workspace, WorkspaceUsage,
     },
     state::{AgentState, QueueKind, QueueState},
 };
-use shoal_protocol::{executions::ServiceLimit, progress::Progress};
+use shoal_protocol::progress::Progress;
 use shoal_schedule::rank::{Dependency, InheritedRank, QueueRank, SharedArea, Tier};
 
 /// `items` joined by `separator` into lines no wider than `width`, where
@@ -111,18 +112,11 @@ fn usage_cell(workspace: &Workspace) -> Cell {
     )
 }
 
-/// A size in bytes as lists show it: `512 B`, `12 KiB`, `640 MiB` or `1.5 GiB`.
-pub fn size_label(bytes: u64) -> String {
-    const KIB: f64 = 1024.0;
-    let bytes = bytes as f64;
-    if bytes < KIB {
-        format!("{bytes} B")
-    } else if bytes < KIB * KIB {
-        format!("{:.0} KiB", bytes / KIB)
-    } else if bytes < KIB * KIB * KIB {
-        format!("{:.0} MiB", bytes / KIB / KIB)
-    } else {
-        format!("{:.1} GiB", bytes / KIB / KIB / KIB)
+/// A duration in minutes and seconds, such as `3m 12s`.
+pub fn duration_label(took: std::time::Duration) -> String {
+    match took.as_secs() {
+        seconds @ ..60 => format!("{seconds}s"),
+        seconds => format!("{}m {}s", seconds / 60, seconds % 60),
     }
 }
 
@@ -417,34 +411,6 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
         Dependency::Serves => "which it serves",
     };
     format!(" (from {}, {why})", inherited.from)
-}
-
-/// What holds a waiting entry back: `memory: needs 4.0 GiB, 1.2 GiB left`,
-/// `memory kept for api-tests`, a limit's setting, low disk space, a failed
-/// reading, `CPU: 97% busy, 95% level` or its tool's upstream limit.
-pub fn held_by_label(held: &HeldBy) -> String {
-    match *held {
-        HeldBy::Memory { needed, left } => format!(
-            "memory: needs {}, {} left",
-            size_label(needed),
-            size_label(left)
-        ),
-        HeldBy::MemoryKept { ref behind } => format!("memory kept for {behind}"),
-        HeldBy::Disk => "low disk space".into(),
-        HeldBy::MaxHeavyAgents => "machine.max_heavy_agents".into(),
-        HeldBy::MaxJobs => "machine.max_jobs".into(),
-        HeldBy::RepositoryLimit => "agent.max_heavy_running".into(),
-        HeldBy::Permits => "runner.permit pool".into(),
-        HeldBy::Reading => "critical or missing reading".into(),
-        HeldBy::Cpu { busy, level } => format!("CPU: {busy}% busy, {level}% level"),
-        HeldBy::UpstreamLimit { limit, until } => {
-            let limit = match limit {
-                ServiceLimit::RateLimited => "rate limited",
-                ServiceLimit::Exhausted => "out of quota",
-            };
-            format!("upstream {limit} until {}", until.local_minutes())
-        }
-    }
 }
 
 /// Why an agent is asleep and what wakes it: `critical memory pressure;

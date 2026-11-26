@@ -1,4 +1,5 @@
 use super::*;
+use crate::model::HeldBy;
 use crate::time::UnixTime;
 use crate::{forge::items::link::ItemKind, state::WorkspaceState};
 use shoal_schedule::priority::Priority;
@@ -678,4 +679,13 @@ fn an_agent_shoal_brings_back_shows_asleep_rather_than_stopped_or_queued() {
     assert_eq!(statuses(&restore).shown(&workspace), [ListStatus::Asleep]);
     restore.state = crate::state::QueueState::Starting;
     assert_eq!(statuses(&restore).of(&workspace), ListStatus::Starting);
+}
+
+#[test]
+fn durations_read_in_minutes_and_seconds() {
+    assert_eq!(duration_label(std::time::Duration::from_secs(42)), "42s");
+    assert_eq!(
+        duration_label(std::time::Duration::from_secs(192)),
+        "3m 12s"
+    );
 }
