@@ -67,7 +67,7 @@ cleanup. Only the claims under [Principles](#principles) keep a space.
 An assignment that ends with a finding rather than something to merge hands
 back files with its completion. They are the space's results among its
 attached files. Attached files outlive the space, as
-[coordination.md](coordination.md) describes, so the user or the coordinator's
+[coordination.md](coordination.md#retention) describes, so the user or the coordinator's
 agent reads them after the worktree is gone.
 
 ### Chats
