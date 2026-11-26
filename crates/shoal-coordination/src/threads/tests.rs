@@ -1079,3 +1079,27 @@ async fn a_thread_that_holds_its_posts_reaches_nobody_and_its_holder_takes_no_si
     );
     assert!(replied.await.is_err());
 }
+
+#[test]
+fn a_thread_larger_than_a_frame_stays_listed_with_older_ones() {
+    let thread = |id: i64, posts: usize| -> Thread {
+        let choices: Vec<String> = (1..=20).map(|number| format!("choice {number}")).collect();
+        let post = |post: usize| {
+            serde_json::json!({"id": post, "created_at": 0, "side": "holder", "sender": "space",
+                "text": "Which?", "ui": Surface::choices(&choices, None, None)})
+        };
+        serde_json::from_value(serde_json::json!({
+            "id": id, "space_number": 2, "item": id, "space_id": "w1", "space": "cache",
+            "kind": "question", "name": "Which?", "opener": "space",
+            "holder": {"kind": "user"}, "created_at": 0,
+            "posts": (1..=posts).map(post).collect::<Vec<_>>(),
+        }))
+        .unwrap()
+    };
+    let migrated = thread(3, 40);
+    assert!(serde_json::to_vec(&migrated).unwrap().len() > crate::protocol::MAX_FRAME);
+    let listing =
+        super::reading::newest_that_fit(vec![thread(1, 0), thread(2, 0), migrated]).unwrap();
+    let ids: Vec<i64> = listing.threads.iter().map(|thread| thread.id).collect();
+    assert_eq!((ids, listing.omitted), (vec![1, 2, 3], 0));
+}

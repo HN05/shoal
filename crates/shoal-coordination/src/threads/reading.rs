@@ -7,7 +7,7 @@ use anyhow::{Context as _, Result, ensure};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::{
     space_names::SpaceSelector,
-    threads::{Listing, Thread, ThreadNumber, ThreadState},
+    threads::{Listing, MAX_THREAD_BYTES, Thread, ThreadNumber, ThreadState},
 };
 
 use super::records;
@@ -21,11 +21,15 @@ const LISTING_BUDGET: usize = crate::protocol::MAX_FRAME - 1024;
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 /// The newest of `threads` that fit one protocol response, oldest first.
-fn newest_that_fit(mut threads: Vec<Thread>) -> Result<Listing> {
+/// A thread larger than a post may make one, as rewriting its choices
+/// into surfaces can, counts as that large, so it keeps no more threads out
+/// than a full one would; the response takes pieces to carry it.
+pub(super) fn newest_that_fit(mut threads: Vec<Thread>) -> Result<Listing> {
     let mut used = 0;
     let mut start = threads.len();
     for (index, thread) in threads.iter().enumerate().rev() {
-        used += serde_json::to_vec(thread)?.len() + 1;
+        let size = serde_json::to_vec(thread)?.len().min(MAX_THREAD_BYTES);
+        used += size + 1;
         if used > LISTING_BUDGET {
             break;
         }
