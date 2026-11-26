@@ -334,8 +334,10 @@ impl Surface {
                 .flatten()
                 .filter_map(|option| {
                     let value = option.get("value")?.as_str()?;
-                    let label = option.get("label").and_then(Value::as_str).unwrap_or(value);
-                    Some((value.to_owned(), label.to_owned()))
+                    let label = (option.get("label"))
+                        .and_then(|label| self.text(label, &placed.scope))
+                        .unwrap_or_else(|| value.to_owned());
+                    Some((value.to_owned(), label))
                 })
                 .collect(),
                 multiple: component.literal("variant") == Some("multipleSelection"),

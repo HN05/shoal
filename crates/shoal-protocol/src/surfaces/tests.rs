@@ -702,3 +702,27 @@ fn data_may_hold_a_catalog_id_key() {
     );
     shop.checked(&[]).unwrap();
 }
+
+#[test]
+fn an_option_s_label_bound_to_data_reads_the_data() {
+    let sized = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["size", "order"]},
+            {"id": "size", "component": "ChoicePicker",
+             "options": [{"label": {"@path": "/largeLabel"}, "value": "l"}],
+             "value": {"@path": "/size"}},
+            {"id": "order", "component": "Button", "child": "order-label",
+             "action": {"event": {"name": "order", "context": {"size": {"@path": "/size"}}}}},
+            {"id": "order-label", "component": "Text", "text": "Order"},
+        ]),
+        json!({"size": [], "largeLabel": "Large"}),
+    );
+    let order = sized.action("order").unwrap();
+    assert_eq!(
+        order.inputs[0].kind,
+        InputKind::Options {
+            options: vec![("l".into(), "Large".into())],
+            multiple: false
+        }
+    );
+}
