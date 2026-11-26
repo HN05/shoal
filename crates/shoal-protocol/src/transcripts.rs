@@ -1,8 +1,5 @@
 //! Where agent tools keep their sessions' files on this machine, such as a
-//! session's transcript. Shoal finds them by name and never reads them: an
-//! app that shows a conversation reads its tool's own format. The daemon
-//! says which sessions a space's agents reported, and `shoal-client`'s
-//! `space_transcripts` finds their files.
+//! session's transcript. Shoal finds them by name and never parses them.
 mod claude;
 mod codex;
 
@@ -107,9 +104,8 @@ pub struct Transcript {
     pub error: Option<String>,
 }
 
-/// The session a client follows, before its files' bytes: the session,
-/// the tool whose format they are in, and the space's ID, which follows
-/// it again where its number may name another space by then.
+/// The session a client follows, sent before its files' bytes. The space's
+/// ID follows it again where its number may name another space by then.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FollowedSession {
     #[serde(flatten)]

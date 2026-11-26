@@ -1,7 +1,5 @@
-//! Demos: named commands Shoal keeps running in a workspace so the user can
-//! try a change, usually from another machine over SSH. A repository names
-//! them in `[demos.NAME]`; a preset says how a demo reaches the user, and the
-//! repository always supplies the command.
+//! Demos, the commands Shoal keeps running in a workspace for the user to
+//! try a change. See `docs/design/demos.md`.
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;

@@ -1,5 +1,5 @@
-//! Approval requests: what a workspace's agent asks the user, or a coordinating
-//! agent, to allow.
+//! Approval requests, which a space's agent makes to the user or its
+//! coordinator, and the decisions on them.
 use crate::space_names::SpaceName;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -34,10 +34,8 @@ states!(DecisionStatus {
     Withdrawn => "withdrawn",
 });
 
-/// What a decision authorizes; one active request per space, target and
-/// name. Keyed as `resource/<scope>/<pool>`, `port/<name>`, `simulator`,
-/// `secret/<name>`, `hold/<name>`, `merge`, `unmerge`, `issue_open`, `pr_open`,
-/// `push` or `action/<permission>`.
+/// What a decision authorizes. A space has one active request per target
+/// and name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Resource {
@@ -269,7 +267,8 @@ pub struct UnmergeSpecification {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SecretSpecification {
-    /// The value as [`Value::recorded`] keeps it.
+    /// The value as [`Value::recorded`](crate::config::value::Value::recorded)
+    /// keeps it.
     pub value: crate::config::value::Value,
     pub tools: Vec<String>,
 }
@@ -367,11 +366,9 @@ states!(
     }
 );
 
-/// Where the gate is with a request: deciding it, or done with it after
-/// allowing it, which the approval path then carries out, after an allow
-/// that could not be carried out or a request it could not judge, which
-/// then take the normal route, or after passing it on for a case the user
-/// wrote down.
+/// Where the gate is with a request. After [`Self::Allowed`] the approval
+/// path carries the allow out; after the other ends the request takes the
+/// normal route.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "snake_case", deny_unknown_fields)]
 pub enum GateStep {
@@ -405,13 +402,10 @@ impl ApprovalRequest {
             && !matches!(self.gate, Some(GateStep::Deciding | GateStep::Allowed))
     }
 
-    /// The permissions that govern the request, each of which a coordinator
-    /// needs as `direct` to approve it instead of a grant, and whose
-    /// narrowest value sends it to the gate when it is `gate`; none for a
-    /// request a grant governs. They are those whose value made the space ask
-    /// instead of act: an issue in another repository is governed by
-    /// `issue_other_repositories` alone, what pushes by `push` too, and an
-    /// action by its own key.
+    /// The permissions whose value made the space ask instead of act; none
+    /// for a request a grant governs. A coordinator needs each as `direct`
+    /// to approve the request, and the narrowest one sends it to the gate
+    /// when it is `gate`.
     pub fn governing(&self) -> Vec<PermissionKey> {
         use PermissionKey::{IssueOpen, IssueOtherRepositories, Merge, PrOpen, Push};
         match self.target {

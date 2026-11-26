@@ -1,6 +1,4 @@
-//! A surface as text, which the terminal and agents read: its components
-//! drawn from the root, layout as indented blocks, then one line per action
-//! with the command that answers it.
+//! A surface as text, which the terminal and agents read.
 use std::collections::BTreeSet;
 
 use serde_json::Value;

@@ -1,6 +1,5 @@
-//! Environment variables Shoal reads or exports, and the scope token that
-//! stands in for the inherited one. Every `SHOAL_*` name lives here so
-//! wrapper, daemon, process scanning and apps agree on the contract.
+//! The environment variables Shoal reads or exports. Every `SHOAL_*` name
+//! lives here, so that every process Shoal runs agrees on them.
 use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},

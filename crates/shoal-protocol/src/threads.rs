@@ -1,6 +1,5 @@
-//! Threads: conversations between whoever opened one, the user, a space or
-//! Shoal, and whoever holds it now, the user or a space, with posts from
-//! both sides and from other participants, and a typed resolution.
+//! Threads, the conversations between an opener and a holder, with their
+//! posts and typed resolutions.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context as _, Result, bail};
@@ -117,9 +116,8 @@ pub enum Outcome {
 }
 
 impl Outcome {
-    /// The outcome `kind` with its data for a thread of `thread`, refusing
-    /// an outcome the kind does not take, data the outcome does not take
-    /// and data it needs, and `closed`, which only Shoal sets.
+    /// Refuses an outcome the thread's kind does not take, missing or extra
+    /// data, and `closed`, which only Shoal sets.
     pub fn new(
         thread: ThreadKind,
         kind: OutcomeKind,
@@ -432,10 +430,8 @@ impl Resolving {
     }
 }
 
-/// What a thread opens with: its name, the text of its opening post and
-/// the places in code that post points at, and for a comment that joins a
-/// review, how much it matters. Without text or code it opens empty;
-/// with code alone its opening post is its name.
+/// What a thread opens with. Without text or code it opens empty; with
+/// code alone its opening post is its name.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ThreadOpening {
     pub name: String,

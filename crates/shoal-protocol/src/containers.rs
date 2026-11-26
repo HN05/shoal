@@ -1,6 +1,5 @@
-//! A workspace's service containers, which one Compose project runs beside
-//! it: how a repository and the machine configure them, and the project
-//! Shoal records and reports.
+//! A workspace's service containers: their config, and the Compose project
+//! Shoal records.
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 use shoal_states::states;

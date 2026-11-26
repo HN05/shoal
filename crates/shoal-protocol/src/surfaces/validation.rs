@@ -1,8 +1,5 @@
-//! The checks an answer must pass: what each component that enters a value
-//! it takes accepts, and the `@checks` of those components and of its
-//! button, read against the data the answer enters, as a renderer holds an
-//! input to its bounds and disables a button or flags an input whose check
-//! fails.
+//! The checks an answer must pass, as a renderer holds an input to its
+//! bounds and disables a button whose check fails.
 use anyhow::{Result, bail};
 use serde_json::Value;
 

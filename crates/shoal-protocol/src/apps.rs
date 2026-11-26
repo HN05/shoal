@@ -1,6 +1,5 @@
-//! Apps built on Shoal, such as Quay: the settings the user gives each in
-//! its `[apps.<name>]` config tables, which Shoal hands it unread, and what
-//! it keeps in the app store.
+//! Apps built on Shoal: their `[apps.<name>]` settings, which Shoal hands
+//! them unread, and their app store entries.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Result, ensure};

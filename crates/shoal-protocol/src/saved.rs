@@ -1,6 +1,5 @@
-//! What a workspace saved for `shoal resume` when its agents and commands
-//! stopped, which the daemon reads from its state, and how a resume
-//! restores it.
+//! What a space saved for `shoal resume` when its agents and commands
+//! stopped.
 use shoal_ids::execution_ids::ExecutionId;
 use std::{collections::BTreeSet, path::PathBuf};
 

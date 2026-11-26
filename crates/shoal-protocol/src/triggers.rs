@@ -1,5 +1,4 @@
-//! Triggers: `[triggers.NAME]` config that starts agents when an event
-//! source fires, and the runtime state the daemon keeps for each.
+//! Triggers and the runtime state the daemon keeps for each.
 use serde::{Deserialize, Serialize};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_states::states;

@@ -1,5 +1,5 @@
-//! What removing a space would discard, whether the caller lets it, and
-//! what the removal did.
+//! What removing a space would discard, what the caller confirmed, and what
+//! the removal did.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;

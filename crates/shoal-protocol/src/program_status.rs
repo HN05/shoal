@@ -1,6 +1,5 @@
 //! What Shoal reports of a space to the terminal its agent runs in, through
-//! the Program Status Protocol (OSC 7501): the daemon decides each report,
-//! and the execution wrapper writes it to its terminal.
+//! the Program Status Protocol (OSC 7501).
 use serde::{Deserialize, Serialize};
 
 /// A report of a space's status, which replaces the one before it whole.

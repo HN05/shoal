@@ -1,7 +1,5 @@
-//! Local reviews: a one-shot, read-only reviewer's run over a workspace's
-//! committed HEAD or a PR, whose findings are `review` threads the
-//! workspace's agent resolves, or a review the user or a space writes
-//! itself, whose comments are `review` threads its writer resolves.
+//! Local reviews, by a reviewer agent or written by the user or a space,
+//! whose findings and comments are `review` threads.
 use shoal_ids::space_ids::SpaceId;
 use std::{fmt, str::FromStr};
 
@@ -301,9 +299,7 @@ impl Review {
         (self.threads.iter().chain(&self.reopened)).filter(|thread| thread.is_open())
     }
 
-    /// The review's state in one line: queued, running, pending with its
-    /// comments so far, the finding counts by severity and how many it
-    /// reopened, or why it failed or that it was cancelled.
+    /// The review's state in one line.
     pub fn status(&self) -> String {
         match self.state {
             ReviewState::Finished => {

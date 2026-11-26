@@ -1,7 +1,5 @@
-//! Where a space's agent is in its work: a status line in the agent's own
-//! words, the steps of its plan, which its plan tool keeps through Shoal's
-//! hooks or `shoal progress --steps` sets, and what blocks the space or its
-//! steps, which `shoal progress --add-blocker` records.
+//! A space's progress: its status line, its plan's steps and what blocks
+//! the space or a step.
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use shoal_states::states;

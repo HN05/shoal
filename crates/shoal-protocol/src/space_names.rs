@@ -1,6 +1,5 @@
-//! How spaces are named and selected: a space's name, the free-text label
-//! people read, and the selector a command takes a space by, its number or
-//! its ID, since names can repeat.
+//! A space's name, which people read, and the selector a command takes a
+//! space by.
 use anyhow::{Result, ensure};
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};

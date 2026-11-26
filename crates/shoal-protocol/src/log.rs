@@ -1,6 +1,4 @@
-//! A space's log, the important events in the life of a workspace or chat,
-//! and Shoal's, every space's with Shoal's own, as the daemon's event
-//! journal holds them.
+//! A space's log, or Shoal's, as the daemon's event journal holds them.
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
 
@@ -14,11 +12,7 @@ use crate::{
 states!(
     /// Which events a log shows.
     LogFilter {
-        /// Its creation, renames, removal and restore; its agent's starts,
-        /// stops and exits; its ready marks and completion; its issue and
-        /// PR links, Shoal's changes to them and their closing, merging and
-        /// reopening; its threads, approvals and alerts; and the spaces
-        /// created and removed below it; and Shoal's own events.
+        /// The events of the space's life and Shoal's own events.
         Entries => "entries",
         /// Every event the journal holds for the log.
         All => "all",

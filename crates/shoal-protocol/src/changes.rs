@@ -1,5 +1,5 @@
-//! Agents' changes: the hunks Shoal records as the agents it runs change
-//! the files of their worktrees, who made each, and the thread it was for.
+//! The changes Shoal records as agents edit their worktrees: who made each,
+//! and the thread it was for.
 use std::{collections::BTreeSet, fmt, path::PathBuf, str::FromStr};
 
 use anyhow::{Context as _, Result, bail};
@@ -163,7 +163,8 @@ impl ChangeDiff {
         Some(patch)
     }
 
-    /// It with whole lines only up to [`MAX_SNIPPET_LEN`] bytes, removed
+    /// It with whole lines only up to
+    /// [`MAX_SNIPPET_LEN`](crate::code::MAX_SNIPPET_LEN) bytes, removed
     /// ones first, as a post carries it; `diff --thread` shows the rest.
     pub fn cut_to_snippet(self) -> Self {
         self.cut_to(crate::code::MAX_SNIPPET_LEN)

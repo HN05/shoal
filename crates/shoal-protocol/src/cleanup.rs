@@ -6,9 +6,8 @@ use shoal_ids::space_ids::SpaceId;
 
 use crate::model::CleanupReason;
 
-/// The workspaces a manual cleanup removed, or would remove in a dry run,
-/// and those it retained because inspection or removal failed. A dry run
-/// also lists why it keeps each other workspace.
+/// What a manual cleanup removed, or would remove in a dry run, and what it
+/// kept.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ManualCleanup {
     pub dry_run: bool,

@@ -1,8 +1,6 @@
-//! Attaching a terminal on one machine to an agent's session on another:
-//! the owning machine runs Shoal's own attach on a terminal it makes for
-//! the viewer, and the connection carries that terminal's screen one way
-//! and the viewer's keys and size the other, each as frames of a tag, a
-//! length and the bytes.
+//! The frames that attach a terminal on one machine to an agent's session
+//! on another: the screen one way, the viewer's keys and size the other,
+//! each as a tag, a length and the bytes.
 use anyhow::{Context as _, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt as _};

@@ -1,5 +1,4 @@
-//! The journal of space, file and Shoal events, as `shoal internal events`
-//! replays it.
+//! The journal of space, file and Shoal events.
 use crate::model::{EventCause, SpaceKind};
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;

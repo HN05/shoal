@@ -1,9 +1,6 @@
-//! `[permissions]` and `[modes.NAME.permissions]`: what a scoped agent may do
-//! at once, after approval, or not at all. Each value is ordered from the
-//! narrowest to the widest, `deny` < `propose` < `gate` < `direct`, where
-//! `gate` asks the gate agent for the approval `propose` asks the user for. A space has its
-//! mode's, each no wider than its parent's, then each key a `--permission`
-//! given to its agent sets, as given.
+//! `[permissions]` and `[modes.NAME.permissions]`: what a scoped agent may
+//! do at once, after approval, or not at all. Values are ordered from the
+//! narrowest to the widest: `deny` < `propose` < `gate` < `direct`.
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use shoal_states::states;
@@ -258,9 +255,8 @@ impl PermissionsConfig {
         ..Self::COORDINATING
     };
 
-    /// The narrowing `--permission KEY=VALUE` gives with each of
-    /// `assignments`, a later one of a key replacing an earlier one,
-    /// refusing an unknown key or value.
+    /// The narrowing that `--permission KEY=VALUE` `assignments` give. A
+    /// later assignment of a key replaces an earlier one.
     pub fn assigned(assignments: &[String]) -> Result<Self> {
         let mut narrowing = Self::default();
         for assignment in assignments {

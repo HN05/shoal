@@ -1,9 +1,7 @@
-//! The app store: what each app keeps in Shoal, as entries of bytes with a
-//! content type under path-like keys of its own. Shoal never reads an
-//! entry's bytes. An entry is shared across the user's machines and
-//! devices, or belongs to one of them; each change gives it a new
-//! revision, and a write or deletion names the revision it replaces, so a
-//! stale one is refused instead of overwriting what another made.
+//! The app store: entries of bytes that each app keeps under keys of its
+//! own. Shoal never reads an entry's bytes. A write or deletion names the
+//! revision it replaces, so a stale one is refused instead of overwriting
+//! another change.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context as _, Result, ensure};

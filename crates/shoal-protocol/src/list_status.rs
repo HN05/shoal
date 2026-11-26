@@ -1,6 +1,4 @@
-//! The status lists show for a workspace, chat or queued agent, which the
-//! CLI shows its own spaces with and a machine reports to the hub for each
-//! of its spaces.
+//! The status lists show for a space or a queued agent.
 use crate::{
     model::{Chat, QueueEntry, Workspace},
     progress::Progress,
@@ -44,13 +42,6 @@ shoal_states::states! {
 }
 
 impl ListStatus {
-    /// The workspace's state unless ready, then an agent Shoal put to sleep,
-    /// whose saved work comes back on its own, a recorded completion when its
-    /// work is stopped, stopped work unless blocked, an agent that needs
-    /// input, what blocks it, a recorded
-    /// completion, a ready mark while its agent is not working,
-    /// the agent's other turn states as its sleep says, an agent or command running without one, the
-    /// coordinator that does its work working, or inactive.
     pub fn of_workspace(workspace: &Workspace, stopped: bool) -> Self {
         let agent = workspace.agent_state.map(|status| status.state);
         let blocked = workspace.progress.as_ref().is_some_and(Progress::blocked);
@@ -108,13 +99,6 @@ impl ListStatus {
         Self::of_listed_workspace(workspace, stopped, entry)
     }
 
-    /// A chat is asleep while Shoal brings its agent back on its own; else
-    /// it is stopped until it is restored, finished when it recorded
-    /// completion or blocked while its progress records what blocks it; a
-    /// running one needs input while its agent does, is blocked, finished
-    /// once it records completion, ready once it is marked ready while its
-    /// agent is not working, or else shows its agent's other turn states as its sleep says, or that
-    /// it runs without one.
     pub fn of_chat(chat: &Chat) -> Self {
         let agent = chat.agent_state.map(|status| status.state);
         let blocked = chat.progress.as_ref().is_some_and(Progress::blocked);

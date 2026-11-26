@@ -1,9 +1,6 @@
-//! A scope token: the secret the daemon issues a space's agent, commands
-//! and workers, which grants that space's scope to whoever presents it. Its
-//! `Debug` redacts it, so a log line or error context that prints a struct
-//! holding one never shows it. Tokens compare and store as themselves, and
-//! only sending one, as in an environment variable, reads its text with
-//! [`ScopeToken::expose`].
+//! A scope token: the secret that grants a space's scope to whoever
+//! presents it. Its `Debug` redacts it. Read its text with
+//! [`ScopeToken::expose`] only to send it.
 use serde::{Deserialize, Serialize};
 
 /// A scope token, stored and serialized as its text.

@@ -7,10 +7,9 @@ use std::path::Path;
 use crate::forge::repo::remote_url::{RemoteUrl, source_name};
 use shoal_ids::repository_ids::RepositoryId;
 
-/// What names a repository: the ID of a registered one, which selects it
-/// alone, or the caller's argument, kept alongside a path resolved in its
-/// directory, which may be an ID, name, path or source. The argument
-/// serializes as before, and an ID as `{"id": ...}`.
+/// What names a repository: the ID of a registered one, or the caller's
+/// argument, an ID, name, path or source, with a path resolved in its
+/// directory. An ID serializes as `{"id": ...}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Selector {
     #[serde(rename = "id")]

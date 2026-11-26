@@ -1,5 +1,5 @@
-//! Agent launches: what a start asks for, which the daemon resolves into
-//! the space it starts in and the agent it queues there.
+//! What a start asks for, which the daemon resolves into a space and an
+//! agent.
 use std::{collections::BTreeMap, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -21,9 +21,8 @@ mod target;
 pub use labelled::{LabelledMode, SeveralModes};
 pub use target::StartTarget;
 
-/// What `shoal start` takes, as the command line gave it: what the agent
-/// starts on, the space it starts in and how its agent runs. What it leaves
-/// out the daemon decides, such as the mode, the kind of space and the
+/// What `shoal start` takes, as the command line gave it. The daemon decides
+/// what it leaves out, such as the mode, the kind of space and the
 /// repository.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Launch {

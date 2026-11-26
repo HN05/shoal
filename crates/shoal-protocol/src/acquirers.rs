@@ -1,6 +1,4 @@
-//! Who acquired a simulator lease, containers or a resource permit, which
-//! decides how long it lasts: the user's stays until released, a space's
-//! agent's until that agent ends for good, and a demo's ends with it.
+//! Who acquired a lease, which decides how long it lasts.
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;

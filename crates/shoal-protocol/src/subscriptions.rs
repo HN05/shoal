@@ -1,5 +1,5 @@
-//! Subscriptions: a snapshot of the records of some topics, then their
-//! changes, as a subscription reports them.
+//! What a subscription reports: a snapshot of its topics' records, then
+//! their changes.
 pub mod records;
 
 use records::{Record, RecordKey};

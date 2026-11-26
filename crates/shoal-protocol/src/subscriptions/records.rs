@@ -1,8 +1,4 @@
-//! The records subscriptions carry: repositories, spaces with their agents,
-//! the issues, PRs and CI runs they link with their forge state,
-//! the sessions each space's agents reported, open threads, pending
-//! approval requests, messages and notifications, each named by a
-//! [`RecordKey`].
+//! The records subscriptions carry, each named by a [`RecordKey`].
 use shoal_ids::space_ids::SpaceId;
 
 use serde::{Deserialize, Serialize};

@@ -21,8 +21,8 @@ impl ModeName {
     /// The mode of a chat without a repository that manages every space.
     pub const ORCHESTRATE: Self = Self::built_in("orchestrate");
     /// The mode in which an agent writes Shoal's config, which `shoal repo
-    /// setup` and `shoal config setup` start. It takes the rules of its
-    /// [`super::setup_base`] with instructions of its own.
+    /// setup` and `shoal config setup` start. It adds instructions of its own
+    /// to the rules of the base mode `shoal-core`'s `setup_base` picks.
     pub const SETUP: Self = Self::built_in("setup");
 
     const fn built_in(name: &'static str) -> Self {

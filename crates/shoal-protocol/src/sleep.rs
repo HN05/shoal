@@ -1,6 +1,5 @@
-//! Whether Shoal wakes a space's agent for having stayed idle: an agent
-//! that is waiting for something sleeps, until its next turn or for good,
-//! and may set a timer that wakes it at a time.
+//! Whether Shoal wakes a space's agent for having stayed idle, and the
+//! timer that wakes it at a time.
 use serde::{Deserialize, Serialize};
 
 use crate::{space_names::SpaceName, state::Sleep, time::UnixTime};

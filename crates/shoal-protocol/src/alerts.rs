@@ -1,5 +1,5 @@
-//! Alerts: one-way notices from the user, a space or Shoal, for the user or
-//! a space's agent.
+//! Alerts, the one-way notices to the user or a space's agent, and their
+//! kinds.
 use std::path::PathBuf;
 
 use crate::space_names::SpaceName;
@@ -269,9 +269,9 @@ impl Alert {
 }
 
 /// Where a follow of the user's alerts stands: the highest number it
-/// delivered of this machine's alerts, and of each other joined machine's,
-/// whose numbers each come in their own order. Written as that number,
-/// then `,MACHINE=NUMBER` for each other machine.
+/// delivered of each machine's alerts, since each machine's come in their
+/// own order. Written as this machine's number, then `,MACHINE=NUMBER` for
+/// each other machine.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AlertCursor {
     pub here: i64,

@@ -1,4 +1,4 @@
-//! The agent queue: the start of a workspace's worker that it queues.
+//! The start of a workspace's worker that the agent queue takes.
 use crate::space_names::SpaceSelector;
 
 /// The worker of an existing workspace for the daemon to queue and start

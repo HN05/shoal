@@ -1,6 +1,4 @@
-//! Tracked executions: what they run, where their executable came from, the
-//! agents Shoal stopped or that exited with a session to resume, and the
-//! retries of their failed turns.
+//! Tracked executions, and what Shoal keeps of their agents to resume.
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;
 use std::{fs, io, path::Path, time::Duration};
@@ -31,9 +29,7 @@ states!(
     }
 );
 
-/// An agent a tracked wrapper runs: its name, as `--agent` names it, the
-/// model and effort it runs with, and the mode it started in, which its
-/// restores keep.
+/// An agent a tracked wrapper runs, as its restores keep it.
 #[derive(Debug, Clone)]
 pub struct TrackedAgent {
     pub name: crate::agent::Agent,
@@ -166,9 +162,7 @@ pub struct Record {
 }
 
 /// What the first session of an agent tool that takes a space's work over
-/// from another is told: `told`, which says what the space is and where the
-/// copies of its earlier sessions are, before its mode's instructions, then
-/// `note`, which the conversion passed on.
+/// is told: `told` before its mode's instructions, then `note`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HandoffBrief {
     pub told: String,

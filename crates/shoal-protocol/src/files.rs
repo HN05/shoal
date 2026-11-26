@@ -1,4 +1,4 @@
-//! Files attached to a workspace or chat: Shoal's copies and how they came.
+//! The files attached to a space: Shoal's copies and how they came.
 use crate::space_names::SpaceName;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
