@@ -240,6 +240,7 @@ fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
 }
 
 mod github_activity;
+mod journal_columns;
 mod journal_shapes;
 mod schema;
 

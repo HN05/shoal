@@ -3,9 +3,8 @@
 use anyhow::Result;
 use rusqlite::{Transaction, params};
 
-use super::{EventCursor, EventKind, decode, log_entry};
+use super::{EventCursor, EventKind, STORED, Stored, log_entry};
 use crate::store::Store;
-use crate::time::UnixTime;
 use shoal_protocol::log::{LogEntry, LogFilter};
 
 /// How many journal rows a read of Shoal's log takes at a time.
@@ -46,17 +45,17 @@ fn batch_before(
     before: EventCursor,
     filter: LogFilter,
 ) -> Result<Vec<LogEntry>> {
-    let mut statement = tx.prepare(
-        "SELECT id,created_at,record FROM space_events
-         WHERE id<?1 AND (?2 OR NOT bulk) ORDER BY id DESC LIMIT ?3",
+    let mut statement = tx.prepare(&format!(
+        "SELECT {STORED} FROM space_events
+         WHERE id<?1 AND (?2 OR NOT bulk) ORDER BY id DESC LIMIT ?3"
+    ))?;
+    let rows = statement.query_map(
+        params![before, filter == LogFilter::All, BATCH],
+        Stored::read,
     )?;
-    let rows = statement.query_map(params![before, filter == LogFilter::All, BATCH], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-    })?;
     let mut entries = Vec::new();
     for row in rows {
-        let (id, created_at, record): (EventCursor, UnixTime, String) = row?;
-        entries.extend(log_entry(decode(id, created_at, &record)?));
+        entries.extend(log_entry(row?.decode()?));
     }
     Ok(entries)
 }
@@ -75,7 +74,7 @@ fn shows(tx: &Transaction<'_>, entry: &LogEntry, filter: LogFilter) -> Result<bo
     }
     let reopened: bool = tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM space_events
-             WHERE space_id=?1 AND id<?2 AND json_extract(record,'$.kind')=?3)",
+             WHERE space_id=?1 AND id<?2 AND kind=?3)",
         params![event.details.space_id, event.id, EventKind::Removed],
         |row| row.get(0),
     )?;

@@ -5,7 +5,9 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::events::{EventDetails, EventSpace, SpaceEvent};
+use shoal_protocol::events::{
+    EventDetails, EventKind, EventSpace, FileEventDetails, ShoalEventDetails, SpaceEvent,
+};
 use shoal_protocol::model::{EventCause, SpaceKind, WorkspaceRef};
 use shoal_protocol::space_names::SpaceName;
 
@@ -35,7 +37,10 @@ pub fn append_caused(
     if workspaces_only(&event) && space.kind() == SpaceKind::Chat {
         return Ok(());
     }
-    insert(db, &space.details(id, event, cause, error))
+    insert(
+        db,
+        &Row::space_event(&space.details(id, event, cause, error))?,
+    )
 }
 
 /// The workspace the workspace `id` builds on, as an event names it.
@@ -79,27 +84,28 @@ fn workspace_ref(db: &Connection, id: &SpaceId) -> Result<Option<WorkspaceRef>> 
 /// Give the journaled creation of the workspace `id` the ref it started
 /// from, `base_ref`, which its setup records after the creation.
 pub fn amend_created_base(db: &Connection, id: &SpaceId, base_ref: &str) -> Result<()> {
-    let mut statement =
-        db.prepare("SELECT id,record FROM space_events WHERE space_id=?1 ORDER BY id DESC")?;
-    let mut rows = statement.query([id])?;
-    while let Some(row) = rows.next()? {
-        let Ok(mut details) = serde_json::from_str::<EventDetails>(&row.get::<_, String>(1)?)
-        else {
-            continue;
-        };
-        let SpaceEvent::Created {
-            base_ref: recorded, ..
-        } = &mut details.event
-        else {
-            continue;
-        };
+    let created: Option<(i64, String)> = db
+        .query_row(
+            "SELECT id,record FROM space_events WHERE space_id=?1 AND kind=?2
+                ORDER BY id DESC LIMIT 1",
+            params![id, EventKind::Created],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((row, record)) = created else {
+        return Ok(());
+    };
+    let mut details: EventDetails = serde_json::from_str(&record)?;
+    if let SpaceEvent::Created {
+        base_ref: recorded, ..
+    } = &mut details.event
+    {
         *recorded = Some(base_ref.to_owned());
-        db.execute(
-            "UPDATE space_events SET record=?2 WHERE id=?1",
-            params![row.get::<_, i64>(0)?, serde_json::to_string(&details)?],
-        )?;
-        break;
     }
+    db.execute(
+        "UPDATE space_events SET record=?2 WHERE id=?1",
+        params![row, serde_json::to_string(&details)?],
+    )?;
     Ok(())
 }
 
@@ -119,12 +125,71 @@ fn workspaces_only(event: &SpaceEvent) -> bool {
     )
 }
 
-fn insert(db: &Connection, details: &EventDetails) -> Result<()> {
+/// Record `details`, an event of Shoal itself, which belongs to no space.
+pub fn append_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
+    insert(db, &Row::shoal_event(details)?)
+}
+
+fn insert(db: &Connection, row: &Row<'_>) -> Result<()> {
     db.execute(
-        "INSERT INTO space_events(space_id,record) VALUES (?1,?2)",
-        params![details.space_id, serde_json::to_string(details)?],
+        "INSERT INTO space_events(space_id,kind,bulk,repository_id,child_id,record)
+            VALUES (?1,?2,?3,?4,?5,?6)",
+        params![
+            row.space_id,
+            row.kind,
+            row.bulk,
+            row.repository_id,
+            row.child_id,
+            row.record
+        ],
     )?;
     Ok(())
+}
+
+/// A journal row: the event's record, with the columns its queries filter
+/// on.
+struct Row<'a> {
+    space_id: Option<&'a SpaceId>,
+    kind: &'static str,
+    bulk: bool,
+    repository_id: Option<&'a RepositoryId>,
+    child_id: Option<&'a SpaceId>,
+    record: String,
+}
+
+impl<'a> Row<'a> {
+    fn shoal_event(details: &ShoalEventDetails) -> Result<Self> {
+        Ok(Self {
+            space_id: None,
+            kind: details.kind.as_str(),
+            bulk: false,
+            repository_id: None,
+            child_id: None,
+            record: serde_json::to_string(details)?,
+        })
+    }
+
+    fn space_event(details: &'a EventDetails) -> Result<Self> {
+        Ok(Self {
+            space_id: Some(&details.space_id),
+            kind: details.kind().as_str(),
+            bulk: details.event.is_bulk(),
+            repository_id: details.repository_id.as_ref(),
+            child_id: details.event.child().map(|child| &child.id),
+            record: serde_json::to_string(details)?,
+        })
+    }
+
+    fn file_event(details: &'a FileEventDetails) -> Result<Self> {
+        Ok(Self {
+            space_id: Some(&details.space_id),
+            kind: details.kind.as_str(),
+            bulk: false,
+            repository_id: details.repository_id.as_ref(),
+            child_id: None,
+            record: serde_json::to_string(details)?,
+        })
+    }
 }
 
 /// What an event records of its space.

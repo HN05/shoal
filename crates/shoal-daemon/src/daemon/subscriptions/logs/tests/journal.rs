@@ -49,23 +49,29 @@ async fn connect(
 }
 
 async fn seed(manager: &Manager, count: usize) {
-    journal(manager, count, r#"{"kind":"ready","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#).await;
+    journal(manager, count, false, r#"{"kind":"ready","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null}"#).await;
 }
 
 /// Journal `count` turn states of one workspace, which keeps its newest 500.
 async fn seed_turns(manager: &Manager, count: usize) {
-    journal(manager, count, r#"{"kind":"agent_state","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null,"agent_state":{"state":"idle"}}"#).await;
+    journal(manager, count, true, r#"{"kind":"agent_state","space_id":"w","space_kind":"workspace","repository_id":"r","name":"worker","path":"/work","branch":"worker","cause":null,"error":null,"agent_state":{"state":"idle"}}"#).await;
 }
 
-async fn journal(manager: &Manager, count: usize, record: &'static str) {
+/// Journal `record` `count` times, as `bulk` says it is.
+async fn journal(manager: &Manager, count: usize, bulk: bool, record: &'static str) {
+    let fields: serde_json::Value = serde_json::from_str(record).unwrap();
+    let (space, kind) = (fields["space_id"].clone(), fields["kind"].clone());
+    let (space, kind) = (
+        space.as_str().unwrap().to_owned(),
+        kind.as_str().unwrap().to_owned(),
+    );
     manager
         .store
         .write(move |tx| {
             for _ in 0..count {
                 tx.execute(
-                    "INSERT INTO space_events(space_id,record)
-                     VALUES (json_extract(?1,'$.space_id'),?1)",
-                    [record],
+                    "INSERT INTO space_events(space_id,kind,bulk,record) VALUES (?1,?2,?3,?4)",
+                    rusqlite::params![space, kind, bulk, record],
                 )?;
             }
             Ok(())

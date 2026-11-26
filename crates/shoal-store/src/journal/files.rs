@@ -1,6 +1,6 @@
 //! The events of attached files, built from the record a trigger saw.
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 use serde::Deserialize;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
@@ -17,11 +17,7 @@ pub(super) fn append(db: &Connection, kind: FileEventKind, source: &str) -> Resu
     let file: FileRow =
         serde_json::from_str(source).with_context(|| format!("invalid file record {source}"))?;
     let details = file.details(db, kind)?;
-    db.execute(
-        "INSERT INTO space_events(space_id,record) VALUES (?1,?2)",
-        params![details.space_id, serde_json::to_string(&details)?],
-    )?;
-    Ok(())
+    super::insert(db, &super::Row::file_event(&details)?)
 }
 
 /// A `space_files` row, by its column names.

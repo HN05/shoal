@@ -119,17 +119,8 @@ fn fail_stopped_removal(tx: &Connection, id: &SpaceId, why: &str) -> Result<()> 
 }
 
 fn started_cause(tx: &Connection, id: &SpaceId) -> Result<EventCause> {
-    let cause = tx
-        .query_row(
-            "SELECT json_extract(record,'$.cause') FROM space_events
-             WHERE space_id=?1 AND json_extract(record,'$.kind')=?2
-             ORDER BY id DESC LIMIT 1",
-            params![id, EventKind::RemovalStarted],
-            |row| row.get::<_, Option<EventCause>>(0),
-        )
-        .optional()?
-        .flatten();
-    Ok(cause.unwrap_or(EventCause::Manual))
+    let started = events::newest_of(tx, id, &[EventKind::RemovalStarted])?;
+    Ok((started.and_then(|started| started.cause)).unwrap_or(EventCause::Manual))
 }
 
 #[cfg(test)]

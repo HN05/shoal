@@ -9,21 +9,21 @@ const JOURNAL: &str = "
     INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('plan','/plan','plan','ready','abc','/admin');
     INSERT INTO spaces(id,kind,repository_id,name) VALUES ('plan','workspace','repo','plan');
     COMMIT;
-    INSERT INTO space_events(space_id,record) VALUES
-        (NULL,json_object('kind','daemon_started','version','1.0.0')),
-        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+    INSERT INTO space_events(space_id,kind,bulk,record) VALUES
+        (NULL,'daemon_started',0,json_object('kind','daemon_started','version','1.0.0')),
+        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix')),
-        ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
+        ('fix-id','agent_state',1,json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix',
             'agent_state',json_object('state','working'))),
-        ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
+        ('fix-id','removed',0,json_object('kind','removed','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix','cause','idle')),
-        (NULL,json_object('kind','cleanup_ran','removed',json_array('fix'))),
-        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+        (NULL,'cleanup_ran',0,json_object('kind','cleanup_ran','removed',json_array('fix'))),
+        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix')),
-        ('fix-id',json_object('kind','restored','space_id','fix-id','space_kind','workspace',
+        ('fix-id','restored',0,json_object('kind','restored','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix')),
-        (NULL,json_object('kind','config_reloaded','error','expected a table'));";
+        (NULL,'config_reloaded',0,json_object('kind','config_reloaded','error','expected a table'));";
 
 /// A store in a temporary state directory.
 async fn store() -> (tempfile::TempDir, Store) {
@@ -81,8 +81,9 @@ async fn shoal_s_log_reads_the_newest_entries_across_batches() {
     let journal = |db: &mut rusqlite::Connection| {
         Ok(db.execute_batch(
             "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1200)
-             INSERT INTO space_events(record)
-                 SELECT json_object('kind','daemon_started','version',CAST(i AS TEXT)) FROM n;",
+             INSERT INTO space_events(kind,bulk,record)
+                 SELECT 'daemon_started',0,json_object('kind','daemon_started','version',CAST(i AS TEXT))
+                 FROM n;",
         )?)
     };
     store.run(journal).await.unwrap();

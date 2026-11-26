@@ -174,7 +174,9 @@ ready mark or a file's deletion, so that no write path or cascade is missed.
 A trigger passes the row it saw to a function the store registers on each of
 its connections. The store's journal code builds every event from Shoal's
 types and writes it, whether a trigger or the code that made the change
-records it. No SQL builds an event's JSON. A connection without the
+records it. No SQL builds an event's JSON. Queries filter on the columns the
+journal code fills from the event, such as its kind, and never read a path
+inside a record. A connection without the
 function, such as a `sqlite3` shell, reads the store but fails on a change
 that a trigger records.
 

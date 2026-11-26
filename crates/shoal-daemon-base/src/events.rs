@@ -1,9 +1,8 @@
 //! The journal of events, which `docs/design/daemon.md` describes.
 
 use crate::model::EventCause;
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Deserialize;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -14,38 +13,69 @@ pub use shoal_protocol::events::{
     FileEvent, FileEventDetails, JobEndedEvent, JournaledSpaceEvent, ShoalEvent, ShoalEventDetails,
     ShoalEventKind, SpaceEvent, StoppedProcess,
 };
-use shoal_protocol::events::{ItemActivityEvent, ItemActivityUpdate, ItemEvent, LinkEvent};
+use shoal_protocol::events::{
+    FileEventKind, ItemActivityEvent, ItemActivityUpdate, ItemEvent, LinkEvent,
+};
 use shoal_store::journal;
 
-/// A journal row as stored: file events carry the space's identity in
-/// place of its fields, and Shoal's own events no space.
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum Record {
-    File(Box<FileEventDetails>),
-    Shoal(Box<ShoalEventDetails>),
-    Workspace(Box<EventDetails>),
+/// The columns [`Stored::read`] reads a journal row by.
+const STORED: &str = "id,created_at,kind,record";
+
+/// A journal row as stored. Its kind says which record it holds: file
+/// events carry the space's identity in place of its fields, and Shoal's
+/// own events no space.
+struct Stored {
+    id: EventCursor,
+    created_at: UnixTime,
+    kind: String,
+    record: String,
 }
 
-/// The stored event `record` with its journal ID and time.
-fn decode(id: EventCursor, created_at: UnixTime, record: &str) -> Result<EventItem> {
-    Ok(match serde_json::from_str(record)? {
-        Record::Workspace(details) => EventItem::Event(Box::new(JournaledSpaceEvent {
-            id,
-            created_at,
-            details: *details,
-        })),
-        Record::File(details) => EventItem::File(Box::new(FileEvent {
-            id,
-            created_at,
-            details: *details,
-        })),
-        Record::Shoal(details) => EventItem::Shoal(Box::new(ShoalEvent {
-            id,
-            created_at,
-            details: *details,
-        })),
-    })
+impl Stored {
+    /// The row's [`STORED`] columns.
+    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get(0)?,
+            created_at: row.get(1)?,
+            kind: row.get(2)?,
+            record: row.get(3)?,
+        })
+    }
+
+    /// The event the row holds, with its journal ID and time.
+    fn decode(self) -> Result<EventItem> {
+        let (id, created_at) = (self.id, self.created_at);
+        let item = if is_kind::<FileEventKind>(&self.kind) {
+            EventItem::File(Box::new(FileEvent {
+                id,
+                created_at,
+                details: self.details()?,
+            }))
+        } else if is_kind::<ShoalEventKind>(&self.kind) {
+            EventItem::Shoal(Box::new(ShoalEvent {
+                id,
+                created_at,
+                details: self.details()?,
+            }))
+        } else {
+            EventItem::Event(Box::new(JournaledSpaceEvent {
+                id,
+                created_at,
+                details: self.details()?,
+            }))
+        };
+        Ok(item)
+    }
+
+    fn details<T: serde::de::DeserializeOwned>(&self) -> Result<T> {
+        serde_json::from_str(&self.record)
+            .with_context(|| format!("decode journal event {} of kind {}", self.id, self.kind))
+    }
+}
+
+/// Whether `kind` names a kind of `T`.
+fn is_kind<T: serde::de::DeserializeOwned>(kind: &str) -> bool {
+    serde_json::from_value::<T>(kind.into()).is_ok()
 }
 
 /// The log entry of the journal's `item`; a gap is none.
@@ -129,17 +159,11 @@ impl Bounds {
 
 /// The first `limit` events after `cursor`.
 fn events_after(db: &Connection, cursor: EventCursor, limit: u32) -> Result<Vec<EventItem>> {
-    let mut statement = db.prepare(
-        "SELECT id,created_at,record FROM space_events WHERE id>?1 ORDER BY id LIMIT ?2",
-    )?;
-    let rows = statement.query_map(params![cursor, limit], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get::<_, String>(2)?))
-    })?;
-    rows.map(|row| {
-        let (id, created_at, record) = row?;
-        decode(id, created_at, &record)
-    })
-    .collect()
+    let mut statement = db.prepare(&format!(
+        "SELECT {STORED} FROM space_events WHERE id>?1 ORDER BY id LIMIT ?2"
+    ))?;
+    let rows = statement.query_map(params![cursor, limit], Stored::read)?;
+    rows.map(|row| row?.decode()).collect()
 }
 
 /// Append in the transaction that owns the transition, before deleting ownership.
@@ -164,19 +188,41 @@ pub fn record(
 
 /// The newest event of the space `id`; none when the newest is a file's.
 fn newest_event(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
-    let newest: Option<(EventCursor, UnixTime, String)> = db
+    let newest = db
         .query_row(
-            "SELECT id,created_at,record FROM space_events WHERE space_id=?1
-                 ORDER BY id DESC LIMIT 1",
+            &format!(
+                "SELECT {STORED} FROM space_events WHERE space_id=?1 ORDER BY id DESC LIMIT 1"
+            ),
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            Stored::read,
         )
         .optional()?;
-    let Some((cursor, created_at, record)) = newest else {
-        return Ok(None);
-    };
-    Ok(match decode(cursor, created_at, &record)? {
-        EventItem::Event(event) => Some(event.details),
+    Ok(match newest.map(Stored::decode).transpose()? {
+        Some(EventItem::Event(event)) => Some(event.details),
+        _ => None,
+    })
+}
+
+/// The newest event of the space `id` of one of `kinds`.
+pub fn newest_of(
+    db: &Connection,
+    id: &SpaceId,
+    kinds: &[EventKind],
+) -> Result<Option<EventDetails>> {
+    let listed = vec!["?"; kinds.len()].join(",");
+    let parameters = std::iter::once(id.as_str()).chain(kinds.iter().map(|kind| kind.as_str()));
+    let newest = db
+        .query_row(
+            &format!(
+                "SELECT {STORED} FROM space_events WHERE space_id=?
+                    AND kind IN ({listed}) ORDER BY id DESC LIMIT 1"
+            ),
+            rusqlite::params_from_iter(parameters),
+            Stored::read,
+        )
+        .optional()?;
+    Ok(match newest.map(Stored::decode).transpose()? {
+        Some(EventItem::Event(event)) => Some(event.details),
         _ => None,
     })
 }
@@ -331,7 +377,7 @@ fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEven
 pub fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime>> {
     Ok(db.query_row(
         "SELECT MAX(created_at) FROM space_events WHERE space_id=?1
-             AND json_extract(record,'$.kind') IN (?2,?3)",
+             AND kind IN (?2,?3)",
         params![id, EventKind::AgentStopped, EventKind::AgentExited],
         |row| row.get(0),
     )?)
@@ -340,48 +386,28 @@ pub fn agent_stopped_at(db: &Connection, id: &SpaceId) -> Result<Option<UnixTime
 /// The removal of the space `id`, which no space has any longer, while the
 /// journal keeps it.
 pub fn removal(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM space_events
-             WHERE json_extract(record,'$.kind')=?2 AND space_id=?1
-                 AND space_id NOT IN (SELECT id FROM spaces)
-             ORDER BY id DESC LIMIT 1",
-            params![id, EventKind::Removed],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record.as_deref().map(serde_json::from_str).transpose()?)
+    if super::store::exists(db, "SELECT 1 FROM spaces WHERE id=?1", [id])? {
+        return Ok(None);
+    }
+    newest_of(db, id, &[EventKind::Removed])
 }
 
 /// Whether the space's newest agent event is the end of `execution`'s agent.
 fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -> Result<bool> {
-    let newest: Option<(EventKind, Option<ExecutionId>)> = db
-        .query_row(
-            "SELECT json_extract(record,'$.kind'),json_extract(record,'$.agent.execution_id')
-             FROM space_events WHERE space_id=?1
-                 AND json_extract(record,'$.kind') IN (?2,?3,?4)
-             ORDER BY id DESC LIMIT 1",
-            params![
-                id,
-                EventKind::AgentStarted,
-                EventKind::AgentStopped,
-                EventKind::AgentExited
-            ],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
-    Ok(newest.is_some_and(|(kind, ended)| {
-        kind != EventKind::AgentStarted && ended.as_ref() == execution
+    let kinds = [
+        EventKind::AgentStarted,
+        EventKind::AgentStopped,
+        EventKind::AgentExited,
+    ];
+    let newest = newest_of(db, id, &kinds)?;
+    Ok(newest.is_some_and(|newest| {
+        newest.kind() != EventKind::AgentStarted
+            && newest
+                .event
+                .agent()
+                .and_then(|agent| agent.execution_id.as_ref())
+                == execution
     }))
-}
-
-/// Record `details`, an event of Shoal itself.
-fn insert_shoal(db: &Connection, details: &ShoalEventDetails) -> Result<()> {
-    db.execute(
-        "INSERT INTO space_events(record) VALUES (?1)",
-        [serde_json::to_string(details)?],
-    )?;
-    Ok(())
 }
 
 /// Record that the request's space asked for it, or that it was decided,
@@ -433,7 +459,9 @@ pub async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: A
 /// is logged, never returned, as it must not fail what Shoal did.
 pub async fn record_shoal(store: &Store, details: ShoalEventDetails) {
     let kind = details.kind;
-    let recorded = store.run(move |db| insert_shoal(db, &details)).await;
+    let recorded = store
+        .run(move |db| journal::append_shoal(db, &details))
+        .await;
     if let Err(error) = recorded {
         log!("{kind} not recorded: {error:#}");
     }

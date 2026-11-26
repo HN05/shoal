@@ -420,19 +420,6 @@ CREATE TABLE "chats" (
     workspace_id TEXT REFERENCES workspaces(id),
     root_dir TEXT);
 
-CREATE TABLE space_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    space_id TEXT,
-    record TEXT NOT NULL,
-    bulk INTEGER GENERATED ALWAYS AS (
-        json_extract(record,'$.kind') IN ('agent_state','progress_changed')
-        OR (json_extract(record,'$.kind')='item_activity'
-            AND json_extract(record,'$.item_activity.update.kind')
-                NOT IN ('closed','merged','reopened'))) VIRTUAL,
-    CHECK (space_id IS json_extract(record,'$.space_id'))
-);
-
 CREATE TABLE space_holds (
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -1145,6 +1132,17 @@ CREATE TABLE run_usage (
     oom_killed INTEGER NOT NULL CHECK(oom_killed IN (0,1))
 );
 
+CREATE TABLE "space_events" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    space_id TEXT,
+    kind TEXT NOT NULL,
+    bulk INTEGER NOT NULL CHECK(bulk IN (0,1)),
+    repository_id TEXT,
+    child_id TEXT,
+    record TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1184,8 +1182,6 @@ CREATE INDEX spaces_repository ON spaces(repository_id);
 CREATE INDEX chats_workspace ON chats(workspace_id);
 
 CREATE INDEX space_files_space ON space_files(space_id, id);
-
-CREATE INDEX space_events_space ON space_events(space_id, bulk, id);
 
 CREATE UNIQUE INDEX access_request_name
     ON access_requests(space_id,target_key,name) WHERE active=1;
@@ -1263,6 +1259,12 @@ CREATE INDEX agent_handoffs_space ON agent_handoffs(space_id, session);
 
 CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
+CREATE INDEX space_events_space ON space_events(space_id, bulk, id);
+
+CREATE INDEX space_events_kind ON space_events(space_id, kind, id);
+
+CREATE INDEX space_events_child ON space_events(child_id) WHERE child_id IS NOT NULL;
+
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL
     UNION ALL SELECT space_number FROM access_requests WHERE space_id IS NULL;
@@ -1276,8 +1278,6 @@ CREATE VIEW hub_held_numbers AS
     UNION ALL SELECT member_id, json_extract(summary,'$.number'), space_id
         FROM hub_space_copies;
 
-INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
-
 INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
@@ -1287,6 +1287,8 @@ INSERT INTO "sqlite_sequence" VALUES ('threads', 0);
 INSERT INTO "sqlite_sequence" VALUES ('thread_code', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('thread_posts', 0);
+
+INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
 
@@ -1326,18 +1328,6 @@ CREATE TRIGGER space_agent_state_turn_kept AFTER DELETE ON space_agent_state
 WHEN OLD.space_id IN (SELECT id FROM spaces) BEGIN
     INSERT INTO space_turns(space_id,turn) VALUES (OLD.space_id,OLD.turn)
         ON CONFLICT(space_id) DO UPDATE SET turn=max(turn,excluded.turn);
-END;
-
-CREATE TRIGGER space_events_retention AFTER INSERT ON space_events
-WHEN NEW.bulk BEGIN
-    UPDATE journal_pruned SET id=MAX(id, COALESCE((
-        SELECT id FROM space_events WHERE space_id=NEW.space_id AND bulk
-            ORDER BY id DESC LIMIT 1 OFFSET 500
-    ), 0));
-    DELETE FROM space_events WHERE space_id=NEW.space_id AND bulk AND id <= (
-        SELECT id FROM space_events WHERE space_id=NEW.space_id AND bulk
-            ORDER BY id DESC LIMIT 1 OFFSET 500
-    );
 END;
 
 CREATE TRIGGER repository_triggers_removed AFTER DELETE ON repositories BEGIN
@@ -1688,4 +1678,16 @@ WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
     SELECT journal_append('thread_resolved', NEW.space_id,
         json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name,
             'outcome', json(NEW.outcome)));
+END;
+
+CREATE TRIGGER space_events_retention AFTER INSERT ON space_events
+WHEN NEW.bulk BEGIN
+    UPDATE journal_pruned SET id=MAX(id, COALESCE((
+        SELECT id FROM space_events WHERE space_id=NEW.space_id AND bulk
+            ORDER BY id DESC LIMIT 1 OFFSET 500
+    ), 0));
+    DELETE FROM space_events WHERE space_id=NEW.space_id AND bulk AND id <= (
+        SELECT id FROM space_events WHERE space_id=NEW.space_id AND bulk
+            ORDER BY id DESC LIMIT 1 OFFSET 500
+    );
 END;

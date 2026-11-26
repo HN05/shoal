@@ -163,26 +163,24 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
 fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     let mut db = Connection::open_in_memory()?;
     migrate(&mut db)?;
-    let insert = |db: &Connection, space: &str, record: &str| {
+    let insert = |db: &Connection, space: &str, kind: &str, bulk: bool| {
         db.execute(
-            "INSERT INTO space_events(space_id,record) VALUES (?1,json_set(json(?2),'$.space_id',?1))",
-            [space, record],
+            "INSERT INTO space_events(space_id,kind,bulk,record)
+                VALUES (?1,?2,?3,json_object('kind',?2,'space_id',?1))",
+            rusqlite::params![space, kind, bulk],
         )
     };
     let tx = db.transaction()?;
-    insert(&tx, "busy", r#"{"kind":"created"}"#)?;
-    insert(&tx, "quiet", r#"{"kind":"created"}"#)?;
-    insert(&tx, "quiet", r#"{"kind":"agent_state"}"#)?;
-    let merged = r#"{"kind":"item_activity","item_activity":{"update":{"kind":"merged"}}}"#;
-    let comment = r#"{"kind":"item_activity","item_activity":{"update":{"kind":"comment"}}}"#;
-    insert(&tx, "busy", merged)?;
+    insert(&tx, "busy", "created", false)?;
+    insert(&tx, "quiet", "created", false)?;
+    insert(&tx, "quiet", "agent_state", true)?;
+    insert(&tx, "busy", "item_activity", false)?;
     for turn in 0..600 {
-        let record = if turn % 2 == 0 {
-            r#"{"kind":"agent_state"}"#
-        } else {
-            comment
+        let kind = match turn % 2 {
+            0 => "agent_state",
+            _ => "item_activity",
         };
-        insert(&tx, "busy", record)?;
+        insert(&tx, "busy", kind, true)?;
     }
     tx.commit()?;
     let count = |space: &str, bulk: bool| -> Result<i64> {
@@ -202,7 +200,7 @@ fn each_space_keeps_its_newest_bulk_events_and_every_other() -> Result<()> {
     )?;
     assert_eq!(oldest_bulk, 105);
     db.execute("DELETE FROM space_events", [])?;
-    insert(&db, "busy", r#"{"kind":"created"}"#)?;
+    insert(&db, "busy", "created", false)?;
     assert_eq!(db.last_insert_rowid(), 605);
     Ok(())
 }

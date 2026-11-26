@@ -36,8 +36,9 @@ fn spaces(db: &Connection) -> Result<Vec<String>> {
 /// Journal `kind` for the workspace `id`, `age` seconds ago.
 fn journal(db: &Connection, id: &str, kind: &str, age: i64) -> Result<()> {
     db.execute(
-        "INSERT INTO space_events(created_at,space_id,record)
-            VALUES (unixepoch()-?3,?1,json_object('kind',?2,'space_id',?1,'space_kind','workspace'))",
+        "INSERT INTO space_events(created_at,space_id,kind,bulk,record)
+            VALUES (unixepoch()-?3,?1,?2,0,
+                json_object('kind',?2,'space_id',?1,'space_kind','workspace'))",
         params![id, kind, age],
     )?;
     Ok(())
@@ -66,8 +67,9 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
                 [],
             )?;
             db.execute(
-                "INSERT INTO space_events(created_at,space_id,record) VALUES (unixepoch()-?1,
-                    'chat',json_object('kind','removed','space_id','chat','space_kind','chat'))",
+                "INSERT INTO space_events(created_at,space_id,kind,bulk,record)
+                    VALUES (unixepoch()-?1,'chat','removed',0,
+                        json_object('kind','removed','space_id','chat','space_kind','chat'))",
                 [decade],
             )?;
             Ok(())
@@ -85,8 +87,8 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
     let decade = 3651 * 24 * 3600;
     let shoal = |db: &Connection, version: &str, age: i64| {
         db.execute(
-            "INSERT INTO space_events(created_at,record) VALUES (unixepoch()-?2,
-                json_object('kind','daemon_started','version',?1))",
+            "INSERT INTO space_events(created_at,kind,bulk,record) VALUES (unixepoch()-?2,
+                'daemon_started',0,json_object('kind','daemon_started','version',?1))",
             params![version, age],
         )
     };

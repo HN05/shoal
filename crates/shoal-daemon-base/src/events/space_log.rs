@@ -2,9 +2,8 @@
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::{EventCursor, EventKind, decode, log_entry};
+use super::{EventKind, STORED, Stored, log_entry};
 use crate::store::Store;
-use crate::time::UnixTime;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::log::{LogEntry, LogFilter};
 
@@ -35,8 +34,7 @@ pub async fn parent_at_removal(store: &Store, id: SpaceId) -> Result<Option<Spac
             Ok(db
                 .query_row(
                     "SELECT space_id FROM space_events
-                     WHERE json_extract(record,'$.kind')=?2
-                         AND json_extract(record,'$.child.id')=?1
+                     WHERE kind=?2 AND child_id=?1
                      ORDER BY id DESC LIMIT 1",
                     params![id, EventKind::ChildRemoved],
                     |row| row.get(0),
@@ -48,13 +46,13 @@ pub async fn parent_at_removal(store: &Store, id: SpaceId) -> Result<Option<Spac
 
 /// Every event of the space `id`, oldest first.
 fn events_of(db: &Connection, id: &SpaceId) -> Result<Vec<LogEntry>> {
-    let mut statement =
-        db.prepare("SELECT id,created_at,record FROM space_events WHERE space_id=?1 ORDER BY id")?;
-    let rows = statement.query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+    let mut statement = db.prepare(&format!(
+        "SELECT {STORED} FROM space_events WHERE space_id=?1 ORDER BY id"
+    ))?;
+    let rows = statement.query_map([id], Stored::read)?;
     let mut entries = Vec::new();
     for row in rows {
-        let (id, created_at, record): (EventCursor, UnixTime, String) = row?;
-        entries.extend(log_entry(decode(id, created_at, &record)?));
+        entries.extend(log_entry(row?.decode()?));
     }
     Ok(entries)
 }

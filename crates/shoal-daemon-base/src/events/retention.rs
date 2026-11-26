@@ -1,5 +1,6 @@
 //! The expiry of journal events, whose retention `docs/design/daemon.md`
 //! states.
+use super::EventKind;
 use shoal_ids::repository_ids::RepositoryId;
 
 use anyhow::Result;
@@ -56,9 +57,9 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
         .prepare(
             "SELECT space_id, (SELECT id FROM repositories WHERE id=repository), removed_at
             FROM (SELECT space_id,
-                MAX(json_extract(record,'$.repository_id')) AS repository,
-                COALESCE(MAX(CASE WHEN json_extract(record,'$.kind')='removed'
-                    THEN created_at END), MAX(created_at)) AS removed_at
+                MAX(repository_id) AS repository,
+                COALESCE(MAX(CASE WHEN kind=?1 THEN created_at END), MAX(created_at))
+                    AS removed_at
             FROM space_events
             WHERE space_id IS NOT NULL
                 AND space_id NOT IN (SELECT id FROM spaces)
@@ -67,7 +68,7 @@ fn gone(db: &Connection) -> Result<Vec<Gone>> {
                     WHERE expires_at > unixepoch())
             GROUP BY space_id)",
         )?
-        .query_map([], |row| {
+        .query_map([EventKind::Removed], |row| {
             Ok(Gone {
                 id: row.get(0)?,
                 repository_id: row.get(1)?,

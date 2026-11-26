@@ -15,22 +15,23 @@ const JOURNAL: &str = "
     INSERT INTO spaces(id,kind,repository_id,name)
         VALUES ('plan','workspace','repo','plan'),('other','workspace','repo','other');
     COMMIT;
-    INSERT INTO space_events(space_id,record) VALUES
-        ('fix-id',json_object('kind','created','space_id','fix-id','space_kind','workspace',
+    INSERT INTO space_events(space_id,kind,bulk,record) VALUES
+        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix')),
-        ('fix-id',json_object('kind','agent_started','space_id','fix-id','space_kind','workspace',
+        ('fix-id','agent_started',0,json_object('kind','agent_started','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',NULL))),
-        ('fix-id',json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
+        ('fix-id','agent_state',1,json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix',
             'agent_state',json_object('state','working'))),
-        ('fix-id',json_object('kind','agent_exited','space_id','fix-id','space_kind','workspace',
+        ('fix-id','agent_exited',0,json_object('kind','agent_exited','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix',
             'agent',json_object('name','claude','execution_id','e','exit_code',0))),
-        ('fix-id',json_object('kind','removed','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix','cause','manual')),
-        ('plan',json_object('kind','child_removed','space_id','plan','space_kind','workspace',
-            'name','plan','path','/plan',
+        ('fix-id','removed',0,json_object('kind','removed','space_id','fix-id','space_kind','workspace',
+            'name','fix','path','/fix','cause','manual'));
+    INSERT INTO space_events(space_id,kind,bulk,child_id,record) VALUES
+        ('plan','child_removed',0,'fix-id',json_object('kind','child_removed','space_id','plan',
+            'space_kind','workspace','name','plan','path','/plan',
             'child',json_object('id','fix-id','name','fix','kind','workspace')));";
 
 fn kinds(entries: &[LogEntry]) -> Vec<EventKind> {
