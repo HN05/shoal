@@ -15,7 +15,6 @@ pub(crate) struct Traits {
     rest: Option<Declared>,
 }
 
-/// A trait's visibility and name.
 struct Declared {
     visibility: Visibility,
     name: Ident,
@@ -42,8 +41,6 @@ impl Parse for Traits {
 }
 
 impl Traits {
-    /// The traits that declare `implementation`'s methods, each implemented
-    /// for its type.
     pub(crate) fn declare(self, implementation: ItemImpl) -> Result<Tokens> {
         if let Some((_, path, _)) = &implementation.trait_ {
             return Err(Error::new_spanned(path, "an extension is an inherent impl"));
@@ -72,6 +69,7 @@ impl Traits {
         let attributes = &implementation.attrs;
         let mut tokens = self.public.extension(attributes, self_type, public)?;
         if let Some(steps) = &self.rest {
+            // The impl's documentation describes the public trait.
             let undocumented: Vec<_> = attributes
                 .iter()
                 .filter(|attribute| !attribute.path().is_ident("doc"))
@@ -84,8 +82,6 @@ impl Traits {
 }
 
 impl Declared {
-    /// This trait, carrying `attributes`, with `methods`, and its
-    /// implementation for `self_type`.
     fn extension(
         &self,
         attributes: &[Attribute],

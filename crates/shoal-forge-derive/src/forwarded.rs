@@ -6,7 +6,6 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
-/// The type the trait is implemented for and the macro that dispatches on it.
 pub(crate) struct Target {
     kind: Path,
     dispatch: Path,
@@ -44,8 +43,6 @@ impl Target {
         })
     }
 
-    /// The method `signature` declares, calling the same method of the
-    /// implementation `self` names.
     fn forwarder(&self, signature: &Signature) -> Result<Tokens> {
         let name = &signature.ident;
         let arguments = arguments(signature)?;
@@ -59,7 +56,6 @@ impl Target {
     }
 }
 
-/// The names of the method's arguments after its `self` receiver.
 fn arguments(signature: &Signature) -> Result<Vec<&Ident>> {
     let mut inputs = signature.inputs.iter();
     if !matches!(inputs.next(), Some(FnArg::Receiver(_))) {
