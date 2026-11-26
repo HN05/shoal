@@ -161,7 +161,8 @@ only once the copy is gone. Shoal never reuses a checkpoint's number, so a
 number names one checkpoint for good.
 
 An expiry pass that deletes a checkpoint then runs `git prune` with the
-repository's `gc.pruneExpire`, two weeks unless set. It runs even where
+repository's `gc.pruneExpire`, two weeks unless set, and prunes nothing when
+it is `never`. It runs even where
 automatic gc is off. It deletes every unreachable loose object older than that,
 the expired checkpoints' and any other, as Git's own gc would. Objects already
 packed stay until that gc.

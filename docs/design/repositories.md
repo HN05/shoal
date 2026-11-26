@@ -82,7 +82,10 @@ require disambiguation.
 the ID that machine gives it, and shows its source, checkout path and the
 spaces it deletes there with the work they lose. After verifying the checkout's identity and
 boundaries, it deletes the checkout recursively, then removes the repository
-directory only when that directory is empty.
+directory only when that directory is empty. It removes every workspace through
+the shared removal path, refuses external worktrees and dangerous paths, and
+persists its progress. Until an interrupted `repo rm` is retried, the
+repository takes no new workspace.
 Each workspace and chat gets its own temporary directory as `TMPDIR`, in the
 repository directory's `.tmp` under its ID, or `root_dir`'s for a chat without a
 repository, which the daemon marks with its state directory so another daemon

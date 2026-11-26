@@ -350,3 +350,13 @@ no row left to supply it; clients showing files follow them without polling. A
 file's optional title rides on its argument as `PATH#TITLE`, the form forge
 attachments use for alt text, because attach flags repeat and a separate title
 flag could not say which file it names.
+
+Files an agent sends the user with an alert or a post join the space's attached
+files, since the user may read the alert after the space is gone. They outlive
+the alert or post, as a message's files outlive the message: clearing or
+withdrawing the alert, or resolving the thread, leaves them among the space's
+files until `shoal files rm` or the retention removes them. The alert or post
+names them by their records rather than by path, so a file `shoal files rm`
+deleted drops out and a moved repository directory moves them. A coordinating
+agent that receives the alert or post receives their paths instead, as the
+message's attached files.
