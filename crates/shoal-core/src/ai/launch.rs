@@ -54,7 +54,6 @@ impl Environment {
         environment
     }
 
-    /// Make these changes to `command`'s environment.
     pub fn apply(&self, command: &mut std::process::Command, home: &Path) {
         for variable in &self.remove {
             command.env_remove(variable);
@@ -90,7 +89,6 @@ pub struct ReviewFields<'a> {
     pub output: &'a Path,
 }
 
-/// An output schema, as a file and as its text.
 #[derive(Clone, Copy)]
 pub struct Schema<'a> {
     pub file: &'a Path,
@@ -235,7 +233,6 @@ impl Arguments {
     }
 }
 
-/// Whether `template` names the output file `{output}`.
 fn names_output(template: Option<&[String]>) -> bool {
     template
         .into_iter()

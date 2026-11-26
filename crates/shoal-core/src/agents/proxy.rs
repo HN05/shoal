@@ -70,7 +70,6 @@ pub fn upstream(
         .context("find where the agent's API requests go without its proxy")
 }
 
-/// Whether an agent with integration `kind` can go through Shoal's proxy.
 fn routes_through_proxy(kind: IntegrationKind) -> bool {
     integration(kind).routes_through_proxy()
 }

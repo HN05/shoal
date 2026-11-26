@@ -1,10 +1,6 @@
 //! Hook groups agents run Shoal through, in the event-and-group shape Claude
-//! Code and Codex share: `shoal internal deliver` delivers unread alerts as
-//! context, `shoal internal agent-state` reports the turn
-//! state, `shoal internal subagent` the subagents it runs, and
-//! `shoal internal plan` the plan the agent's plan tools keep, and
-//! `shoal internal change` what its tool calls change. Integrations
-//! choose the events and how the agent receives them.
+//! Code and Codex share. Integrations choose the events and how the agent
+//! receives them.
 use serde_json::{Map, Value, json};
 
 use crate::state::AgentState;

@@ -1,11 +1,6 @@
-//! Agents Shoal launches by name. A launch runs the agent's configured
-//! command with the arguments its provider describes (see [`crate::ai`]); an
-//! [`Integration`] adds what configuration cannot say for a tool Shoal knows,
-//! such as hooks, trust entries or a launch of its own. Adding an agent means
-//! configuration, plus an integration its [`IntegrationKind`] selects when
-//! the tool needs one; an integration may also add agents of its own
-//! ([`ADDED`], behind its Cargo feature). The CLI, the execution wrapper and
-//! the daemon share what this module decides about a launch.
+//! Agents Shoal launches by name, and the [`Integration`] that adds what
+//! configuration cannot say for a tool Shoal knows, such as hooks, trust
+//! entries or a launch of its own. See `docs/design/agents.md`.
 mod args;
 mod checks;
 mod claude;
@@ -249,7 +244,6 @@ struct Configured;
 
 impl Integration for Configured {}
 
-/// The integration of an AI tool of `kind`.
 pub fn integration(kind: IntegrationKind) -> &'static dyn Integration {
     match kind {
         IntegrationKind::Claude => &claude::Claude,
@@ -267,7 +261,6 @@ pub struct Added {
     off: fn(&Effective) -> Option<&'static str>,
 }
 
-/// Agents integrations add.
 pub const ADDED: &[Added] = &[
     Added {
         name: "happy-claude",
@@ -281,7 +274,6 @@ pub const ADDED: &[Added] = &[
     },
 ];
 
-/// The agent `name`, when an integration adds it.
 pub fn added(name: &Agent) -> Option<&'static Added> {
     ADDED.iter().find(|added| *name == added.name)
 }

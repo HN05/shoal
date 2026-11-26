@@ -25,7 +25,6 @@ use shoal_ids::{
     agent_session_ids::AgentSessionId, execution_ids::ExecutionId, space_ids::SpaceId,
 };
 
-/// What a hook reports for its space's agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Report {
@@ -58,7 +57,6 @@ pub struct Kept {
     /// that made the report, which a restore replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ancestors: Vec<u32>,
-    /// When the hook made the report.
     pub at: SystemTime,
     /// Why the daemon did not record it, when the hook learned why before
     /// it ended.
@@ -108,7 +106,6 @@ impl Sending {
         })
     }
 
-    /// When the hook made the report.
     pub fn made(&self) -> SystemTime {
         self.kept.at
     }
@@ -172,7 +169,6 @@ impl Drop for Lock {
     }
 }
 
-/// When the report whose file is `mark` was made.
 fn delivered_at(mark: &Path) -> Option<SystemTime> {
     let kept: Kept = serde_json::from_slice(&fs::read(mark).ok()?).ok()?;
     Some(kept.at)
@@ -302,7 +298,6 @@ pub fn find(paths: &Paths, space: &SpaceId) -> io::Result<Found> {
     Ok(found)
 }
 
-/// When the latest report a hook of `space` still sends was made.
 pub fn sending(paths: &Paths, space: &SpaceId) -> io::Result<Option<SystemTime>> {
     Ok(find(paths, space)?.sending)
 }

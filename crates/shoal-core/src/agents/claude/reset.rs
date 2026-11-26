@@ -54,7 +54,6 @@ fn duration(text: &str) -> Option<Duration> {
     (components > 0 && ends_word).then_some(total)
 }
 
-/// The unit `text` starts with, and its length.
 fn unit(text: &str) -> Option<(Duration, usize)> {
     [
         ("ms", Duration::from_millis(1)),

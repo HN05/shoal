@@ -48,7 +48,6 @@ pub static CODEX: TrustFile = TrustFile {
 };
 
 impl TrustFile {
-    /// The tool's name in warnings.
     pub fn tool(&self) -> &'static str {
         self.tool
     }

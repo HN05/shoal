@@ -118,7 +118,6 @@ pub fn check_queued_launch(
 /// names one and no terminal picks one.
 pub const NO_AGENT: &str = "no agent selected; pass --agent or set agent.default in the repository or global config, or make a workspace without an agent with shoal create";
 
-/// `agent`, else the `agent.default` of `settings`.
 fn named_or_default(settings: &Effective, agent: Option<Agent>) -> Option<Agent> {
     agent.or_else(|| settings.agent.default.clone())
 }

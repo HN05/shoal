@@ -44,7 +44,6 @@ impl<'a> AgentHome<'a> {
         }
     }
 
-    /// The directory the agent runs in.
     pub fn path(self) -> &'a Path {
         match self {
             Self::Workspace(workspace) => &workspace.path,
@@ -52,7 +51,6 @@ impl<'a> AgentHome<'a> {
         }
     }
 
-    /// The issues, PRs and CI runs the space links.
     fn links(self) -> &'a SpaceLinks {
         match self {
             Self::Workspace(workspace) => &workspace.links,

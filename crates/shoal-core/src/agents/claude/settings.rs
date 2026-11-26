@@ -106,7 +106,6 @@ fn project(directory: &Path) -> [Value; 2] {
     ["settings.local.json", "settings.json"].map(|name| read_file(&settings.join(name)))
 }
 
-/// The settings in the file at `path`, or nothing when it cannot be read.
 fn read_file(path: &Path) -> Value {
     std::fs::read(path)
         .ok()

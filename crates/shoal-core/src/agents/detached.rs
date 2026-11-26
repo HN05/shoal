@@ -40,11 +40,9 @@ pub trait App: Sync {
 /// integrations read.
 pub struct Session<'a> {
     pub paths: &'a Paths,
-    /// Where the session runs.
     pub directory: &'a Path,
     /// The branch checked out there, for a workspace's session.
     pub branch: Option<&'a str>,
-    /// The first message.
     pub prompt: Option<String>,
     pub args: Vec<OsString>,
 }

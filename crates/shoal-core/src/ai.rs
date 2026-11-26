@@ -23,59 +23,26 @@ pub type Agents = BTreeMap<String, Agent>;
 /// One AI tool as its settings and this machine describe it.
 #[derive(Debug, Default)]
 pub struct Agent {
-    /// Parent directory in which Shoal installs `<skill>/SKILL.md`.
     pub skill_dir: Option<PathBuf>,
-    /// Its launcher; a tool with one runs as `shoal run <name>`.
     pub command: Option<Vec<String>>,
-    /// Arguments that give the agent instructions apart from its first
-    /// message, with `{instructions}`, or `{instructions_toml}` for a TOML
-    /// string. Without them, instructions join the prompt.
     pub instructions: Option<Vec<String>>,
-    /// Arguments that resume the session with ID `{session}`.
     pub resume: Option<Vec<String>>,
-    /// Arguments that resume the workspace's latest session.
     pub resume_latest: Option<Vec<String>>,
-    /// Arguments that start a new session from a fork of the one with ID
-    /// `{session}`, which stays unchanged, working in `{directory}`.
     pub fork: Option<Vec<String>>,
-    /// Arguments that give the agent another working directory,
-    /// `{directory}`; empty gives none.
     pub add_dir: Option<Vec<String>>,
-    /// The model its agents run with by default.
     pub model: Option<String>,
-    /// The reasoning effort its agents run with by default.
     pub effort: Option<String>,
-    /// Arguments that select the model `{model}`.
     pub model_args: Option<Vec<String>>,
-    /// Arguments that select the reasoning effort `{effort}`.
     pub effort_args: Option<Vec<String>>,
-    /// Arguments of a one-shot, read-only review, or answer in one of its
-    /// findings' threads, with `{prompt}`, and optionally `{output}`, which
-    /// lets it run Shoal's commands.
     pub review: Option<Vec<String>>,
-    /// Arguments of such a run resuming session `{session}`.
     pub review_resume: Option<Vec<String>>,
-    /// Arguments of the gate's one-shot run, as `review`'s, that returns its
-    /// result in the output schema `{schema}` or `{schema_json}` names.
     pub gate: Option<Vec<String>>,
-    /// Arguments of such a gate run resuming session `{session}`.
     pub gate_resume: Option<Vec<String>>,
-    /// The AI tool this one is a launch profile of: it inherits that tool's
-    /// integration, launcher and arguments, each replaced by its own.
     pub base: Option<String>,
-    /// Variables set for the tool's tracked launches, after the workspace's
-    /// `[env]`; a value starting with `~/` names a path under the home.
     pub env: BTreeMap<String, String>,
-    /// Variables removed from the tool's tracked launches, whether inherited
-    /// or set by `[env]`.
     pub env_remove: Vec<String>,
-    /// Whether Shoal retries a turn an API failure ended, for an agent whose
-    /// integration reports failed turns.
     pub retry: Option<bool>,
-    /// How many minutes the tool's prompt cache lives after its last
-    /// request, over what its own settings give.
     pub prompt_cache_minutes: Option<u64>,
-    /// The `[machine.proxies.<name>]` the tool's tracked agents reach their API through.
     pub proxy: Option<String>,
 }
 
@@ -96,7 +63,8 @@ pub fn skill_dirs(tools: &Tools, home: &Path) -> Result<BTreeMap<String, Option<
         .collect()
 }
 
-/// Skill delivery reads machine config without constructing daemon paths.
+/// The AI tools the global config under `home` describes, read without the
+/// daemon's paths.
 pub fn load(home: &Path) -> Result<Tools> {
     let config = crate::config::Config::load_unchecked(home)?;
     validate::skill_dirs(&config.machine.agents, home)?;

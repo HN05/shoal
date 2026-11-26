@@ -393,7 +393,6 @@ fn set(table: &mut toml::Table, key: &[String], value: toml::Value) {
     table.insert(last.clone(), value);
 }
 
-/// `key` as a dotted TOML key, quoting the parts that need it.
 fn dotted(key: &[String]) -> String {
     key.iter()
         .map(|part| toml_edit::Key::new(part.as_str()).to_string())

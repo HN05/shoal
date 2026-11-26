@@ -49,7 +49,6 @@ pub(super) fn lifetime(variable: &dyn Fn(&str) -> Option<OsString>, home: &Path)
     }
 }
 
-/// A lifetime as Claude Code names one.
 fn parse(text: &str) -> Option<Duration> {
     match text {
         "5m" => Some(FIVE_MINUTES),

@@ -34,7 +34,6 @@ pub struct Tool {
     /// What its launcher takes: the argument templates of its
     /// `[agents.<name>]` entry and its bases.
     pub launch: LaunchProfile,
-    /// Which Shoal integration it runs with.
     pub integration: IntegrationKind,
     /// The tools it is a launch profile of, nearest first. A launcher is
     /// resolved per config layer, so it is looked up along them there.
@@ -91,7 +90,6 @@ impl LaunchProfile {
 
 #[derive(Debug, Clone)]
 enum SkillDir {
-    /// A `skill_dir` as written.
     Configured(PathBuf),
     Builtin(builtin::SkillDir),
 }
@@ -120,7 +118,6 @@ impl Tool {
     }
 }
 
-/// Every built-in tool and every configured one, resolved.
 pub fn tools(entries: &Agents) -> Tools {
     builtin::PROVIDERS
         .iter()

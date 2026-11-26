@@ -25,7 +25,6 @@ pub(super) const CLAUDE: Happy = Happy(Agent::Claude);
 pub(super) const CODEX: Happy = Happy(Agent::Codex);
 
 impl Happy {
-    /// The integration of the agent Happy runs.
     fn inner(&self) -> &'static dyn Integration {
         super::integration(match self.0 {
             Agent::Claude => IntegrationKind::Claude,
@@ -220,7 +219,6 @@ impl Opening {
             .context("the Happy session did not receive its first message")
     }
 
-    /// The line reporting a prompt delivered through the seeded session.
     fn note(&self) -> &'static str {
         match self.seeded {
             Some(_) => "\nPrompt delivered to the session",

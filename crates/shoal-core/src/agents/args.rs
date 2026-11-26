@@ -32,7 +32,6 @@ pub fn model_args(
         .map_err(|template| missing_template(name, template))
 }
 
-/// The refusal of a model or effort for agent `name`, which lacks `template`.
 fn missing_template(name: &Agent, template: &str) -> anyhow::Error {
     let option = template.trim_end_matches("_args");
     anyhow::anyhow!(
