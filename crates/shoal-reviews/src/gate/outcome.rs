@@ -1,7 +1,5 @@
-//! Carrying out the gate's verdict: an allowed request is approved through
-//! the path an approval takes, a denied one ends with the reason, and a
-//! passed one takes the normal route. Each verdict goes to the requesting
-//! space's log and agent, and as one line to its coordinator.
+//! Carrying out the gate's verdict. An allowed request is approved through
+//! the path every approval takes.
 use super::{
     DENIALS,
     context::Case,

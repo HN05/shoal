@@ -1,8 +1,4 @@
-//! Reviews the user or a space writes, as Shoal's reviewer writes its own:
-//! a writer starts a pending review of a workspace below it, the threads it
-//! opens towards that workspace join it and hold their posts, submitting it
-//! at the workspace's HEAD delivers them together, and cancelling it drops
-//! them.
+//! Reviews the user or a space writes.
 use anyhow::{Context as _, Result, bail, ensure};
 use rusqlite::Transaction;
 use shoal_ids::space_ids::SpaceId;

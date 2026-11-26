@@ -1,7 +1,5 @@
-//! The scope a one-shot run holds, of the space it serves, so the run's
-//! `shoal` commands read that space and the spaces below it and change only
-//! what its access allows: nothing for the gate's runs and the reviewer's
-//! answers, its own review for a review's. It ends with the run.
+//! The scope a one-shot run holds, of the space it serves. It ends with the
+//! run.
 use std::{collections::BTreeMap, ffi::OsString};
 
 use shoal_daemon_base::callers::{Access, Caller};

@@ -1,6 +1,5 @@
-//! The checkouts reviews' runs may still have, each a worktree of the
-//! reviewed repository, which hold back the repository's move and removal
-//! until they are removed.
+//! The checkouts reviews' runs may still have, which hold back the
+//! repository's move and removal until they are removed.
 use std::path::{Path, PathBuf};
 
 use shoal_ids::repository_ids::RepositoryId;

@@ -1,8 +1,5 @@
-//! The gate: an agent that decides the approval requests a permission of
-//! `gate` governs before anyone else sees them. Each request runs it once
-//! in the background, read-only in its repository's checkout, continuing
-//! the session of the request's subject; it allows the request, denies it
-//! with a reason, or passes it on for a case the user wrote down.
+//! The gate agent, which decides the approval requests a permission of
+//! `gate` governs, as `docs/design/reviews.md` describes it.
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

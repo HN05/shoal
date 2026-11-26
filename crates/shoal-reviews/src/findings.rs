@@ -1,6 +1,5 @@
-//! The repository's false positives as the resolutions of its findings'
-//! threads keep them: a thread resolved as one is kept there, and drops out
-//! once it is reopened or resolved otherwise.
+//! Keeping a repository's false positives in step with the resolutions of
+//! its findings' threads.
 use anyhow::{Context, Result};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::threads::{Outcome, Sender, Thread, ThreadKind};

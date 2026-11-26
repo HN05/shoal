@@ -1,7 +1,5 @@
-//! Telling a review's workspace that it ended: its agents receive the
-//! threads of its findings or comments in one alert, and whoever
-//! coordinates the workspace a one-line notice, unless a space above wrote
-//! the review.
+//! Telling a review's workspace, and whoever coordinates it, that the
+//! review ended.
 use std::fmt::Write as _;
 
 use crate::{

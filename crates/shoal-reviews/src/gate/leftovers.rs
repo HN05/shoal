@@ -1,6 +1,5 @@
-//! What gate runs leave in a repository's directory: a run there holds back
-//! the repository's move and removal, and a restarted daemon stops and
-//! removes the runs a stopped one left.
+//! What gate runs leave in a repository's directory. A run there holds back
+//! the repository's move and removal.
 use anyhow::Result;
 
 use super::run::remove_run;

@@ -1,7 +1,4 @@
-//! One reviewer run: an AI tool's review command run once in the review's
-//! checkout as a one-shot run, under a scope of the reviewed workspace, and
-//! how it ended: what it wrote through Shoal's commands, a review or an
-//! answer in a finding's thread, or the failure its result names.
+//! One reviewer run and how it ended.
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};

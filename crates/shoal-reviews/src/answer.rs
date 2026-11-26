@@ -1,8 +1,4 @@
-//! The reviewer's answers in its findings' threads: when a thread's holder
-//! posts there instead of resolving it, the reviewer's session for the
-//! review's subject resumes as a one-shot, read-only run in the subject's
-//! place, which posts its answer in the thread with `shoal send`, for
-//! Shoal; when it posts none, Shoal posts why.
+//! The reviewer's answers to posts in its findings' threads.
 use std::sync::Arc;
 
 use anyhow::{Context, Result};

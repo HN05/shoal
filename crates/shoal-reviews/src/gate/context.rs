@@ -1,6 +1,4 @@
-//! What the gate is told of a request: the settings and rules of its
-//! repository's checkout, the requesting space and its issues and PRs, the
-//! commits the request brings and what Shoal finds missing in it.
+//! What the gate is told of a request.
 use anyhow::{Context, Result};
 use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_refs::CommitId;

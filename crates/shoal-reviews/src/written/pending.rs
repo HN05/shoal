@@ -1,9 +1,8 @@
 //! The pending reviews a caller writes, wherever they are kept. The machine
-//! that runs a workspace keeps the reviews of it, so a request made here
-//! reads this machine's and those of the other machines that run a space
-//! its caller sees, and one that acts on the caller's only pending review
-//! acts on the machine that keeps it. A request another machine forwarded
-//! here reads this machine's alone, as it is never forwarded again.
+//! that runs a workspace keeps the reviews of it, so a request reads every
+//! machine that runs a space its caller sees. A request another machine
+//! forwarded here reads this machine's alone, so it is never forwarded
+//! again.
 use anyhow::{Context as _, Result, bail, ensure};
 use futures_util::future::join_all;
 use serde::de::DeserializeOwned;

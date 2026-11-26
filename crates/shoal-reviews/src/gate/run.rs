@@ -1,7 +1,4 @@
-//! Running the gate on one request: once the agent queue admits it, as a
-//! one-shot run in the repository's checkout that resumes its subject's
-//! session or starts one, once more told why when its escalation quotes no
-//! listed case, then once by the fallback agent when it fails.
+//! Running the gate on one request.
 use std::{
     collections::BTreeMap,
     ffi::OsString,

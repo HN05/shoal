@@ -1,10 +1,5 @@
 //! A stand-in for the rest of the daemon, which the tests of reviews build
-//! the service over: one workspace, a worktree of a real repository on its
-//! own branch, recorded in a temporary store, under a global config a test
-//! gives, whose one-shot runs the agent queue admits at once, except a run
-//! protection stopped, which waits until a test says load recovered. The
-//! approval requests the gate decides are kept in memory and change as the
-//! daemon's records do; approving one records it as approved.
+//! the service over, with one workspace in a worktree of a real repository.
 use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::operations::Operations;

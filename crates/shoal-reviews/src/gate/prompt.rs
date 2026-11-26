@@ -1,6 +1,5 @@
-//! The gate's prompt: an opening each session of a space begins with, the
-//! same for every one so a new session reuses its cache, then the request,
-//! of which a resumed session is given only what is new.
+//! The gate's prompt. Its opening is the same for every session of a space,
+//! so a new session reuses the cache.
 use std::fmt::Write as _;
 
 use crate::config::gate::GateRules;

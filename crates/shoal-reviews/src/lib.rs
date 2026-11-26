@@ -1,10 +1,5 @@
-//! The local reviews the daemon runs: queueing them, running each once in
-//! a detached checkout as a one-shot agent run, started in the background
-//! without a session or terminal, opening a thread for each finding the
-//! reviewer made and keeping the repository's false positives as those
-//! threads are resolved, the review gates that wait for them, and the gate agent that decides approval requests. [`Reviews`] holds what they keep in memory and offers their
-//! operations; what they need of the rest of the daemon is the interface in
-//! [`daemon`].
+//! Local reviews, reviews a space writes and the gate agent, as
+//! `docs/design/reviews.md` describes them.
 use shoal_daemon_base::forge_access::ForgeAccess;
 use shoal_daemon_base::operations::Operations;
 use std::{
@@ -54,7 +49,6 @@ use reviews::ReviewId;
 
 pub use run::run;
 
-/// The daemon's reviews, with the daemon's services they use.
 pub struct Reviews {
     store: Store,
     gates: Arc<Gates>,

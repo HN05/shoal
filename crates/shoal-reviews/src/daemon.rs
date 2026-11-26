@@ -1,9 +1,4 @@
-//! What reviews and the gate need of the rest of the daemon, which
-//! implements it: the workspaces they review, their repositories and
-//! settings, the agent queue that admits their runs, the agents and
-//! coordinators that hear of them, the forge a PR's review is posted on,
-//! and for the gate the spaces whose requests it decides and the approvals
-//! that carry out its verdicts.
+//! What reviews and the gate need of the rest of the daemon.
 use shoal_daemon_base::callers::Caller;
 use shoal_protocol::hub::Member;
 use shoal_protocol::protocol::{Body, Operation};
@@ -215,8 +210,6 @@ pub trait Machines: Send + Sync {
     ) -> BoxFuture<'a, Result<Body>>;
 }
 
-/// Everything reviews need of the daemon, which each of their operations
-/// that reaches beyond them takes.
 pub trait Daemon: Spaces + Repositories + Settings + Agents + Forge + Threads + Machines {}
 
 impl<T: Spaces + Repositories + Settings + Agents + Forge + Threads + Machines> Daemon for T {}
@@ -263,7 +256,6 @@ pub trait Approvals: Send + Sync {
     fn prune_proposal_files<'a>(&'a self, denied: &'a ApprovalRequest) -> BoxFuture<'a, ()>;
 }
 
-/// Everything the gate needs of the daemon.
 pub trait GateDaemon: Daemon + Requesters + Approvals {}
 
 impl<T: Daemon + Requesters + Approvals> GateDaemon for T {}

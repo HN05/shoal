@@ -1,9 +1,4 @@
-//! Running queued reviews: each starts at once, takes the workspace's HEAD,
-//! runs its reviewer in a detached checkout at the place of the workspace's
-//! or PR's reviews, under a scope that writes only that review, falls back
-//! to a second reviewer once, dropping what a failed run wrote, and fails
-//! the review when no run submitted it. An answer in a finding's thread
-//! runs its reviewer the same way, under a scope that posts only there.
+//! Running queued reviews and the reviewer's answers in findings' threads.
 use std::{collections::HashSet, path::Path, sync::Arc};
 
 use anyhow::{Context, Result, anyhow};

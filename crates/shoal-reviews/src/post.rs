@@ -1,6 +1,6 @@
-//! Posting a finished PR review on the PR as a comment review by the
-//! workspace's agent account: findings whose last line the PR's diff shows
-//! become line comments, the rest go in the body with the summary.
+//! Posting a finished PR review on the PR. A finding becomes a line comment
+//! only where the PR's diff shows its last line, since the forge refuses a
+//! comment on any other line.
 use std::fmt::Write as _;
 
 use anyhow::Result;

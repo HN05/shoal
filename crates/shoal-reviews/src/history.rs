@@ -1,6 +1,4 @@
-//! What a review receives after its instructions as context: the false
-//! positives of its repository, the earlier reviews of its workspace and,
-//! for a PR, the PR's discussion.
+//! The history a review receives as context after its instructions.
 use std::fmt::Write as _;
 
 use shoal_refs::CommitId;
@@ -17,12 +15,10 @@ pub const PROMPT_LIMIT: usize = 120 * 1024;
 /// earlier reviews room.
 pub const FALSE_POSITIVES_LIMIT: usize = 32 * 1024;
 
-/// The repository's false positives, given newest first, then the earlier
-/// reviews, the threads of their findings with their posts, outcomes and
-/// the changes made for them, then the PR's
-/// discussion, in at most `limit` bytes. Of the false positives the newest
-/// that fit in [`FALSE_POSITIVES_LIMIT`] are kept, and of the rest the
-/// newest part.
+/// The repository's false positives, newest first, then the earlier
+/// reviews with their findings' threads, then the PR's discussion, in at
+/// most `limit` bytes. Of the false positives, the newest that fit in
+/// [`FALSE_POSITIVES_LIMIT`] are kept, and of the rest the newest part.
 pub fn history(
     false_positives: &[FalsePositive],
     earlier: &[Review],

@@ -1,5 +1,4 @@
-//! Reviews as requests read them: one by ID, a workspace's newest, a
-//! listing, and a wait for one to end, each marked outdated once its
+//! Reviews as requests read them, each marked outdated once its
 //! workspace's HEAD has moved past it.
 use std::collections::HashMap;
 

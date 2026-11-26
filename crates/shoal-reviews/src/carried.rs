@@ -1,6 +1,6 @@
-//! The review a workspace's package carries to the machine it goes on: its
-//! queued or running one, which the import there queues again, so a review
-//! a sleep, shutdown or move cut off runs where the workspace continues.
+//! The review a workspace's package carries to the machine it goes to, so
+//! a review a sleep, shutdown or move cut off runs where the workspace
+//! continues.
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;

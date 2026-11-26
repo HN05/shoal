@@ -1,7 +1,6 @@
-//! One-shot agent runs: an AI tool's command started in the background,
-//! without a session or terminal, in a directory its caller chose. It runs
-//! as a process group of its own, which is killed when the run times out, is
-//! cancelled or is dropped, and its output goes to files in a run directory.
+//! One-shot agent runs: an AI tool's command started without a terminal.
+//! Each runs as a process group of its own, which is killed when the run
+//! times out, is cancelled or is dropped.
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     ffi::OsString,

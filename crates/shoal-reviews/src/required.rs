@@ -1,7 +1,5 @@
-//! Review gates: with `[review] require_for_pr`, `require_for_ready` or
-//! `require_for_merge` holding the caller, it opens a new PR, marks work
-//! ready or merges only once a finished review covers the commit it acts on
-//! and every thread it opened or reopened is resolved.
+//! The review gates that `[review] require_for_pr`, `require_for_ready` and
+//! `require_for_merge` set, as `docs/design/permissions.md` describes them.
 use shoal_ids::space_ids::SpaceId;
 use shoal_refs::CommitId;
 use std::fmt::Write as _;

@@ -1,8 +1,6 @@
-//! What a running review's reviewer writes through the scope its run
-//! holds: a `review` thread for each finding, pointing at lines of the
-//! reviewed commit, the reopen of a finding resolved `fixed` whose problem
-//! remains, which waits for the submit, and the submit that finishes the
-//! review and delivers them together.
+//! What a running review's reviewer writes through the scope its run holds.
+//! Its findings and reopens wait for the submit, which delivers them
+//! together.
 use anyhow::{Context as _, Result, ensure};
 use shoal_protocol::{
     space_names::SpaceSelector,

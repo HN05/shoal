@@ -1,7 +1,4 @@
-//! Review rows: queueing and the state changes of a run, whose reviewer
-//! opens a thread for each finding and reopens the earlier ones still
-//! present before it submits, each in the caller's connection or
-//! transaction.
+//! Review rows, each operation in the caller's connection or transaction.
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use shoal_ids::repository_ids::RepositoryId;

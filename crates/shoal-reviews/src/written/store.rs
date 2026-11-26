@@ -1,6 +1,5 @@
-//! The rows of reviews the user or a space writes: starting one, finding a
-//! writer's pending reviews, and ending one, each in the caller's
-//! connection or transaction.
+//! The rows of reviews the user or a space writes, each operation in the
+//! caller's connection or transaction.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;

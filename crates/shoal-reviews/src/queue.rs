@@ -1,6 +1,4 @@
-//! Queueing and cancelling reviews, stopping those a removal ends and
-//! those the machine's sleep would cut off, and the refusals of a
-//! repository's move or removal while its reviews run.
+//! Queueing, cancelling and stopping reviews.
 use anyhow::{Context, Result, bail, ensure};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;

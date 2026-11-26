@@ -1,5 +1,4 @@
-//! What the gate returns: the output schema it is given, and the verdict
-//! read from its result, whose escalation must quote a case the user wrote.
+//! What the gate returns. An escalation must quote a case the user wrote.
 use serde::Deserialize;
 use serde_json::Value;
 

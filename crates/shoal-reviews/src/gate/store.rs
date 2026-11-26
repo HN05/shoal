@@ -1,5 +1,4 @@
-//! The gate's records: a session per space and subject, and the verdicts it
-//! gave each action, which go with the space.
+//! The gate's records of its sessions and verdicts.
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 
