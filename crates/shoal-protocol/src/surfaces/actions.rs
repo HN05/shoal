@@ -42,6 +42,8 @@ pub struct Input {
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputKind {
     Text,
+    /// A number field's text: a number, or left empty, as its field may be.
+    NumberText,
     Number {
         min: Option<f64>,
         max: Option<f64>,
@@ -435,10 +437,7 @@ impl Surface {
         let component = placed.component;
         let number = |field| component.get(field).and_then(Value::as_f64);
         Some(match component.kind {
-            "TextField" if component.literal("variant") == Some("number") => InputKind::Number {
-                min: None,
-                max: None,
-            },
+            "TextField" if component.literal("variant") == Some("number") => InputKind::NumberText,
             "TextField" => InputKind::Text,
             "CheckBox" => InputKind::Boolean,
             "Slider" => InputKind::Number {
@@ -474,6 +473,10 @@ impl InputKind {
         match (self, given) {
             (Self::Text, Value::String(text)) => Ok(Value::String(text)),
             (Self::DateTime(dates), Value::String(text)) => dates.accept(key, &text),
+            (Self::NumberText, Value::String(text)) if text.trim().is_empty() => {
+                Ok(Value::String(String::new()))
+            }
+            (Self::NumberText, given) => number(key, &given, None, None),
             (Self::Number { min, max }, given) => number(key, &given, *min, *max),
             (Self::Boolean, Value::Bool(value)) => Ok(Value::Bool(value)),
             (Self::Boolean, Value::String(text)) => match text.as_str() {
@@ -497,6 +500,7 @@ impl InputKind {
                 max: Some(max),
             } => format!("a number from {min} to {max}"),
             Self::Number { .. } => "a number".into(),
+            Self::NumberText => "a number, or empty to leave it unset".into(),
             Self::Boolean => "true or false".into(),
             Self::Options {
                 options,

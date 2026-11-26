@@ -943,6 +943,34 @@ fn an_answer_s_value_is_entered_where_null_or_an_empty_list_stands() {
 }
 
 #[test]
+fn a_number_field_may_stay_empty_where_a_slider_may_not() {
+    let fields = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["count", "level", "save"]},
+            {"id": "count", "component": "TextField", "label": "Count", "variant": "number",
+             "value": {"@path": "/count"}},
+            {"id": "level", "component": "Slider", "max": 10, "value": {"@path": "/level"}},
+            {"id": "save", "component": "Button", "child": "save-label",
+             "action": {"event": {"name": "save",
+                 "context": {"count": {"@path": "/count"}, "level": {"@path": "/level"}}}}},
+            {"id": "save-label", "component": "Text", "text": "Save"},
+        ]),
+        json!({"count": "", "level": 5}),
+    );
+    let answer = |count: &str, level: &str| {
+        fields.resolve(
+            "save",
+            values(&[("count", json!(count)), ("level", json!(level))]),
+        )
+    };
+    let resolved = answer("", "3").unwrap();
+    assert_eq!(Value::Object(resolved), json!({"count": "", "level": 3}));
+    assert_eq!(answer("7", "3").unwrap()["count"], json!(7));
+    assert!(answer("seven", "3").is_err());
+    assert!(answer("7", "").is_err());
+}
+
+#[test]
 fn an_answer_s_value_that_other_data_blocks_is_refused() {
     let blocked = entering("/person/name", json!({"person": "Grace"}));
     let refused = blocked
