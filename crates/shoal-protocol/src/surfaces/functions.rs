@@ -46,7 +46,11 @@ impl Surface {
             "email" => check(text("value")?.map(|value| email(&value))),
             "regex" => {
                 let pattern = regex(arg("pattern")?.as_str()?)?;
-                check(text("value")?.map(|value| pattern.is_match(&value)))
+                let value = text("value")?;
+                match value {
+                    Some(value) => Some(validation(pattern.is_match(&value).ok()?)),
+                    None => check(None),
+                }
             }
             "and" => self.logical(arg("values")?, scope, |values| {
                 values.iter().all(|value| *value)
@@ -181,17 +185,26 @@ fn email(text: &str) -> bool {
         && domain.split('.').all(|label| !label.is_empty())
 }
 
-/// `pattern` as a regular expression of the A2UI dialect, none where it
-/// is longer than the dialect allows or Shoal cannot compile it.
-fn regex(pattern: &str) -> Option<regex::Regex> {
+/// `pattern` as a regular expression of the A2UI dialect, lookahead
+/// included, none where it is longer than the dialect allows or Shoal
+/// cannot compile it. A match that backtracks past [`MAX_BACKTRACKS`]
+/// fails to run, which leaves the check to a renderer, as the dialect
+/// rejects such a pattern.
+fn regex(pattern: &str) -> Option<fancy_regex::Regex> {
     if pattern.chars().count() > MAX_PATTERN_CHARS {
         return None;
     }
-    regex::RegexBuilder::new(&ecmascript(pattern))
-        .size_limit(1 << 20)
+    fancy_regex::RegexBuilder::new(&ecmascript(pattern))
+        .backtrack_limit(MAX_BACKTRACKS)
         .build()
         .ok()
 }
+
+/// Most steps a regex check's match may backtrack.
+const MAX_BACKTRACKS: usize = 100_000;
+
+/// An ASCII word character, as ECMAScript's `\w` is.
+const WORD: &str = "[A-Za-z0-9_]";
 
 /// `pattern`, written in ECMAScript's syntax, with what Rust's syntax
 /// means otherwise spelled as ECMAScript means it: `\d`, `\w` and `\b`
@@ -205,10 +218,14 @@ fn ecmascript(pattern: &str) -> String {
             ('\\', _) => match characters.next() {
                 Some('d') => "[0-9]".to_owned(),
                 Some('D') => "[^0-9]".to_owned(),
-                Some('w') => "[A-Za-z0-9_]".to_owned(),
+                Some('w') => WORD.to_owned(),
                 Some('W') => "[^A-Za-z0-9_]".to_owned(),
-                Some('b') if !in_class => "(?-u:\\b)".to_owned(),
-                Some('B') if !in_class => "(?-u:\\B)".to_owned(),
+                Some('b') if !in_class => {
+                    format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))")
+                }
+                Some('B') if !in_class => {
+                    format!("(?:(?<={WORD})(?={WORD})|(?<!{WORD})(?!{WORD}))")
+                }
                 Some(escaped) => format!("\\{escaped}"),
                 None => "\\".to_owned(),
             },

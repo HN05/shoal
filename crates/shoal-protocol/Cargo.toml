@@ -28,8 +28,8 @@ anyhow.workspace = true
 base64.workspace = true
 imara-diff = { version = "0.2", default-features = false }
 jsonschema = { version = "0.63", default-features = false }
+fancy-regex = "0.20"
 pulldown-cmark = { version = "0.13", default-features = false }
-regex = "1"
 clap = { workspace = true, features = ["derive"], optional = true }
 rusqlite = { workspace = true, optional = true }
 serde.workspace = true

@@ -742,6 +742,13 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     assert!(answer(&pattern(r"^\w+$"), "é").is_err());
     assert!(answer(&pattern(r"^a.b$"), "a\u{2028}b").is_err());
     answer(&pattern(r"^[\d_]+$"), "1_2").unwrap();
+    // Lookahead and word boundaries work as ECMAScript's do.
+    let named = pattern(r"^(?!admin$)[a-z]+$");
+    assert!(answer(&named, "admin").is_err());
+    answer(&named, "ada").unwrap();
+    let bounded = pattern(r"\bcat\b");
+    assert!(answer(&bounded, "concatenate").is_err());
+    answer(&bounded, "a cat").unwrap();
 }
 
 #[test]
