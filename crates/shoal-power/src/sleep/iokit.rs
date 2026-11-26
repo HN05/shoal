@@ -1,10 +1,7 @@
-//! IOKit's system power notifications, with IOKit and Core Foundation
-//! loaded at run time, as the release cross-builds macOS against an SDK
-//! without Apple frameworks. A thread of its own runs the run loop the
-//! notifications arrive on. macOS waits for a will-sleep notification's
-//! acknowledgement up to [`ALLOWANCE`]; it lets an idle sleep it asks about
-//! go at once, and tells a client registered this way only of full wakes,
-//! so a dark wake passes unseen.
+//! IOKit's system power notifications. IOKit and Core Foundation load at
+//! run time, since the release cross-builds macOS against an SDK without
+//! Apple frameworks. macOS tells a client registered this way only of full
+//! wakes, so a dark wake passes unseen.
 use std::{
     ffi::{CStr, c_void},
     time::Duration,

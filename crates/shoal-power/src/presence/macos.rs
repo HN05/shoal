@@ -1,7 +1,4 @@
-//! macOS's view of the user's presence, as `ioreg` and `pmset` print it:
-//! IOKit's `AppleClamshellState` and `AppleClamshellCausesSleep` on a Mac
-//! with a lid, and the time since the user's last input against the
-//! system's idle sleep timer.
+//! macOS's view of the user's presence, as `ioreg` and `pmset` print it.
 use std::time::Duration;
 
 use anyhow::{Context, Result};

@@ -1,7 +1,4 @@
-//! Whether the user walked away from this machine: its lid is closed, or,
-//! on a machine without a lid or docked with its lid closed, as with an
-//! external display, it has gone without the user's input as long as the
-//! platform reads as idle.
+//! Whether the user walked away from this machine.
 use anyhow::Result;
 
 #[cfg(target_os = "linux")]

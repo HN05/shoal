@@ -1,5 +1,4 @@
-//! Platforms that announce no sleep, where the hub reads a sleeping
-//! machine as one that dropped.
+//! Platforms that announce no sleep.
 use super::{PowerEvent, PowerEvents};
 
 pub enum Unsupported {}

@@ -1,7 +1,4 @@
-//! The platform's announcements of the machine's sleep, which waits for
-//! the daemon a while: logind's `PrepareForSleep` under a sleep delay lock
-//! on Linux, IOKit's will-sleep notification on macOS, whose
-//! acknowledgement it may delay.
+//! The platform's announcements of the machine's sleep.
 use std::time::Duration;
 
 #[cfg(target_os = "macos")]

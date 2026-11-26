@@ -1,4 +1,3 @@
-//! systemd-logind as the login manager, over the system bus.
 use std::time::Duration;
 
 use anyhow::{Context, Result};

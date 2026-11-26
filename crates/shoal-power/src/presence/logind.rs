@@ -1,11 +1,8 @@
-//! systemd-logind's view of the user's presence, over the system bus: its
-//! `LidClosed` and `Docked` on a machine with a lid, and the idle hint of
-//! the user's sessions, which their desktop sets once it reads them as idle.
-//! The user's hint, unlike the manager's, ignores the idle inhibitor that
-//! keep-awake holds. A user without a session that takes input, as on a
-//! headless machine whose user lingers with only its service manager's
-//! session, reads as idle to logind but gives no input to wait for, so
-//! counts as present.
+//! systemd-logind's view of the user's presence, over the system bus.
+//! It reads the idle hint of the user's sessions, not the manager's, which
+//! the idle inhibitor that keep-awake holds would keep from idling. A user
+//! without a session that takes input, as on a headless machine, reads as
+//! idle to logind but gives no input to wait for, so counts as present.
 use anyhow::{Context, Result};
 use zbus::proxy::CacheProperties;
 

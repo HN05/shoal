@@ -1,6 +1,4 @@
-//! systemd-logind's sleep announcements, over the system bus: the daemon
-//! holds a sleep delay lock while the machine is awake, which logind waits
-//! for up to its delay limit once it announces a sleep.
+//! systemd-logind's sleep announcements, over the system bus.
 use std::time::Duration;
 
 use anyhow::{Context, Result};

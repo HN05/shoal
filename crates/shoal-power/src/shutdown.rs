@@ -1,6 +1,5 @@
 //! The login manager's announcements of a system shutdown and the delay
-//! lock that holds one off; without a login manager, as on macOS, the
-//! signals of the shutdown itself are all the daemon learns.
+//! lock that holds one off.
 use std::time::Duration;
 
 use anyhow::Result;

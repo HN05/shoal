@@ -1,6 +1,4 @@
-//! systemd-logind's manager over the system bus, whose delay locks and
-//! announcements hold off a shutdown or a sleep until the daemon is ready,
-//! and which says whether the lid is closed and the machine docked.
+//! systemd-logind's manager over the system bus.
 use std::time::Duration;
 
 use zbus::OwnedFd;
