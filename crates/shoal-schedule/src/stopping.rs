@@ -5,13 +5,14 @@ use std::{
     time::Duration,
 };
 
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_time::UnixTime;
 
 /// The running work a stop may free resources from.
 #[derive(Debug, Default)]
 pub struct Running {
     pub jobs: Vec<RunningJob>,
+    pub runs: Vec<RunningRun>,
     pub demos: Vec<RunningDemo>,
     pub agents: Vec<RunningAgent>,
     pub parents: HashMap<SpaceId, SpaceId>,
@@ -26,6 +27,17 @@ pub struct Running {
 pub struct RunningJob {
     pub space: SpaceId,
     pub started: UnixTime,
+}
+
+/// A running `shoal run` command or seed build, which protection stops
+/// through its admission.
+#[derive(Debug)]
+pub struct RunningRun {
+    /// The queue ID it waited under.
+    pub id: QueueEntryId,
+    /// None for a seed build.
+    pub space: Option<SpaceId>,
+    pub running_for: Duration,
 }
 
 #[derive(Debug)]
@@ -50,8 +62,8 @@ pub struct RunningAgent {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Stop {
-    /// The space whose work it stops.
-    pub space: SpaceId,
+    /// The space whose work it stops; none for a seed build.
+    pub space: Option<SpaceId>,
     pub work: Work,
 }
 
@@ -59,6 +71,8 @@ pub struct Stop {
 pub enum Work {
     /// The CI job of the stop's workspace.
     Job,
+    /// The `shoal run` command or seed build that waited under this ID.
+    Run(QueueEntryId),
     Demo(ExecutionId),
     Agent {
         execution: ExecutionId,
@@ -70,7 +84,7 @@ impl Stop {
     pub fn agent(&self) -> Option<&ExecutionId> {
         match &self.work {
             Work::Agent { execution, .. } => Some(execution),
-            Work::Job | Work::Demo(_) => None,
+            Work::Job | Work::Run(_) | Work::Demo(_) => None,
         }
     }
 }
@@ -88,25 +102,31 @@ impl StopOrder {
     pub fn new(running: &Running, ranked: &[SpaceId]) -> Self {
         let mut jobs: Vec<&RunningJob> = running.jobs.iter().collect();
         jobs.sort_by_key(|job| std::cmp::Reverse(job.started));
+        let mut runs: Vec<&RunningRun> = running.runs.iter().collect();
+        runs.sort_by_key(|run| run.running_for);
         let mut demos: Vec<&RunningDemo> = running.demos.iter().collect();
         demos.sort_by_key(|demo| std::cmp::Reverse(demo.started));
         let jobs = jobs.into_iter().map(|job| Stop {
-            space: job.space.clone(),
+            space: Some(job.space.clone()),
             work: Work::Job,
         });
+        let runs = runs.into_iter().map(|run| Stop {
+            space: run.space.clone(),
+            work: Work::Run(run.id.clone()),
+        });
         let demos = demos.into_iter().map(|demo| Stop {
-            space: demo.space.clone(),
+            space: Some(demo.space.clone()),
             work: Work::Demo(demo.execution.clone()),
         });
         let agents = leaves_first(running, ranked).into_iter().map(|agent| Stop {
-            space: agent.space.clone(),
+            space: Some(agent.space.clone()),
             work: Work::Agent {
                 execution: agent.execution.clone(),
                 light: agent.light,
             },
         });
         Self {
-            stops: jobs.chain(demos).chain(agents).collect(),
+            stops: jobs.chain(runs).chain(demos).chain(agents).collect(),
             parents: running.parents.clone(),
         }
     }
@@ -118,11 +138,17 @@ impl StopOrder {
     /// What stopping `stop` stops, in order: for an agent, every running
     /// agent below its space, leaves first, then the agent itself.
     pub fn with_agents_below<'a>(&'a self, stop: &'a Stop) -> Vec<&'a Stop> {
-        let mut stops: Vec<&Stop> = match stop.work {
-            Work::Agent { .. } => (self.stops.iter())
-                .filter(|other| other.agent().is_some() && self.is_below(&other.space, &stop.space))
+        let mut stops: Vec<&Stop> = match (&stop.work, &stop.space) {
+            (Work::Agent { .. }, Some(space)) => (self.stops.iter())
+                .filter(|other| other.agent().is_some())
+                .filter(|other| {
+                    other
+                        .space
+                        .as_ref()
+                        .is_some_and(|below| self.is_below(below, space))
+                })
                 .collect(),
-            Work::Job | Work::Demo(_) => Vec::new(),
+            _ => Vec::new(),
         };
         stops.push(stop);
         stops

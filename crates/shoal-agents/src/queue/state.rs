@@ -481,6 +481,14 @@ impl AgentQueue {
         stop.map(|stop| stop(reason)).is_some()
     }
 
+    /// What the admitted command or seed build `id` holds now, if it runs.
+    pub fn measured_using(&self, id: &QueueEntryId) -> Option<u64> {
+        let number = oneshot_number(id)?;
+        let oneshots = self.oneshots.lock().unwrap();
+        let run = oneshots.runs.get(&number)?;
+        run.admitted.borrow().is_some().then_some(run.using)
+    }
+
     /// Stop the admitted command or seed build `id` for protection, which
     /// names its `reason`, returning whether it was there to stop.
     pub fn stop_measured(&self, id: &QueueEntryId, reason: &str) -> bool {

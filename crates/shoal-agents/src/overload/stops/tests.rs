@@ -18,7 +18,7 @@ async fn a_restarted_demo_waits_for_recovery_before_load_picks_it_again() {
     let fixture = Arc::new(Fixture::new().await);
     let execution: ExecutionId = "demo".into();
     let demo = Stop {
-        space: "space".into(),
+        space: Some("space".into()),
         work: Work::Demo(execution.clone()),
     };
     assert!(fixture.agents.frees(&*fixture.daemon, &demo, Pressure::Cpu));
@@ -235,4 +235,47 @@ async fn load_leaves_a_coordinator_running_above_an_agent_it_cannot_reach() {
             .await
     );
     assert!(!*coordinator.stop.borrow());
+}
+
+/// Load stops a command holding memory before the heavy chat's agent that
+/// runs beside it, and passes over one that holds next to nothing.
+#[tokio::test]
+async fn load_stops_a_command_holding_memory_before_an_agent() {
+    use crate::queue::{
+        Serving,
+        state::{Measured, MeasuredKind},
+    };
+    let fixture = Fixture::new().await;
+    let execution = chat_agent(&fixture, "pair").await;
+    let repo = fixture.repository().await;
+    let queue = &fixture.agents.agent_queue;
+    let (stops, stopped) = std::sync::mpsc::channel();
+    let command = |name: &str, using: u64| {
+        let measured = Measured {
+            kind: MeasuredKind::Command(name.into()),
+            expected: 8 << 30,
+        };
+        let serving = Serving {
+            space: "space".into(),
+            queued_after: 0,
+        };
+        let stops = stops.clone();
+        let name = name.to_owned();
+        let stop = move |_: &str| drop(stops.send(name));
+        let admission = queue.request_measured(&repo.id, Some(serving), measured, false, stop);
+        admission.admit_now();
+        admission.using(using);
+        admission
+    };
+    let _idle = command("idle", 1 << 20);
+    let _building = command("building", 4 << 30);
+    let stop = |pressure| fixture.agents.stop_for_overload(&*fixture.daemon, pressure);
+
+    assert!(stop(Pressure::Memory).await);
+    assert_eq!(stopped.try_recv().unwrap(), "building");
+    assert!(!*execution.stop.borrow());
+
+    assert!(stop(Pressure::Memory).await);
+    assert!(stopped.try_recv().is_err());
+    assert!(*execution.stop.borrow());
 }

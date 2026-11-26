@@ -1,6 +1,6 @@
 //! What load protection stops next. `docs/design/protection.md` gives the order
 //! and why.
-use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
+use shoal_ids::{execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_schedule::stopping::{Stop, Work};
 
 use super::Pressure;
@@ -17,7 +17,7 @@ impl Agents {
     /// Stop work under `pressure`, returning whether anything stopped.
     pub async fn stop_for_overload(&self, daemon: &dyn Daemon, pressure: Pressure) -> bool {
         if self.agent_queue.stop_oneshots(OneShotStop::Newest) > 0 {
-            log!("{}: stopped a one-shot agent run", pressure.reason());
+            log!("{}: stopped a review", pressure.reason());
             return true;
         }
         let turns = self.protection_turns().await;
@@ -26,10 +26,8 @@ impl Agents {
         for stop in (order.stops().iter()).filter(|stop| self.frees(daemon, stop, pressure)) {
             let stopped = match &stop.work {
                 Work::Job => self.stop_job_for(daemon, stop, pressure).await,
-                Work::Demo(execution) => {
-                    self.restart_demo_for(daemon, stop, execution, pressure)
-                        .await
-                }
+                Work::Run(id) => self.stop_run_for(id, pressure),
+                Work::Demo(execution) => self.restart_demo_for(daemon, execution, pressure).await,
                 // An asleep agent's running lease goes before any agent,
                 // which it picks among itself, and whose stop starts a new
                 // recovery epoch.
@@ -67,9 +65,18 @@ impl Agents {
     /// Whether stopping `stop` for its own sake frees what `pressure`
     /// presses.
     pub fn frees(&self, daemon: &dyn Daemon, stop: &Stop, pressure: Pressure) -> bool {
-        let worth = || pressure != Pressure::Memory || self.holds_memory(daemon, &stop.space);
+        let worth = || {
+            let space = stop.space.as_ref();
+            pressure != Pressure::Memory
+                || space.is_none_or(|space| self.holds_memory(daemon, space))
+        };
         match &stop.work {
             Work::Job => true,
+            Work::Run(id) => {
+                let using = self.agent_queue.measured_using(id);
+                pressure != Pressure::Memory
+                    || using.is_some_and(|using| using >= NEGLIGIBLE_MEMORY)
+            }
             Work::Demo(execution) => !self.overload_recovery.restarted_demo(execution) && worth(),
             Work::Agent { light, .. } => !light && worth(),
         }
@@ -87,19 +94,31 @@ impl Agents {
     /// recover, returning whether it did.
     async fn stop_job_for(&self, daemon: &dyn Daemon, stop: &Stop, pressure: Pressure) -> bool {
         let reason = pressure.reason();
-        let stopped = daemon.stop_job_for_overload(&stop.space, reason);
+        let Some(space) = &stop.space else {
+            return false;
+        };
+        let stopped = daemon.stop_job_for_overload(space, reason);
         stopped.await.unwrap_or_else(|error| {
-            log!("{reason}: CI job of {} not stopped: {error:#}", stop.space);
+            log!("{reason}: CI job of {space} not stopped: {error:#}");
             false
         })
     }
 
-    /// Restart the command of the demo `execution` in `stop`'s space for
-    /// `pressure`, returning whether one ran.
+    /// Stop the command or seed build that waited under `id` for
+    /// `pressure`, to run again once it fits, returning whether it did.
+    fn stop_run_for(&self, id: &QueueEntryId, pressure: Pressure) -> bool {
+        let stopped = self.agent_queue.stop_measured(id, pressure.reason());
+        if stopped {
+            log!("{}: stopped {id}", pressure.reason());
+        }
+        stopped
+    }
+
+    /// Restart the command of the demo `execution` for `pressure`,
+    /// returning whether one ran.
     async fn restart_demo_for(
         &self,
         daemon: &dyn Daemon,
-        stop: &Stop,
         execution: &ExecutionId,
         pressure: Pressure,
     ) -> bool {
@@ -108,15 +127,12 @@ impl Agents {
         match daemon.restart_demo_command(execution).await {
             Ok(restarted) => {
                 if restarted {
-                    log!(
-                        "{reason}: restarted the command of a demo in {}",
-                        stop.space
-                    );
+                    log!("{reason}: restarted the command of demo {execution}");
                 }
                 restarted
             }
             Err(error) => {
-                log!("{reason}: demo in {} not restarted: {error:#}", stop.space);
+                log!("{reason}: demo {execution} not restarted: {error:#}");
                 false
             }
         }

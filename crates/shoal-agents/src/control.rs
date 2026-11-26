@@ -1107,10 +1107,10 @@ impl Agents {
             // The spaces whose agent did not stop, which keep those above.
             let mut kept: Vec<&SpaceId> = Vec::new();
             for stop in &chosen {
-                let Some(id) = stop.agent() else {
+                let (Some(id), Some(space)) = (stop.agent(), &stop.space) else {
                     continue;
                 };
-                if kept.iter().any(|space| order.is_below(space, &stop.space)) {
+                if kept.iter().any(|kept| order.is_below(kept, space)) {
                     continue;
                 }
                 let turn = turns.get(id).copied();
@@ -1118,7 +1118,7 @@ impl Agents {
                     Some(agent) => stopped.push(agent),
                     None => {
                         raced |= turn.is_some_and(|turn| turn.idle());
-                        kept.push(&stop.space);
+                        kept.push(space);
                     }
                 }
             }

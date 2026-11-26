@@ -1,7 +1,9 @@
 //! The running work the stop order reads, from what the daemon records now. A
 //! part that cannot be read is left out and logged, so the rest still stops.
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
-use shoal_schedule::stopping::{Running, RunningAgent, RunningDemo, RunningJob, StopOrder};
+use shoal_schedule::stopping::{
+    Running, RunningAgent, RunningDemo, RunningJob, RunningRun, StopOrder,
+};
 use std::collections::{HashMap, HashSet};
 
 use crate::Agents;
@@ -19,6 +21,7 @@ impl Agents {
     ) -> StopOrder {
         let running = Running {
             jobs: self.running_jobs(daemon).await,
+            runs: self.running_runs(),
             demos: self.running_demos(daemon).await,
             agents: self.stoppable_agents(daemon, turns).await,
             parents: self.space_parents().await,
@@ -33,6 +36,17 @@ impl Agents {
             log!("CI jobs unavailable to the stop order: {error:#}");
             Vec::new()
         })
+    }
+
+    /// The admitted commands and seed builds protection may stop.
+    fn running_runs(&self) -> Vec<RunningRun> {
+        (self.agent_queue.running_measured().into_iter())
+            .map(|run| RunningRun {
+                id: run.id,
+                space: run.space,
+                running_for: run.running_for,
+            })
+            .collect()
     }
 
     async fn running_demos(&self, daemon: &dyn Daemon) -> Vec<RunningDemo> {

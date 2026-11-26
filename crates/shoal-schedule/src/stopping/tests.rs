@@ -24,11 +24,50 @@ fn order(running: &Running, ranked: &[&str]) -> Vec<String> {
 fn names<'a>(stops: impl Iterator<Item = &'a Stop>) -> Vec<String> {
     stops
         .map(|stop| match &stop.work {
-            Work::Job => format!("job {}", stop.space),
+            Work::Job => format!("job {}", stop.space.as_ref().unwrap()),
+            Work::Run(id) => format!("run {id}"),
             Work::Demo(execution) => format!("demo {execution}"),
             Work::Agent { execution, .. } => execution.to_string(),
         })
         .collect()
+}
+
+#[test]
+fn commands_and_seed_builds_go_newest_first_between_jobs_and_demos() {
+    let run = |id: &str, space: Option<&str>, seconds| RunningRun {
+        id: id.into(),
+        space: space.map(Into::into),
+        running_for: Duration::from_secs(seconds),
+    };
+    let running = Running {
+        jobs: vec![RunningJob {
+            space: "ci".into(),
+            started: at(10),
+        }],
+        runs: vec![
+            run("test", Some("w"), 300),
+            run("seed", None, 20),
+            run("build", Some("w"), 60),
+        ],
+        demos: vec![RunningDemo {
+            execution: "web".into(),
+            space: "w".into(),
+            started: at(5),
+        }],
+        agents: vec![agent("a", "w")],
+        ..Running::default()
+    };
+    assert_eq!(
+        order(&running, &[]),
+        [
+            "job ci",
+            "run seed",
+            "run build",
+            "run test",
+            "demo web",
+            "a"
+        ]
+    );
 }
 
 #[test]

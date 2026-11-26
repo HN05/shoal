@@ -101,7 +101,15 @@ impl Agents {
         let jobs = daemon.job_executions().await?;
         let entries: Vec<(Option<ExecutionId>, bool)> = (order.stops().iter())
             .map(|stop| match &stop.work {
-                Work::Job => (jobs.get(&stop.space).cloned(), true),
+                Work::Job => (
+                    stop.space
+                        .as_ref()
+                        .and_then(|space| jobs.get(space))
+                        .cloned(),
+                    true,
+                ),
+                // A command's or seed build's scope is its own wrapper's.
+                Work::Run(_) => (None, false),
                 Work::Demo(execution) | Work::Agent { execution, .. } => {
                     (Some(execution.clone()), false)
                 }
