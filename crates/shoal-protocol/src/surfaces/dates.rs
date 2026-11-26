@@ -114,13 +114,15 @@ enum Moment {
 
 impl Moment {
     /// The moment `text` writes, none when it is no ISO 8601 date or time.
+    /// Its `T` and `Z` may be lowercase, as RFC 3339 and the schema allow.
     fn parse(text: &str) -> Option<Self> {
+        let text = text.to_ascii_uppercase();
         match text.split_once('T') {
             Some((date, time)) => {
                 let (days, seconds) = (days(date)?, seconds(time)?);
                 Some(Self::DateTime(days as f64 * 86_400.0 + seconds))
             }
-            None => (days(text).map(Self::Date)).or_else(|| seconds(text).map(Self::Time)),
+            None => (days(&text).map(Self::Date)).or_else(|| seconds(&text).map(Self::Time)),
         }
     }
 

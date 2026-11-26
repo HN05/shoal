@@ -643,6 +643,24 @@ fn nested_list_items_give_their_buttons_ids_of_their_own() {
 }
 
 #[test]
+fn a_date_and_time_may_write_its_t_and_z_lowercase() {
+    let meeting = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["at", "book"]},
+            {"id": "at", "component": "DateTimeInput", "enableDate": true, "enableTime": true,
+             "min": "2026-12-10t00:00:00z", "value": {"@path": "/at"}},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"at": {"@path": "/at"}}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"at": ""}),
+    );
+    let answer = |at: &str| meeting.resolve("book", values(&[("at", json!(at))]));
+    assert!(answer("2026-12-01T00:00:00Z").is_err());
+    answer("2026-12-11t09:00:00z").unwrap();
+}
+
+#[test]
 fn a_date_input_in_a_list_item_reads_its_bounds_there() {
     let booking = surface(
         json!([
