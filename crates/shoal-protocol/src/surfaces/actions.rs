@@ -171,20 +171,10 @@ impl Surface {
         let action = (entered.action(id))
             .filter(|entered| values.keys().all(|key| entered.takes(key)))
             .unwrap_or(action);
-        let kept: Vec<&Input> = (action.inputs.iter())
-            .filter(|input| !values.contains_key(&input.key))
-            .collect();
         for (key, given) in values {
             let input = action.input(&key);
             let accepted = input.kind.accept(&key, given)?;
             entered.enter(&input.path, accepted)?;
-        }
-        // A value the answer keeps must still fit the bounds the values it
-        // gives set, such as an end date after a later start.
-        for input in kept {
-            if let Some(value) = entered.data(&input.path).filter(|value| !value.is_null()) {
-                input.kind.accept(&input.key, value.clone())?;
-            }
         }
         entered.check_answer(&action)?;
         Ok(entered.dispatched(&action))
@@ -447,7 +437,7 @@ fn entering(placed: &Placed<'_>, path: &str) -> bool {
 impl Surface {
     /// What `placed`, one of its inputs, enters into the data its value
     /// binds.
-    fn entry(&self, placed: &Placed<'_>) -> Option<InputKind> {
+    pub(super) fn entry(&self, placed: &Placed<'_>) -> Option<InputKind> {
         let component = placed.component;
         let number = |field| component.get(field).and_then(Value::as_f64);
         Some(match component.kind {
@@ -490,7 +480,7 @@ impl Surface {
 impl InputKind {
     /// `given` as the value of the input `key`, which takes text the way
     /// `--value KEY=VALUE` passes it as well as typed JSON.
-    fn accept(&self, key: &str, given: Value) -> Result<Value> {
+    pub(super) fn accept(&self, key: &str, given: Value) -> Result<Value> {
         match (self, given) {
             (Self::Text, Value::String(text)) => Ok(Value::String(text)),
             (Self::DateTime(dates), Value::String(text)) => dates.accept(key, &text),

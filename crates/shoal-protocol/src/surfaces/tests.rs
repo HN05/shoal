@@ -831,6 +831,23 @@ fn every_control_of_an_answer_s_value_checks_it() {
     twice
         .resolve("save", values(&[("name", json!("Ada"))]))
         .unwrap();
+    // Each holds the value to its own bounds too.
+    let day = json!({"@path": "/day"});
+    let dated = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["any", "later", "book"]},
+            {"id": "any", "component": "DateTimeInput", "enableDate": true, "value": day},
+            {"id": "later", "component": "DateTimeInput", "enableDate": true,
+             "min": "2026-12-10", "value": day},
+            {"id": "book", "component": "Button", "child": "book-label",
+             "action": {"event": {"name": "book", "context": {"day": day}}}},
+            {"id": "book-label", "component": "Text", "text": "Book"},
+        ]),
+        json!({"day": ""}),
+    );
+    let answer = |value: &str| dated.resolve("book", values(&[("day", json!(value))]));
+    assert!(answer("2026-12-01").is_err());
+    answer("2026-12-12").unwrap();
 }
 
 #[test]
