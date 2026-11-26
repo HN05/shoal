@@ -1,7 +1,5 @@
 //! Taking over a space whose machine is offline from the package the hub
-//! keeps of it: `shoal restore` of the space fetches the package and imports
-//! it under the space's ID, as `shoal restore --from` does, whose claim at
-//! the hub makes the space this machine's.
+//! keeps of it. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -19,24 +17,19 @@ use crate::{
     {log, scope::Caller},
 };
 
-/// A space of an offline machine that a restore takes over from the hub's
-/// package of it.
 pub(super) struct Takeover {
     id: SpaceId,
-    /// The name of the machine it runs on.
     machine: String,
     kept: KeptPackage,
-    /// Since when that machine had changes of it the package lacks, as it
-    /// last reported.
+    /// Since when that machine had changes the package lacks, as it last
+    /// reported.
     unsent_since: Option<UnixTime>,
 }
 
 impl Spaces {
-    /// The space `selector` names on another joined machine that is
-    /// offline, with the package the hub keeps of it; none for a space this
-    /// machine has a record of, one whose machine is connected, one no
-    /// package keeps, and while the hub cannot be asked, as a restore goes
-    /// on then.
+    /// None for a space this machine has a record of, one whose machine is
+    /// connected, one no package keeps, and while the hub cannot be asked,
+    /// as a restore goes on then.
     pub(super) async fn takeover(
         &self,
         daemon: &dyn Daemon,
@@ -58,8 +51,7 @@ impl Spaces {
         }
     }
 
-    /// The space `selector` names on another joined machine that is
-    /// offline, with the package the hub keeps of it, as the hub answers.
+    /// As the hub answers.
     async fn offline_package(
         &self,
         daemon: &dyn Daemon,
@@ -83,9 +75,8 @@ impl Spaces {
         }))
     }
 
-    /// The removed space `selector` names, here or, for a space whose
-    /// machine is offline, as the hub's package of it records it, which a
-    /// restore takes over.
+    /// Here, or for a space whose machine is offline, as the hub's package of
+    /// it records it.
     pub async fn restorable_space(
         &self,
         daemon: &dyn Daemon,
@@ -101,8 +92,7 @@ impl Spaces {
         }
     }
 
-    /// Take over the space `takeover` names: fetch the hub's package of it
-    /// and import it under its ID for `caller`, warning of the changes its
+    /// Imports it under its ID for `caller`, warning of the changes its
     /// machine made that the package lacks.
     pub(super) async fn take_over_from_package(
         &self,
@@ -127,8 +117,7 @@ impl Spaces {
         Ok(restored)
     }
 
-    /// Refuse a scoped `caller` the takeover of the space `selector` names
-    /// unless its `admin` permission allows it, since a takeover moves the
+    /// Allowed only by the `admin` permission, since a takeover moves the
     /// space here as an import does.
     pub async fn ensure_takeover_allowed(
         &self,
@@ -148,16 +137,14 @@ impl Spaces {
             .await
     }
 
-    /// Whether this machine has a removal record of the space `id`.
     pub(crate) async fn removed_here(&self, id: &SpaceId) -> Result<bool> {
         let removed = self.removed_spaces().await?;
         Ok(removed.iter().any(|removed| &removed.space_id == id))
     }
 }
 
-/// The warning that a package lacks the changes its machine, named
-/// `machine`, made `unsent_since`, naming how old the oldest is at `now`;
-/// none for a package that has them all.
+/// Names how old the oldest change is at `now`. None for a package that has
+/// them all.
 pub fn lacking(machine: &str, unsent_since: Option<UnixTime>, now: UnixTime) -> Option<String> {
     let since = unsent_since?;
     Some(format!(

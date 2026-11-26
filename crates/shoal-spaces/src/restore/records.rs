@@ -1,6 +1,5 @@
-//! Removal records: every removal of a chat, and of an existing worktree
-//! with a checkpoint, records what `shoal restore` needs to reopen the
-//! space, until the record expires.
+//! Removal records: what `shoal restore` needs to reopen a space, kept
+//! until the record expires.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::execution::recovery::{LastSession, LastSessionExt, StoppedAgent};
@@ -21,8 +20,6 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// What a removal record keeps of a workspace's place: `checkpoint` and
-/// what `worktree` builds on.
 fn kept_workspace(worktree: &Worktree, checkpoint: Checkpoint) -> RemovedKind {
     RemovedKind::Workspace(Box::new(KeptWorkspace {
         checkpoint,
@@ -33,8 +30,7 @@ fn kept_workspace(worktree: &Worktree, checkpoint: Checkpoint) -> RemovedKind {
     }))
 }
 
-/// What a removal record keeps of the chat `space`: how and where its agent
-/// ran.
+/// How and where its agent ran.
 fn kept_chat(space: &Space) -> RemovedKind {
     RemovedKind::Chat {
         chat: Box::new(KeptChat {
@@ -46,16 +42,15 @@ fn kept_chat(space: &Space) -> RemovedKind {
     }
 }
 
-/// SQL true when the space of a removal record is gone: no space has its ID.
+/// True when no space has the record's ID.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
 
 impl Spaces {
-    /// Take the removal's checkpoint and record what `shoal restore` reopens
-    /// before any file is deleted, so an interrupted or failed removal stays
-    /// restorable, leaving out the agent `carried_on` ran as, which carries on
-    /// in the chat the workspace becomes, which takes the record an ID of its
-    /// own once it commits. Records of spaces that still exist are not
-    /// listed.
+    /// Takes the checkpoint and records the space before any file is
+    /// deleted, so an interrupted or failed removal stays restorable. Leaves
+    /// out the agent `carried_on` ran as, which carries on in the chat the
+    /// workspace becomes; that chat gives the record an ID of its own once
+    /// it commits. Records of spaces that still exist are not listed.
     pub async fn save_removal_record(
         &self,
         daemon: &dyn Daemon,
@@ -67,7 +62,7 @@ impl Spaces {
             .checkpoint(daemon, workspace, CheckpointCause::Removal, None)
             .await?;
         // Removal refuses link changes, so links read now are final, unlike
-        // those of the snapshot taken before it started; the spaces below go
+        // those of the snapshot taken before it started. The spaces below go
         // first, so its parent is still there.
         let Workspace { links, parent, .. } = self.workspace_by_id(&workspace.id).await?;
         // A parent on another machine stays, so a restore keeps it.
@@ -100,10 +95,9 @@ impl Spaces {
         Ok(removed)
     }
 
-    /// Record what `shoal restore` reopens of the chat `id`, which `cause`
-    /// removes, before its state is deleted: how and where its agent ran,
-    /// with the stopped agent and last session it saved, until the
-    /// retention its files have too.
+    /// Runs before its state is deleted. Keeps how and where its agent ran,
+    /// with the stopped agent and last session it saved, for the retention
+    /// its files have too.
     pub async fn save_chat_removal_record(
         &self,
         daemon: &dyn Daemon,
@@ -117,10 +111,9 @@ impl Spaces {
         Ok(removed)
     }
 
-    /// What a removal of the space `id` for `cause` would record of it now,
-    /// without recording it: its stopped agents and last sessions, and a
+    /// Records nothing. Holds the stopped agents and last sessions, and a
     /// workspace at `checkpoint`, which the caller took, until that expires,
-    /// or how and where a chat's agent ran, until the retention its files
+    /// or how and where a chat's agent ran, for the retention its files
     /// have.
     pub async fn present_removal_record(
         &self,
@@ -164,9 +157,8 @@ impl Spaces {
         })
     }
 
-    /// The stopped agents and last sessions the space `id` saved, which its
-    /// removal deletes with its state, leaving out the agent `carried_on`
-    /// ran as, which carries on elsewhere.
+    /// The removal deletes them with its state. Leaves out the agent
+    /// `carried_on` ran as, which carries on elsewhere.
     fn saved_agents(
         &self,
         id: &SpaceId,
@@ -180,11 +172,10 @@ impl Spaces {
         Ok((agents, last_sessions))
     }
 
-    /// Whether a checkpoint taken for `cause` would keep all of the
-    /// workspace's unsaved files, or those left of a worktree Git disowned:
-    /// none is a nested repository or a changed submodule, and a capped
-    /// checkpoint's are within the archive limit; or they are a copy's
-    /// starting files, which its starting checkpoint already holds.
+    /// Includes what is left of a worktree Git disowned. None may be a nested
+    /// repository or a changed submodule, and a capped checkpoint's must be
+    /// within the archive limit. A copy's starting files always count, since
+    /// its starting checkpoint already holds them.
     pub async fn checkpoint_keeps_unsaved_files(
         &self,
         daemon: &dyn Daemon,
@@ -213,9 +204,9 @@ impl Spaces {
         Ok(bytes <= settings.archive_max_bytes())
     }
 
-    /// Whether merged cleanup may archive the workspace's unsaved files: the
-    /// branch has commits of its own, so they are left over from merged work
-    /// rather than work never committed, and a checkpoint keeps them.
+    /// The branch must have commits of its own, so the files are left over
+    /// from merged work rather than work never committed, and a checkpoint
+    /// must keep them.
     pub async fn unsaved_files_are_leftovers(
         &self,
         daemon: &dyn Daemon,
@@ -235,15 +226,14 @@ impl Spaces {
         )
     }
 
-    /// The workspaces among [`Self::removed_spaces`].
     pub async fn removed_workspaces(&self) -> Result<Vec<RemovedSpace>> {
         let mut removed = self.removed_spaces().await?;
         removed.retain(|removed| removed.workspace().is_some());
         Ok(removed)
     }
 
-    /// Restorable spaces, newest first; expired ones are gone even before
-    /// the sweep deletes them.
+    /// Newest first. Expired ones are gone even before the sweep deletes
+    /// them.
     pub async fn removed_spaces(&self) -> Result<Vec<RemovedSpace>> {
         self.store
             .run(|db| {
@@ -258,9 +248,8 @@ impl Spaces {
             .await
     }
 
-    /// Forget the removal records of the spaces `ids`, which another joined
-    /// machine keeps now; their checkpoints and kept session files go as
-    /// those no record owns do.
+    /// Another joined machine keeps them now. Their checkpoints and kept
+    /// session files go as those no record owns do.
     pub async fn forget_moved_records(&self, ids: Vec<SpaceId>) -> Result<()> {
         self.store
             .write(move |tx| {
@@ -272,9 +261,9 @@ impl Spaces {
             .await
     }
 
-    /// The removal record to reopen, kept with its checkpoints for at least
-    /// [`RESTORE_CLAIM`] in the same transaction, so expiry cannot delete
-    /// them while the restore runs.
+    /// Keeps the record with its checkpoints for at least [`RESTORE_CLAIM`]
+    /// in the same transaction, so expiry cannot delete them while the
+    /// restore runs.
     pub async fn claim_removed_space(&self, selector: &SpaceSelector) -> Result<RemovedSpace> {
         let id = (selector.given_id().cloned()).with_context(|| {
             format!("no restorable space {selector}; a removed space has no number, so select it by its ID")
@@ -286,8 +275,7 @@ impl Spaces {
     }
 }
 
-/// The IDs of the removed spaces whose removal records this machine keeps
-/// and has not expired.
+/// Leaves out expired records.
 pub fn kept_record_ids(db: &Connection) -> Result<Vec<SpaceId>> {
     Ok(db
         .prepare(&format!(
@@ -298,11 +286,11 @@ pub fn kept_record_ids(db: &Connection) -> Result<Vec<SpaceId>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Give the removal record of the workspace `id`, which a conversion makes a
-/// chat keeping that ID, and its checkpoints an ID of their own, which its
-/// restore opens it under beside the chat; a disposable workspace has none.
-/// It runs in the transaction that commits the conversion, so a conversion
-/// that fails leaves the record and checkpoints the workspace's.
+/// The conversion makes a chat that keeps the ID, so the record and its
+/// checkpoints get one of their own, which a restore opens the workspace
+/// under beside the chat. A disposable workspace has none. Runs in the
+/// transaction that commits the conversion, so one that fails leaves them
+/// the workspace's.
 pub fn rekey_converted(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<()> {
     let recorded = crate::store::exists(
         tx,
@@ -330,7 +318,7 @@ pub fn rekey_converted(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<(
     Ok(())
 }
 
-/// Persist a removal record, replacing one an earlier attempt left.
+/// Replaces one an earlier attempt left.
 pub fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
     db.execute(
         "INSERT OR REPLACE INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
@@ -347,8 +335,8 @@ pub fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
     Ok(())
 }
 
-/// Record that the removed chat `id` runs in `root_dir` once restored, as a
-/// root move that took its files there says, when it has a removal record.
+/// As a root move that took its files there says, when it has a removal
+/// record.
 pub fn rehome_removed_chat(
     db: &Connection,
     id: &SpaceId,
@@ -367,8 +355,8 @@ pub fn rehome_removed_chat(
 /// attached files from expiring.
 pub const RESTORE_CLAIM: std::time::Duration = std::time::Duration::from_secs(3600);
 
-/// Find a removal record and keep it, its checkpoints and its attached files
-/// for at least [`RESTORE_CLAIM`].
+/// Keeps it, its checkpoints and its attached files for at least
+/// [`RESTORE_CLAIM`].
 fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedSpace>> {
     let Some(mut removed) = find(tx, id)? else {
         return Ok(None);
@@ -400,7 +388,6 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
     Ok(Some(removed))
 }
 
-/// The unexpired removal record of the removed space `id`.
 fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
     let record: Option<String> = db
         .query_row(

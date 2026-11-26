@@ -1,5 +1,5 @@
-//! A restored workspace's place: its worktree, opened again on its branch
-//! at the removed HEAD with the unsaved files its removal checkpoint keeps.
+//! A restored workspace's worktree, opened again on its branch at the
+//! removed HEAD with the unsaved files its removal checkpoint keeps.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use shoal_ids::space_ids::SpaceId;
@@ -15,13 +15,11 @@ use crate::{
 };
 
 impl Spaces {
-    /// Open the worktree of the workspace `removed` records again, below
-    /// `parent`, on its branch at the removed HEAD, or at that commit for a
-    /// workspace without a branch, with its unsaved files, adding to
-    /// `warnings` when another branch has to take it. One recorded whose
-    /// worktree failed is reopened too, failed, with the failure among
-    /// `warnings`, so the restore goes on and its preparation retries the
-    /// worktree.
+    /// At the removed HEAD on its branch, or at that commit for a workspace
+    /// without a branch, with its unsaved files. Warns when another branch
+    /// has to take it. A workspace whose worktree fails is reopened too,
+    /// failed, with the failure among `warnings`, so the restore goes on and
+    /// its preparation retries the worktree.
     pub(super) async fn reopen_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -51,9 +49,8 @@ impl Spaces {
         }
     }
 
-    /// The workspace `removed` records, reopened with the pending worktree
-    /// whose creation failed with `error`, which joins `warnings`; `error`
-    /// itself when the restore recorded no workspace.
+    /// The failure `error` joins `warnings`. Returns `error` itself when the
+    /// restore recorded no workspace.
     async fn failed_reopening(
         &self,
         removed: &RemovedSpace,
@@ -73,9 +70,7 @@ impl Spaces {
         })
     }
 
-    /// Open the removed workspace `removed` again as `new` places it, on its
-    /// `branch` at the removed HEAD, with the unsaved files its checkpoint
-    /// keeps, adding to `warnings` when another branch has to take it.
+    /// Warns when another branch has to take it.
     async fn restore_branch_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -119,10 +114,9 @@ impl Spaces {
         Ok(opened)
     }
 
-    /// The branch to open: the workspace's `branch`, or, when it no longer
-    /// contains the removed HEAD, as when the workspace was removed during a
-    /// rebase, one named after the short commit, with a warning in
-    /// `warnings`.
+    /// The workspace's `branch`, or, when it no longer contains the removed
+    /// HEAD, as when the workspace was removed during a rebase, one named
+    /// after the short commit, with a warning.
     async fn restore_branch(
         &self,
         daemon: &dyn Daemon,
@@ -149,9 +143,9 @@ impl Spaces {
         Ok(short)
     }
 
-    /// Ready `branch` to open at `checkpoint`'s HEAD: at it, or at a later
-    /// commit when nothing unsaved has to be applied, created there when it
-    /// does not exist; false when it no longer contains HEAD.
+    /// At the checkpoint's HEAD, or at a later commit when nothing unsaved
+    /// has to be applied. Creates the branch there when it does not exist.
+    /// False when it no longer contains HEAD.
     async fn ready_branch(
         &self,
         repo: &Repository,
@@ -187,8 +181,8 @@ impl Spaces {
         Ok(true)
     }
 
-    /// The recorded base, so diffs and the stack link come back: its ref
-    /// while it exists, otherwise its commit; `None` when neither remains.
+    /// So diffs and the stack link come back: its ref while it exists,
+    /// otherwise its commit. `None` when neither remains.
     async fn restore_base(
         &self,
         daemon: &dyn Daemon,
@@ -217,15 +211,13 @@ impl Spaces {
     }
 }
 
-/// The unsaved files of a removal's checkpoint, written into the new worktree.
 pub struct RestoredFiles {
     pub head: CommitId,
     pub snapshot: CommitId,
 }
 
 impl RestoredFiles {
-    /// The unsaved files `checkpoint` keeps at its HEAD; none when it kept
-    /// none.
+    /// None when the checkpoint kept none.
     pub fn of(checkpoint: &Checkpoint) -> Option<Self> {
         (checkpoint.commit != checkpoint.head).then(|| Self {
             head: checkpoint.head.clone(),
@@ -234,8 +226,8 @@ impl RestoredFiles {
     }
 }
 
-/// Write a removal checkpoint's files into a new worktree still at the removed
-/// HEAD, before the workspace can be used.
+/// The worktree is still at the removed HEAD, and the workspace cannot be
+/// used yet.
 pub async fn write_files(worktree: &Path, files: &RestoredFiles) -> Result<()> {
     let head = git::revision(worktree, "HEAD", git::run).await?;
     ensure!(

@@ -1,10 +1,7 @@
-//! Importing a package `shoal move` wrote, which the daemon reads itself:
-//! its manifest first, then, once the repositories its spaces go to are
-//! here, cloning those it lacks from their origins, its parts into the
-//! directory of the repository it goes to. Only once the whole package
-//! checks out does it record its spaces, opening its own again as
-//! [`Manager::import_space`] does and leaving those it carries recorded for
-//! the caller to open after it, parents first.
+//! Importing a package `shoal move` wrote, which the daemon reads itself.
+//! Only once the whole package checks out does it record its spaces,
+//! opening its own again as [`Spaces::import_space`] does and leaving those
+//! it carries recorded for the caller to open after it, parents first.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,9 +29,9 @@ mod input;
 use destinations::Destinations;
 pub use input::PackageInput;
 
-/// A package read and checked whole: its spaces as they are recorded here,
-/// its own first, then those it carries, parents first, with the warnings
-/// of reading it, while the directory its parts are in lives.
+/// Its spaces as recorded here, its own first, then those it carries,
+/// parents first, with the warnings of reading it, while the directory its
+/// parts are in lives.
 struct Package {
     own: SpaceImport,
     carried: Vec<SpaceImport>,
@@ -43,10 +40,10 @@ struct Package {
 }
 
 impl Spaces {
-    /// Import the package `input` holds as `import` says: read it whole and
-    /// check it, then record its spaces as removed here and open its own
-    /// again. `caller`, when scoped, imports only into its own repository
-    /// and clones none. An error before anything is recorded says so.
+    /// Reads it whole and checks it, then records its spaces as removed here
+    /// and opens its own again. A scoped `caller` imports only into its own
+    /// repository and clones none. An error before anything is recorded
+    /// says so.
     pub async fn import_package(
         &self,
         daemon: &dyn Daemon,
@@ -70,10 +67,9 @@ impl Spaces {
         Ok(ImportedPackage { restored, carried })
     }
 
-    /// Record the spaces of the package `input` holds, a removed space's
-    /// that another joined machine moves here with the move `ticket`, as
-    /// removed here, opening none, and return the IDs of those it carries
-    /// that it recorded. An error before its own space is recorded says so.
+    /// For a removed space another joined machine moves here with the move
+    /// `ticket`. Opens none, and returns the IDs of the carried spaces it
+    /// recorded. An error before its own space is recorded says so.
     pub async fn import_removed(
         &self,
         daemon: &dyn Daemon,
@@ -105,9 +101,7 @@ impl Spaces {
             .collect())
     }
 
-    /// Read the package `input` holds as `import` says, for `caller`, into
-    /// the spaces it records, refusing what any of them would refuse before
-    /// one is recorded.
+    /// Refuses what any of its spaces would refuse before one is recorded.
     async fn read_package(
         &self,
         daemon: &dyn Daemon,
@@ -133,11 +127,10 @@ impl Spaces {
         })
     }
 
-    /// Record each of `carried` as removed here, in order, after the
-    /// package's own space, `opened` from its ID in the package to the one
-    /// it opened under, which its caller sets up before it opens them:
-    /// each below the copy this import made of the space it was below,
-    /// going on after one fails.
+    /// In order, after the package's own space, which `opened` maps from its
+    /// ID in the package to the one it opened under. Each goes below the
+    /// copy this import made of the space it was below. Goes on after one
+    /// fails.
     async fn record_carried(
         &self,
         daemon: &dyn Daemon,
@@ -169,8 +162,7 @@ impl Spaces {
         records
     }
 
-    /// Refuse the package `manifest` while a space here has the ID one of
-    /// its spaces keeps.
+    /// Refuses while a space here has the ID one of its spaces keeps.
     async fn ensure_none_here(&self, manifest: &Manifest) -> Result<()> {
         let copy = manifest.copy.is_some();
         for packaged in manifest.packaged() {
@@ -181,16 +173,15 @@ impl Spaces {
     }
 }
 
-/// The spaces of a package an import recorded or opened before the next
-/// one: the IDs they have here, and those by their IDs in the package.
+/// The IDs they have here, and those by their IDs in the package.
 struct Before {
     copies: BTreeMap<SpaceId, SpaceId>,
     recorded: BTreeSet<SpaceId>,
 }
 
 impl Before {
-    /// The package's own space, `opened` from its ID in the package to the
-    /// one it opened under.
+    /// `opened` maps the package's own space from its ID in the package to
+    /// the one it opened under.
     fn new(opened: (SpaceId, SpaceId)) -> Self {
         Self {
             recorded: BTreeSet::from([opened.1.clone()]),
@@ -198,7 +189,7 @@ impl Before {
         }
     }
 
-    /// Place `import` after them, below the copies a copy was below.
+    /// Places `import` after them, below the copies a copy was below.
     fn place(&self, import: &mut SpaceImport) {
         if import.copy {
             import.copies = self.copies.clone();
@@ -206,15 +197,13 @@ impl Before {
         import.recorded = self.recorded.clone();
     }
 
-    /// Add the space `original` the import recorded as `space`.
     fn add(&mut self, original: SpaceId, space: &SpaceId) {
         self.copies.insert(original, space.clone());
         self.recorded.insert(space.clone());
     }
 }
 
-/// The warnings of importing the copy `manifest` holds, refusing it when
-/// `sessions` keeps the sessions its agents start forks of.
+/// Refuses it when `sessions` keeps the sessions its agents start forks of.
 pub fn copy_warnings(manifest: &Manifest, sessions: Option<bool>) -> Result<Vec<String>> {
     let Some(copied) = manifest.copy else {
         return Ok(Vec::new());
@@ -235,11 +224,9 @@ pub fn copy_warnings(manifest: &Manifest, sessions: Option<bool>) -> Result<Vec<
         .collect())
 }
 
-/// The imports of the spaces of `manifest`, its own and those it carries,
-/// whose agents keep their sessions on this machine as `sessions` says,
-/// into the repositories `destinations` names, with the bundles and session
-/// files `parts` hold for them, claimed at the hub as `claim` says, unless
-/// they are copies.
+/// Its own and those it carries. Their agents keep their sessions on this
+/// machine as `sessions` says. Each is claimed at the hub as `claim` says,
+/// unless they are copies.
 fn space_imports(
     manifest: &Manifest,
     (sessions, claim): (Option<bool>, Claim),
@@ -272,9 +259,6 @@ fn space_imports(
     (own, carried)
 }
 
-/// The import of the space `packaged` of `manifest`, whose agents keep
-/// `sessions`, into the repository `destinations` names for it, with the
-/// bundle and session files `parts` hold for it, claimed as `claim` says.
 fn space_import(
     manifest: &Manifest,
     destinations: &Destinations,
@@ -297,8 +281,6 @@ fn space_import(
     }
 }
 
-/// The session files among `parts` of the sessions the agents of `space`
-/// continue.
 fn session_files(parts: &Parts, space: &RemovedSpace) -> Vec<CarriedSessionFile> {
     let stopped = space.agents.iter().map(|agent| &agent.record.session);
     let last = space.last_sessions.iter().map(|last| &last.session);
