@@ -98,6 +98,11 @@ names its responsibility.
 - `scripts/crate_dependencies.toml` lists the Shoal crates each crate may
   depend on, and CI's `scripts/check_crate_dependencies.py` refuses any other.
   A new crate or dependency gets an entry that follows the rules below.
+- A crate declares only the dependencies its sources name, and CI's
+  `scripts/check_unused_dependencies.py` refuses any other. List a dependency
+  that only a macro's expansion names, or that enables a feature, in
+  `[package.metadata.shoal] unnamed-dependencies`, with a comment that says
+  what needs it.
 - A file a package compiles, or its tests read, lives in that package's
   directory (`src/` or `tests/` for the root package) or in that of a package
   it depends on. CI tests a PR's packages by the directories it changes, and

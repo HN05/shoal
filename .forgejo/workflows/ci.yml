@@ -158,6 +158,11 @@ jobs:
       - name: Crates depend only on the crates they may
         run: python3 scripts/check_crate_dependencies.py
 
+      # Reads only the manifests and the Rust sources, so it runs whatever the
+      # change affects.
+      - name: Crates declare only the dependencies they name
+        run: python3 scripts/check_unused_dependencies.py
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 
