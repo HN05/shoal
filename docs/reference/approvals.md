@@ -288,8 +288,9 @@ one that is also fetched from: Git would rewrite that fetch URL too. The agent
 does not start until that push URL changes or `push` is `"direct"`.
 
 An agent's rewrite follows the `push` permission it
-[launched with](modes.md#mode-permissions). The rewrite stops pushes by accident, not on purpose: an agent that clears its Git
-settings, or pushes to a URL spelled differently, reaches the remote.
+[launched with](modes.md#mode-permissions). The rewrite keeps an agent from
+pushing by accident, not on purpose: an agent that clears its Git settings, or
+pushes to a URL spelled differently, reaches the remote.
 
 ### Approve a push
 
