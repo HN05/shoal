@@ -82,7 +82,8 @@ impl Backend {
         match self {
             Self::Fresh(path) => {
                 let path = path.clone();
-                // Opening, closing and scheduling match `Store::run`.
+                // The baseline: a fresh connection per operation, opened and
+                // closed on the blocking pool.
                 let metrics = setup_metrics;
                 tokio::task::spawn_blocking(move || {
                     let mut db = connect(&path, &metrics).unwrap();
