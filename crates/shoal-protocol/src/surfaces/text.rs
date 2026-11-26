@@ -261,10 +261,18 @@ fn checkbox(label: &str, value: Option<&Value>) -> String {
 
 /// An image as text: what it shows and the attached file that holds it.
 fn image(alt: &str, file: &str) -> String {
-    match alt {
+    let (alt, file) = (uncontrolled(alt), uncontrolled(file));
+    match alt.as_str() {
         "" => format!("[image: attached file {file}]"),
         alt => format!("[image: {alt}, attached file {file}]"),
     }
+}
+
+/// `text` without its control characters, which Markdown's character
+/// references can decode into an image's description or file past the
+/// check of the surface's own text.
+fn uncontrolled(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
 }
 
 /// An action's line: its id, its label unless that is its id, whether it

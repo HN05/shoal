@@ -458,6 +458,13 @@ fn images_by_reference_name_attached_files_too() {
         lines[0],
         "See [image: chart, attached file https://example.com/a.png] and [image: Map, attached file map.png]"
     );
+    // A character reference decodes into no control character shown.
+    let escaped = surface(
+        json!([{"id": "root", "component": "Text", "text": "![&#x1b;&#91;31m](chart.png)"}]),
+        json!({}),
+    );
+    let lines = escaped.checked(&["chart.png"]).unwrap().layout_lines();
+    assert_eq!(lines[0], "[image: [31m, attached file chart.png]");
     // Brackets nest, and a backslash escapes one, in an image's text.
     let nested = surface(
         json!([{"id": "root", "component": "Text",
