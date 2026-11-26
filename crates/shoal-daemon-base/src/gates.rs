@@ -196,7 +196,7 @@ impl Gates {
         self.background_operations.clone().write_owned().await
     }
 
-    /// [`Self::quiesce`] when no background operation is in progress.
+    /// Hold off every background operation, when none is in progress.
     pub fn try_quiesce(&self) -> Option<OwnedRwLockWriteGuard<()>> {
         self.background_operations.clone().try_write_owned().ok()
     }

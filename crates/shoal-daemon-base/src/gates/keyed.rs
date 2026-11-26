@@ -16,7 +16,6 @@ impl<L> Default for Keyed<L> {
 }
 
 impl<L: Default> Keyed<L> {
-    /// The gate of `key`.
     pub(super) fn gate(&self, key: &str) -> Arc<L> {
         let mut gates = self.live();
         share(&mut gates, key.to_owned())

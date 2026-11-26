@@ -18,7 +18,6 @@ fn space_number(db: &Connection, id: &SpaceId) -> Result<SpaceNumber> {
     )
 }
 
-/// The next number of the space `id`.
 pub fn next(db: &Connection, id: &SpaceId) -> Result<ItemNumber> {
     let space = space_number(db, id)?;
     Ok(ItemNumber {

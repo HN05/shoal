@@ -14,7 +14,6 @@ use shoal_protocol::{
 pub(super) struct Elsewhere(BTreeMap<MemberId, BTreeMap<i64, Alert>>);
 
 impl Elsewhere {
-    /// Take what the hub sent.
     pub(super) fn take(&mut self, copies: AlertCopies) {
         match copies {
             AlertCopies::Whole(alerts) => {

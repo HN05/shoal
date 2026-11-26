@@ -17,10 +17,9 @@ pub(crate) use shoal_coordination::scope::ScopedExecution;
 pub use shoal_coordination::scope::{Access, Caller, ScopeRefusal, outside_scope};
 
 /// Resolve `token`, which may stand for a caller another machine vouches
-/// for, and confine `method` to the spaces the caller's scope reaches: its own space, a workspace or a chat, and the spaces below it,
-/// or every space for a chat without a repository; a chat in a workspace's
-/// worktree also reads that workspace, without changing it. Optional space
-/// filters default to the caller's own; other targets must name one of them.
+/// for, and confine `method` to the spaces the caller's scope reaches, as
+/// `docs/design/spaces.md` defines it. Optional space filters default
+/// to the caller's own; other targets must name one of them.
 pub(crate) async fn authorize(
     manager: &Manager,
     token: Option<&ScopeToken>,

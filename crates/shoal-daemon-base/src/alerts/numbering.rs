@@ -96,7 +96,6 @@ fn above_known(tx: &Transaction<'_>, numbering: &Numbering) -> Result<i64> {
         + 1)
 }
 
-/// Whether an alert here holds `number`.
 fn held(tx: &Transaction<'_>, number: i64) -> Result<bool> {
     Ok(tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",
