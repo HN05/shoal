@@ -143,6 +143,10 @@ or until cleanup verifies that its worktree is deleted.
 [Rename a branch](../reference/workspaces.md#rename-a-branch) says what it
 refuses.
 
+A branch switched outside Shoal, such as with `git switch` in the worktree,
+shows in the daemon's sweeps as a `branch_changed` event. It changes no
+recorded ownership.
+
 ## The default branch
 
 Shoal finds the default branch from the remote's HEAD, or from the checkout's

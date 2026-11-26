@@ -241,6 +241,25 @@ back only those requests, never the watches and reads the others serve. A pause
 the forge puts on the whole account, such as a `Retry-After`, holds back every
 request.
 
+### Repeated reads
+
+Forge reads go through one request layer in the daemon. Polls repeat the same
+reads, so the layer keeps them cheap and steady.
+[Rate limits and retries](../reference/issues.md#rate-limits-and-retries) says
+what it does.
+
+The layer remembers each account's last response per URL and repeats the read
+as a conditional request. An unchanged item thus costs a `304 Not Modified`,
+which GitHub does not count against its primary rate limit. The memory is not
+persisted, so a restart reads everything once in full.
+
+The layer reads each forge's rate-limit headers. It sends nothing to a forge
+that limits the account until the limit ends. A 429 is such a limit, so the
+layer never resends it within seconds as it does a 503.
+
+The layer sends a read again after a failure that may pass. Reading twice
+changes nothing, and one refused connection would otherwise fail a whole poll.
+
 ### API requests
 
 `shoal forge api` passes any request under the repository's forge API root
