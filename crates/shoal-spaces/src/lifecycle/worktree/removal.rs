@@ -1,7 +1,6 @@
-//! The worktree's part of a removal: what it checks of the worktree's Git
-//! state, the processes and hooks it stops and runs there, and deleting the
-//! worktree once a checkpoint keeps its work, or forgetting one that was
-//! deleted.
+//! The worktree's part of a removal: checking its Git state, stopping and
+//! running what runs there, and deleting the worktree once a checkpoint
+//! keeps its work, or forgetting one that was deleted.
 use super::super::{Removal, STOPPED_REMOVAL, Stage};
 use super::candidacy::Baseline;
 use crate::Spaces;
@@ -33,30 +32,28 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// A post-remove hook resolved while the workspace record still exists.
+/// Resolved while the workspace record still exists.
 struct PostRemoveHook {
     command: PathBuf,
     checkout: PathBuf,
     env: BTreeMap<String, OsString>,
 }
 
-/// What Git records of a worktree being removed.
 #[derive(Debug, Clone, Copy)]
 enum Registration {
     /// Git lists it, so Git removes it.
     Listed,
-    /// Its directory stays though Git no longer lists it, so removal
-    /// deletes what is left once a checkpoint keeps what is worth keeping.
+    /// Its directory stays though Git no longer lists it, so removal deletes
+    /// what is left once a checkpoint keeps what is worth keeping.
     Disowned,
     /// Git no longer lists it, and its directory is gone.
     Unlisted,
 }
 
-/// The worktree a removal takes, as the removal found it once it reserved
-/// the workspace.
+/// As the removal found it once it reserved the workspace.
 pub struct WorktreeStage {
     workspace: Workspace,
-    /// Whether its directory existed; a missing one is forgotten instead.
+    /// A missing directory is forgotten instead.
     present: bool,
     post_remove: Option<PostRemoveHook>,
     xcode: Option<crate::config::Effective>,
@@ -64,7 +61,6 @@ pub struct WorktreeStage {
     baseline: Option<Baseline>,
 }
 
-/// What removing a worktree did.
 #[derive(Debug, Clone)]
 pub struct WorktreeRemoval {
     pub removed: bool,
@@ -75,8 +71,6 @@ pub struct WorktreeRemoval {
 }
 
 impl WorktreeRemoval {
-    /// The protocol's result of the workspace removal that took `children`
-    /// first.
     pub fn with_children(
         self,
         children: Vec<shoal_protocol::space_names::SpaceName>,
@@ -103,8 +97,8 @@ impl From<RemovalResult> for WorktreeRemoval {
 }
 
 impl WorktreeStage {
-    /// What the journal records as the removal's cause: `removal`'s, or the
-    /// deleted directory's, which a worktree yet to be created never had.
+    /// `removal`'s cause, or the deleted directory's, which a worktree yet to
+    /// be created never had.
     pub fn cause(&self, removal: Removal<'_>) -> EventCause {
         if self.present || self.workspace.checkout.unborn() {
             removal.cause()
@@ -113,8 +107,7 @@ impl WorktreeStage {
         }
     }
 
-    /// What ties processes to the workspace as `removal` stops them: nothing
-    /// for a deleted directory.
+    /// Nothing for a deleted directory.
     pub fn ties(&self, removal: Removal<'_>) -> WorktreeTies {
         match self.present {
             true => removal.worktree_ties(),
@@ -122,14 +115,12 @@ impl WorktreeStage {
         }
     }
 
-    /// The shared Git directory of the repository of an existing worktree,
-    /// as the removal read it.
+    /// As the removal read it.
     pub fn common_dir(&self) -> Option<&CommonDir> {
         self.baseline.as_ref().map(Baseline::common_dir)
     }
 
-    /// How the removal stops the workspace's commands: those of a deleted
-    /// directory cannot be restored there.
+    /// The commands of a deleted directory cannot be restored there.
     pub fn stop_request(&self) -> StopRequest {
         if self.present {
             StopRequest::restorable_removal()
@@ -140,9 +131,8 @@ impl WorktreeStage {
 }
 
 impl Spaces {
-    /// What removing the worktree of `workspace` at a request would discard,
-    /// with its changed files and whether removal archives them when
-    /// `include_changes` is set and it has any.
+    /// With `include_changes`, also returns its changed files and whether
+    /// removal archives them.
     pub async fn check_manual_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -178,10 +168,9 @@ impl Spaces {
             .await
     }
 
-    /// Begin the worktree's part of `removal` of the reserved `workspace`,
-    /// which was `replaced` before: settle an earlier removal that stopped
-    /// partway, then resolve the post-remove hook and Xcode data while its
-    /// record exists.
+    /// Settles an earlier removal that stopped partway, then resolves the
+    /// post-remove hook and Xcode data while the record exists. `replaced`
+    /// is the state the reservation replaced.
     pub async fn begin_worktree_removal(
         &self,
         daemon: &dyn Daemon,
@@ -212,15 +201,15 @@ impl Spaces {
         })
     }
 
-    /// Settle an earlier removal of `workspace`, in lifecycle state `state`,
-    /// that stopped before Git finished and did not put back what it
-    /// deleted, as when the daemon stopped meanwhile. Such a removal leaves
-    /// the workspace failed with a [`STOPPED_REMOVAL`] error, so that its
-    /// `.git` link and tracked files come back before an inspection takes
-    /// their deletion for unsaved work. A workspace something readied or
-    /// failed otherwise since has its marker dropped instead: the deletions
-    /// there may be its agent's. Only the recorded admin directory, marked
-    /// as this workspace's, says that a removal began.
+    /// Settles an earlier removal that stopped before Git finished and did
+    /// not put back what it deleted, as when the daemon stopped meanwhile.
+    /// Such a removal leaves the workspace failed with a
+    /// [`STOPPED_REMOVAL`] error, so its `.git` link and tracked files come
+    /// back before an inspection takes their deletion for unsaved work. A
+    /// workspace something readied or failed otherwise since has its marker
+    /// dropped instead: the deletions there may be its agent's. Only the
+    /// recorded admin directory, marked as this workspace's, says that a
+    /// removal began.
     pub async fn settle_interrupted_removal(
         &self,
         workspace: &Workspace,
@@ -245,13 +234,12 @@ impl Spaces {
         Ok(())
     }
 
-    /// What a `removal` of `workspace`, which was `replaced` before, that
-    /// failed with `error` leaves: whether the workspace can no longer be
-    /// ready, with the error to record. Its directory was deleted, or a
-    /// [`STOPPED_REMOVAL`] left what it deleted for the next removal to put
-    /// back, which its error says: this removal's `worktree remove`, stopped
-    /// partway and unable to restore, or an earlier one whose marker this
-    /// removal failed before settling.
+    /// Whether the workspace can no longer be ready, with the error to
+    /// record. Its directory was deleted, or a [`STOPPED_REMOVAL`] left what
+    /// it deleted for the next removal to put back, which its error says:
+    /// this removal's `worktree remove`, stopped partway and unable to
+    /// restore, or an earlier one whose marker this removal failed before
+    /// settling.
     pub async fn failed_worktree_removal(
         &self,
         workspace: &Workspace,
@@ -269,10 +257,9 @@ impl Spaces {
         (deleted, error)
     }
 
-    /// Inspect the worktree again and apply every check `removal` needs of it
-    /// at `stage`, after stopping the `cancelled` restores, returning the
-    /// inspection removal proceeds with; none for a deleted directory, whose
-    /// checks come before the removal stops anything.
+    /// Inspects again after stopping the `cancelled` restores. None for a
+    /// deleted directory, whose checks come before the removal stops
+    /// anything.
     pub(in crate::lifecycle) async fn check_worktree_removal(
         &self,
         daemon: &dyn Daemon,
@@ -293,10 +280,8 @@ impl Spaces {
             .map(Some)
     }
 
-    /// Inspect the worktree of `workspace` against `baseline` and apply
-    /// every check `removal` needs of it at `stage`, after stopping
-    /// the `cancelled` restores. A deleted directory inspects as clean,
-    /// while its HEAD cannot be read.
+    /// Stops the `cancelled` restores first. A deleted directory inspects as
+    /// clean, while its HEAD cannot be read.
     pub(in crate::lifecycle) async fn check_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -343,9 +328,9 @@ impl Spaces {
         Ok(check)
     }
 
-    /// Refuse to forget a deleted worktree on `removal`: automatic cleanup
-    /// takes only unused ones, a moved one is restored to its recorded path
-    /// instead, and commands recorded there could still run.
+    /// Automatic cleanup takes only unused ones, a moved one is restored to
+    /// its recorded path instead, and commands recorded there could still
+    /// run.
     async fn check_missing_worktree(
         &self,
         workspace: &Workspace,
@@ -368,9 +353,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// End what the worktree runs that its commands' stop leaves alone: its
-    /// review goes with its record, and a CI job ends through its forge
-    /// before its runner is stopped.
+    /// Ends what the commands' stop leaves alone: the review goes with the
+    /// record, and a CI job ends through its forge before its runner stops.
     pub async fn stop_worktree_work(&self, daemon: &dyn Daemon, worktree: &WorktreeStage) {
         daemon.stop_reviews(&worktree.workspace.id).await;
         daemon
@@ -378,7 +362,7 @@ impl Spaces {
             .await;
     }
 
-    /// Run the worktree's removal hooks, which a deleted directory does not.
+    /// A deleted directory runs none.
     pub async fn run_removal_hooks(
         &self,
         daemon: &dyn Daemon,
@@ -393,11 +377,10 @@ impl Spaces {
             .await
     }
 
-    /// Delete the worktree as the final inspection `check` decides, once a
-    /// checkpoint keeps its HEAD and the unsaved files `removal` discards or
-    /// promises to keep, or forget a deleted one, retaining its branch since
-    /// its contents cannot be inspected. Its containers, simulators and Xcode
-    /// data go with it.
+    /// Deletes once a checkpoint keeps HEAD and the unsaved files `removal`
+    /// discards or promises to keep. A deleted worktree is forgotten, and
+    /// its branch kept, since its contents cannot be inspected. Containers,
+    /// simulators and Xcode data go with it.
     pub async fn delete_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -439,9 +422,8 @@ impl Spaces {
         Ok(removed)
     }
 
-    /// What only a removed worktree leaves behind once the record is gone:
-    /// the branch it kept, and its post-remove hook, which runs with the
-    /// workspace's identity.
+    /// Runs once the record is gone: deletes the branch it kept, and runs the
+    /// post-remove hook with the workspace's identity.
     pub async fn complete_worktree_removal(
         &self,
         daemon: &dyn Daemon,
@@ -471,8 +453,8 @@ impl Spaces {
         outcome
     }
 
-    /// The removal hook `kind` of `workspace`; none for one whose setup was
-    /// skipped, since they tear down what setup made.
+    /// None for a workspace whose setup was skipped, since the hooks tear
+    /// down what setup made.
     async fn removal_hook(
         &self,
         daemon: &dyn Daemon,
@@ -508,7 +490,7 @@ impl Spaces {
         }
     }
 
-    /// Run the post-remove hook, notifying and returning its failure.
+    /// Notifies on failure and returns it.
     async fn run_post_remove_hook(
         &self,
         daemon: &dyn Daemon,
@@ -538,8 +520,8 @@ impl Spaces {
         Some(message)
     }
 
-    /// Run the pre-remove hook, which sees the worktree intact; a failing
-    /// hook retains the workspace.
+    /// The hook sees the worktree intact. A failing hook retains the
+    /// workspace.
     async fn run_pre_remove_hook(&self, daemon: &dyn Daemon, workspace: &Workspace) -> Result<()> {
         let Some(command) = self
             .removal_hook(daemon, workspace, HookKind::PreRemove)
@@ -561,10 +543,9 @@ impl Spaces {
         .await
     }
 
-    /// Run the pre-resource-release hook for each resource lease of the
-    /// workspace, which committing the removal releases. The hook is resolved
-    /// only for leases to release, since it fails while the worktree's config
-    /// file is rejected.
+    /// Committing the removal releases the leases. The hook is resolved only
+    /// for leases to release, since resolving fails while the worktree's
+    /// config file is rejected.
     async fn run_resource_release_hooks(
         &self,
         daemon: &dyn Daemon,
@@ -587,11 +568,8 @@ impl Spaces {
         Ok(())
     }
 
-    /// Delete the worktree as the final inspection `check` decides, once a
-    /// checkpoint keeps its HEAD and the unsaved files `removal` discards or
-    /// promises to keep. A failed deletion may have deleted some files, so
-    /// its checkpoint stays; the next attempt takes another, and both expire
-    /// as usual.
+    /// A failed deletion may have deleted some files, so its checkpoint
+    /// stays. The next attempt takes another, and both expire as usual.
     async fn delete_checkpointed_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -609,10 +587,8 @@ impl Spaces {
             .await
     }
 
-    /// What Git records of the existing worktree of `workspace` that the
-    /// removal deletes: disowned, or listed once the identity of its
-    /// directory is recorded, which proves what Git leaves there should the
-    /// deletion stop partway.
+    /// Disowned, or listed once the identity of its directory is recorded,
+    /// which proves what Git leaves there should the deletion stop partway.
     async fn existing_registration(
         &self,
         workspace: &Workspace,
@@ -625,8 +601,8 @@ impl Spaces {
         Ok(Registration::Listed)
     }
 
-    /// The record that restores the workspace, with a checkpoint of its HEAD
-    /// and unsaved files; a disposable workspace keeps nothing to restore.
+    /// Checkpoints HEAD and unsaved files. A disposable workspace keeps
+    /// nothing to restore.
     async fn save_restore_record(
         &self,
         daemon: &dyn Daemon,
@@ -645,11 +621,10 @@ impl Spaces {
             .map(Some)
     }
 
-    /// Release live resources immediately before removing the worktree, its
-    /// containers first. Failed cleanup retains their ownership records so
-    /// removal can be retried.
-    /// Git cannot tell which branch a worktree it no longer lists was on, so
-    /// the recorded one stays.
+    /// Releases live resources, containers first, just before removing the
+    /// worktree. Failed cleanup keeps their ownership records so removal can
+    /// be retried. Git cannot tell which branch a worktree it no longer
+    /// lists was on, so the recorded one stays.
     async fn remove_worktree(
         &self,
         daemon: &dyn Daemon,
@@ -678,10 +653,9 @@ impl Spaces {
         })
     }
 
-    /// Refuse a removal that [skips stalled](Removal::skips_stalled) spaces
-    /// while the worktree of `workspace`, below the space it removes, is in a
-    /// directory whose file access stalled. The sweep's own pass of that
-    /// workspace rechecks it.
+    /// Only for a removal that [skips stalled](Removal::skips_stalled)
+    /// spaces: refuses while the worktree is in a directory whose file
+    /// access stalled. The sweep's own pass of that workspace rechecks it.
     pub fn ensure_worktree_answers(&self, workspace: &Workspace) -> Result<()> {
         ensure!(
             self.file_access.stalled(&workspace.path).is_none(),
@@ -692,9 +666,8 @@ impl Spaces {
     }
 }
 
-/// Whether `workspace`, in lifecycle state `state`, still waits for the
-/// files a stopped removal deleted: that removal left it, and its marker
-/// stays. A marker that cannot be read counts too.
+/// True while the stopped removal's marker stays. A marker that cannot be
+/// read counts too.
 async fn stopped_removal_pending(workspace: &Workspace, state: WorkspaceState) -> bool {
     let Some(admin_dir) = workspace.checkout.git_dir() else {
         return false;
@@ -703,17 +676,15 @@ async fn stopped_removal_pending(workspace: &Workspace, state: WorkspaceState) -
         && !matches!(interrupted::began(admin_dir).await, Ok(false))
 }
 
-/// Whether `workspace`, in lifecycle state `state`, is as a removal that
-/// stopped partway left it: failed with that removal's error, which every
-/// other failure, and readying it, replaces.
+/// Failed with that removal's error, which every other failure, and
+/// readying the workspace, replaces.
 fn left_by_stopped_removal(workspace: &Workspace, state: WorkspaceState) -> bool {
     state == WorkspaceState::Failed
         && (workspace.error.as_deref()).is_some_and(|error| error.starts_with(STOPPED_REMOVAL))
 }
 
-/// Refuse to delete the unsaved files of the worktree `check` inspected
-/// when `removal` discards them or promises to keep them restorable, unless
-/// the checkpoint of `record` keeps them.
+/// Refuses unless the checkpoint of `record` keeps the unsaved files that
+/// `removal` discards or promises to keep restorable.
 fn ensure_checkpoint_keeps_files(
     check: &Inspection,
     removal: Removal<'_>,
@@ -731,10 +702,9 @@ fn ensure_checkpoint_keeps_files(
     Ok(())
 }
 
-/// What removal takes with the worktree the final inspection `check` saw.
 /// A branch goes when its commits are all preserved, except the default
 /// branch, which an unresolved default branch could be, and a branch that
-/// another workspace records building on, `built_on`; files go by force
+/// another workspace records building on, `built_on`. Files go by force
 /// only once `removal` may discard unsaved work, or discards unsaved files a
 /// checkpoint keeps. A workspace at a commit owns no branch to delete,
 /// whichever its worktree is on. A disposable workspace's branch counts as
