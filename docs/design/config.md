@@ -22,6 +22,9 @@ The daemon resolves a workspace's settings once per request. Every use site
 reads those settings and never layers files on its own. Before a workspace
 exists, the registered checkout's file stands in for the worktree's.
 
+Shoal refuses a setting it no longer reads, naming what replaces it, instead of
+loading the file with a warning. No setting thus keeps two names.
+
 Shoal parses the global file once. It deserializes `[machine]` and the
 repository schema from that parse strictly, each on its own. `serde(flatten)`
 would accept unknown keys and lose their error positions.

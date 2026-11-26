@@ -29,7 +29,7 @@ A repository may have several chats, so each start makes a new one.
 
 A chat's instructions describe the discussion only. They come from the `chat`
 rule, which repositories extend like the other rules, as
-[Modes](modes.md) describes.
+[Configured text](modes.md#configured-text) describes.
 
 A chat waits for the user to speak first unless it opens on a task. An agent
 whose tool takes instructions apart from the first message gets them so.

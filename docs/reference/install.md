@@ -141,8 +141,9 @@ only into directories that exist, and skips a tool without a directory.
 Create the directory, or name the tool, to install for it.
 
 Each `SKILL.md` is a regular copy of the skill built into the binary, as
-[modes](../design/modes.md) explains. A linked skill directory stays as the
-user made it, and so do other files in a skill directory.
+[skill files](../design/modes.md#skill-files) explains. A linked skill
+directory stays as the user made it, and so do other files in a skill
+directory.
 
 `shoal skill --json` returns the skill in its `skill` field.
 

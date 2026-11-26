@@ -20,9 +20,30 @@ Shoal generates its Homebrew formula, which lives in the shared HN05 tap. The
 formula installs the bare binary on Linux and `Shoal.app` on macOS. It has no
 head channel, so every Homebrew installation runs a release that CI signed.
 
+The formula links `bin/shoal` to the executable itself, so Homebrew launches
+the binary directly, without a shell.
+
 `shoal update` replaces a downloaded binary or bundle with a GitHub release. It
 leaves a Homebrew installation to Homebrew, so one package manager owns each
 installation.
+
+## Development builds
+
+A debug build is a development build. It shares the user's home with the
+installed Shoal, so it leaves the user's own files to that Shoal:
+
+- It refuses the user's state directory, however that is selected, since its
+  daemon serves every running agent.
+- It refuses to write the global config and the files beside it in the user's
+  config directory, since running agents read their settings there.
+- It changes no other user-level files outside its state directory, such as
+  installed skills.
+
+Tests in a temporary home set `SHOAL_DEV_USER_FILES=1` to lift these limits.
+Unit tests refuse the user's config directory whatever they inherit. The
+password database names the user's home, so a temporary `HOME` neither hides
+nor imitates it. [Development](../../README.md#development) says how to run a
+development build.
 
 ## The installed config
 
