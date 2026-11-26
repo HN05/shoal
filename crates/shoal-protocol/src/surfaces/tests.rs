@@ -352,3 +352,19 @@ fn a_surface_that_names_its_components_again_draws_within_a_bound() {
     assert!(lines.len() <= 2 * text::MAX_DRAWN, "{}", lines.len());
     assert!(lines.last().unwrap().contains("--json"), "{lines:?}");
 }
+
+#[test]
+fn a_date_input_takes_date_bounds() {
+    let dated = surface(
+        json!([{"id": "root", "component": "DateTimeInput", "enableDate": true,
+            "min": "2026-11-26", "max": "2026-12-31T12:00:00Z", "value": {"@path": "/when"}}]),
+        json!({"when": ""}),
+    );
+    dated.checked(&[]).unwrap();
+    let vague = surface(
+        json!([{"id": "root", "component": "DateTimeInput", "enableDate": true,
+            "min": "tomorrow", "value": {"@path": "/when"}}]),
+        json!({"when": ""}),
+    );
+    assert!(refusal(vague, &[]).contains("schema"));
+}

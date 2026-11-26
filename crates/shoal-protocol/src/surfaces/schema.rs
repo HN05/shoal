@@ -32,8 +32,11 @@ static VALIDATOR: LazyLock<Validator> = LazyLock::new(|| {
         .expect("vendored schemas register");
     let schema =
         json!({"$ref": format!("{BASE}agent_to_renderer.json#/$defs/CreateSurfaceMessage")});
+    // The catalog tells a date bound's forms apart by `format` alone, which
+    // 2020-12 only annotates unless asked to assert it.
     jsonschema::options()
         .with_draft(Draft::Draft202012)
+        .should_validate_formats(true)
         .with_registry(&registry)
         .build(&schema)
         .expect("vendored schema builds")
