@@ -6,7 +6,8 @@ use serde_json::{Map, Value};
 use shoal_protocol::surfaces::{Input, InputKind, SurfaceAction};
 
 use super::{
-    Entries, SelectionCanceled, input, pick, pick_choice, pick_many, pick_with_header, read_input,
+    Entries, SelectionCanceled, input, pick, pick_choice, pick_many_selected, pick_with_header,
+    read_input,
 };
 use crate::cli::context::Context;
 
@@ -77,27 +78,25 @@ fn entries(actions: &[SurfaceAction]) -> Entries {
 fn value(ctx: &Context, input: &Input) -> Result<Value> {
     let prompt = format!("{} ({})", input.key, input.kind.describe());
     match &input.kind {
-        InputKind::Options { options, multiple } => picked(ctx, &prompt, options, *multiple),
+        InputKind::Options { options, multiple } => picked(ctx, &prompt, input, options, *multiple),
         InputKind::Boolean => boolean(ctx, &prompt, input),
         _ => typed(ctx, &prompt, input),
     }
 }
 
 /// The values of the options picked among `options`, by their labels,
-/// several when `multiple`, or none, which the picker offers last.
+/// several when `multiple`, or none, starting from those `input` holds.
 fn picked(
     ctx: &Context,
     prompt: &str,
+    input: &Input,
     options: &[(String, String)],
     multiple: bool,
 ) -> Result<Value> {
-    let rows = (options.iter().enumerate())
-        .map(|(place, (_, label))| (format!("{OPTION}{place}"), label.clone()));
-    let none = (NO_OPTION.to_owned(), "No option".to_owned());
-    let entries: Entries = rows.chain(std::iter::once(none)).collect();
+    let (entries, selected) = option_entries(options, &selected_values(input), multiple);
     let prompt = format!("{prompt}> ");
     let picked = match multiple {
-        true => pick_many(ctx, &prompt, entries)?,
+        true => pick_many_selected(ctx, &prompt, entries, &selected)?,
         false => vec![pick(ctx, &prompt, entries)?],
     };
     let places = (picked.iter()).filter_map(|id| id.strip_prefix(OPTION)?.parse::<usize>().ok());
@@ -107,6 +106,50 @@ fn picked(
             .map(|(value, _)| Value::String(value.clone()))
             .collect(),
     ))
+}
+
+/// The rows offering `options` and none, and the ids of those to start
+/// selected: for one option, the one `current` names leads, or picking
+/// none where it names none; for several, those it names are selected,
+/// with picking none leading where it names none, so Enter alone keeps
+/// the selection the surface starts with.
+fn option_entries(
+    options: &[(String, String)],
+    current: &[String],
+    multiple: bool,
+) -> (Entries, Vec<String>) {
+    let mut rows: Vec<(String, String)> = (options.iter().enumerate())
+        .map(|(place, (_, label))| (format!("{OPTION}{place}"), label.clone()))
+        .collect();
+    let chosen: Vec<String> = (options.iter().enumerate())
+        .filter(|(_, (value, _))| current.contains(value))
+        .map(|(place, _)| format!("{OPTION}{place}"))
+        .collect();
+    let none = (NO_OPTION.to_owned(), "No option".to_owned());
+    match (chosen.first(), multiple) {
+        (None, _) => rows.insert(0, none),
+        (Some(first), false) => {
+            let at = rows.iter().position(|(id, _)| id == first).unwrap_or(0);
+            let lead = rows.remove(at);
+            rows.insert(0, lead);
+            rows.push(none);
+        }
+        (Some(_), true) => rows.push(none),
+    }
+    let selected = if multiple { chosen } else { Vec::new() };
+    (rows, selected)
+}
+
+/// The option values `input` starts with: its text, or each text of its
+/// list.
+fn selected_values(input: &Input) -> Vec<String> {
+    match &input.initial {
+        Some(Value::String(value)) => vec![value.clone()],
+        Some(Value::Array(values)) => (values.iter())
+            .filter_map(|value| value.as_str().map(str::to_owned))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// `true` or `false`, picked with the input's value first.
@@ -154,3 +197,6 @@ fn initial_text(input: &Input) -> Option<String> {
         other => Some(other.to_string()),
     }
 }
+
+#[cfg(test)]
+mod tests;

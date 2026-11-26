@@ -26,7 +26,8 @@
 //!   the next view ([`next_picker_view`]) and encoding its transition
 //!   ([`PickerView::transition`]).
 //! - [`several`]: choosing several items at once; Tab selects each and
-//!   Ctrl-A all of them ([`pick_many`]).
+//!   Ctrl-A all of them ([`pick_many`]), also starting from a selection
+//!   ([`pick_many_selected`]).
 //! - [`workspaces`]: the workspace a command acts on, named, current or
 //!   picked ([`select_workspace`]), listed by what the command needs of it.
 //! - [`spaces`]: the space a command acts on, a workspace or a chat, picked
@@ -73,7 +74,7 @@ pub use modes::ModeChoice;
 pub use picker::*;
 pub use prompt::*;
 pub use rows::*;
-pub use several::{Report, confirm_losses, failure, pick_many};
+pub use several::{Report, confirm_losses, failure, pick_many, pick_many_selected};
 pub use spaces::*;
 pub use views::*;
 pub use workspaces::*;

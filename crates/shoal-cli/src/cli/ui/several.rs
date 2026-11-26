@@ -26,7 +26,18 @@ const SELECT_ALL: &str = "ctrl-a:transform:[ \"$FZF_SELECT_COUNT\" -gt 0 ] && aw
 /// returning their ids in list order. Enter without a selection chooses the
 /// highlighted entry.
 pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<String>> {
-    let extra = [
+    pick_many_selected(ctx, prompt, entries, &[])
+}
+
+/// [`pick_many`] starting with the entries `selected` names selected, so
+/// Enter alone keeps them.
+pub fn pick_many_selected(
+    ctx: &Context,
+    prompt: &str,
+    entries: Entries,
+    selected: &[String],
+) -> Result<Vec<String>> {
+    let mut extra = vec![
         "--multi".to_owned(),
         "--with-shell=sh -c".to_owned(),
         "--marker=✓ ".to_owned(),
@@ -38,6 +49,9 @@ pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<St
         "--header".to_owned(),
         "Tab: select   Ctrl-A: all   Enter: confirm".to_owned(),
     ];
+    if let Some(selecting) = selecting(&entries, selected) {
+        extra.extend(["--bind".to_owned(), selecting]);
+    }
     let output = picker_output(ctx, prompt, &entries, &extra)?;
     let ids: Vec<String> = output.lines().map(entry_id).collect();
     ensure!(
@@ -46,6 +60,17 @@ pub fn pick_many(ctx: &Context, prompt: &str, entries: Entries) -> Result<Vec<St
         "picker returned an unknown item"
     );
     Ok(ids)
+}
+
+/// The binding that selects the entries `selected` names once the picker
+/// starts, then highlights the first; none when it names none of them.
+fn selecting(entries: &Entries, selected: &[String]) -> Option<String> {
+    let toggles: Vec<String> = (1..)
+        .zip(entries.iter())
+        .filter(|(_, (id, _))| selected.contains(id))
+        .map(|(position, _)| format!("pos({position})+toggle"))
+        .collect();
+    (!toggles.is_empty()).then(|| format!("start:{}+first", toggles.join("+")))
 }
 
 /// Ask once whether to go on with `action` on every item of `losses`, as
