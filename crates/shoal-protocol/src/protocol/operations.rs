@@ -12,15 +12,14 @@ use crate::{
     model::{MergedBranch, QueueEntry, Unmerged, Workspace},
 };
 
-/// Requests about operations: work the daemon starts in a worker process of
-/// its own, so it continues when its caller goes, and whose progress callers
-/// follow.
+/// Requests about operations: work the daemon runs in a worker process of
+/// its own, so that it continues when its caller goes.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OperationMethod {
     /// Start `spec` under the caller's scope; answers with
     /// [`super::Body::OperationStarted`]. The worker runs with `env`, the
-    /// caller's environment, or without it with the daemon's.
+    /// caller's environment, else with the daemon's.
     StartOperation {
         spec: OperationSpec,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -29,15 +28,19 @@ pub enum OperationMethod {
     /// Long-lived: the progress of `operation` after its first `after`
     /// events, each as [`super::Body::OperationEvent`], then its end as
     /// [`super::Body::OperationEnded`].
-    FollowOperation { operation: OperationRef, after: u64 },
+    FollowOperation {
+        operation: OperationRef,
+        after: u64,
+    },
     /// Interrupt the worker of `operation`, as an interrupt of the command
-    /// that ran its work did.
-    CancelOperation { operation: OperationRef },
+    /// that ran its work would.
+    CancelOperation {
+        operation: OperationRef,
+    },
     /// Open a workspace in `repository` where `start` says and start
-    /// preparing it, as `shoal start` does: refuse an agent that cannot run
-    /// there or an issue that is not open before anything is created, assign
-    /// the issue, then run setup, link `pr` and queue `agent`, with `env` as
-    /// [`Self::StartOperation`] takes it. Answers with
+    /// preparing it, with `env` as [`Self::StartOperation`] takes it.
+    /// Refuses an agent that cannot run there, or an issue that is not open,
+    /// before anything is created. Answers with
     /// [`super::Body::WorkspaceStarted`].
     StartWorkspace {
         repository: crate::repository::Selector,
@@ -62,18 +65,16 @@ pub enum OperationMethod {
         issue: Option<crate::forge::items::reference::ItemInput>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pr: Option<crate::forge::items::reference::ItemInput>,
-        /// The agent its preparation queues, on `issue` unless it names a
-        /// task of its own.
+        /// The agent its preparation queues, working on `issue` unless it
+        /// names a task of its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agent: Option<Box<LaunchRequest>>,
-        /// The agent the caller starts itself once setup succeeds, which
-        /// waits in the queue for a retried setup should setup fail.
+        /// The agent the caller starts itself once setup succeeds. It waits
+        /// in the queue for a retried setup should setup fail.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         waiting: Option<Box<QueuedLaunch>>,
         /// What `agent` waits for besides the preparation. A new
-        /// workspace's preparation waits for it too, then creates the
-        /// worktree on the branch of the done blocker that holds the
-        /// others' work.
+        /// workspace's preparation waits for it too.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         blockers: Vec<crate::progress::Blocker>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -83,14 +84,10 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         queue_entry: Option<shoal_ids::queue_entry_ids::QueueEntryId>,
     },
-    /// Create the workspace `launch` describes, as `shoal create` does,
-    /// starting no agent there: placed as a launch's new workspace is, from
-    /// the repository, issue, PR or branch link, branch or copy it names,
-    /// or the existing workspace that has the branch it names, reopened,
-    /// then prepared with `env` as [`Self::StartWorkspace`] prepares it.
-    /// A new workspace goes below the space the launch names, else below
-    /// `below`, the space the creation was made in. A launch that names an
-    /// agent, a mode or anything else only an agent takes is refused.
+    /// Create the workspace `launch` describes without starting an agent,
+    /// as `shoal create` does, and prepare it with `env`. A new workspace
+    /// goes below the space the launch names, else below `below`. A launch
+    /// that names anything only an agent takes, such as a mode, is refused.
     /// Answers with [`super::Body::WorkspaceStarted`].
     StartCreation {
         launch: Box<crate::launches::Launch>,
@@ -99,11 +96,10 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
-    /// Create a child of the space `parent`, a workspace or a chat, and
-    /// start preparing it, as revert's workspace and an agent's worktree
-    /// hook do, with the checks of [`Self::StartWorkspace`]: on the new
-    /// branch `name`, or with `copy` on a copy of that workspace, on `name`
-    /// or else a branch named after the copied one.
+    /// Create a child of the space `parent` and start preparing it, with
+    /// the checks of [`Self::StartWorkspace`]. It works on the new branch
+    /// `name`, or with `copy` on a copy of that workspace, on `name` or else
+    /// a branch named after the copied one.
     StartChild {
         parent: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -122,8 +118,10 @@ pub enum OperationMethod {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         env: Option<BTreeMap<String, String>>,
     },
-    /// The worker's report of a step of operation `id`, or of its end.
-    ReportProgress { id: String, report: Report },
+    ReportProgress {
+        id: String,
+        report: Report,
+    },
     /// Long-lived: start `order`, a move, under the caller's scope on the
     /// machine of its spaces, answering with
     /// [`super::Body::OperationStarted`], then follow it from its first
@@ -145,16 +143,14 @@ impl OperationMethod {
     }
 }
 
-/// A started operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Started {
     pub id: String,
 }
 
 /// An operation a request names: its ID, and the space it works in where
-/// the caller knows it, which takes the request to that space's machine
-/// when another joined machine runs it, as a start there prepares a
-/// workspace.
+/// the caller knows it. The space takes the request to the machine that
+/// runs it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OperationRef {
     pub id: String,
@@ -163,7 +159,6 @@ pub struct OperationRef {
 }
 
 impl OperationRef {
-    /// Operation `id`, on this machine.
     pub fn here(id: String) -> Self {
         Self { id, space: None }
     }
@@ -211,10 +206,8 @@ pub enum WorkspaceStart {
     Workspace(SpaceSelector),
 }
 
-/// An operation preparing a workspace a request opened, and the workspace
-/// as it began: a new one, or with `reused` one it reopened, with the queue
-/// entry of the agent the request queued there, which waits for the
-/// preparation.
+/// The preparation of a workspace a request opened, with the workspace as
+/// it began and the queue entry of the agent the request queued there.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartedWorkspace {
     /// None while the preparation waits, as the workspace's
@@ -238,7 +231,6 @@ pub struct Order {
     pub spec: OperationSpec,
 }
 
-/// What an operation does.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OperationSpec {
@@ -278,11 +270,10 @@ pub enum OperationSpec {
     },
 }
 
-/// What preparing a workspace runs: creating its worktree when it has none
-/// yet, then its setup when `setup`, then linking `pr`, which only warns
-/// when refused, then its post-setup hook when `post_setup`, then queuing
-/// `agent`. A failed worktree or setup leaves `agent`, or else `waiting`,
-/// waiting in the queue for a retried preparation.
+/// The steps of a workspace's preparation. It creates a missing worktree,
+/// then runs setup, links `pr`, runs the post-setup hook and queues `agent`.
+/// Linking `pr` only warns when refused. A failed worktree or setup leaves
+/// `agent`, or else `waiting`, in the queue for a retried preparation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Preparation {
     pub setup: bool,
@@ -296,16 +287,13 @@ pub struct Preparation {
     pub waiting: Option<Box<QueuedLaunch>>,
 }
 
-/// An agent to queue in a ready workspace, as a `shoal start` without a
-/// terminal or a scoped one queues the new workspace's. A request names it
-/// as a [`LaunchRequest`], which the daemon resolves into the launch it
-/// queues.
+/// An agent to queue in a ready workspace. A request names it as a
+/// [`LaunchRequest`], which the daemon resolves into the launch it queues.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueuedLaunch<A = crate::agent::Agent> {
     pub agent: A,
     /// Its first message when no issue gives it one.
     pub prompt: Option<String>,
-    /// The mode it starts in; the default mode when omitted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode: Option<crate::config::modes::ModeName>,
     /// The permissions `--permission` gives its agent, whatever its mode's.
@@ -317,7 +305,6 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// The model and effort requested over the configured ones.
     #[serde(default, skip_serializing_if = "ModelChoice::is_empty")]
     pub model: ModelChoice,
-    /// Arguments passed on to the agent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub args: Vec<String>,
     /// The session the agent starts from a fork of.
@@ -338,9 +325,8 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
     /// its `limits` permission allows.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub now: bool,
-    /// The caller runs the agent in its own terminal or process: the queue
-    /// leaves the agent's entry to it, rather than start it in a place of
-    /// its own, while the caller holds it.
+    /// The caller runs the agent in its own terminal or process. The queue
+    /// leaves the agent's entry to it while the caller holds it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub here: bool,
     /// Discard the stopped or asleep agent of the workspace it starts in as
@@ -353,7 +339,6 @@ pub struct QueuedLaunch<A = crate::agent::Agent> {
 }
 
 impl<A> QueuedLaunch<A> {
-    /// A launch of `agent` that asks for nothing else.
     pub fn new(agent: A) -> Self {
         Self {
             agent,
@@ -384,7 +369,6 @@ impl<A> QueuedLaunch<A> {
         }
     }
 
-    /// This launch, run by the agent `agent` makes of its own.
     fn map_agent<B>(self, agent: impl FnOnce(A) -> B) -> QueuedLaunch<B> {
         let Self {
             agent: own,
@@ -426,7 +410,6 @@ impl<A> QueuedLaunch<A> {
 pub type LaunchRequest = QueuedLaunch<Option<crate::agent::Agent>>;
 
 impl LaunchRequest {
-    /// This launch, run by `agent`.
     pub fn run_by(self, agent: crate::agent::Agent) -> QueuedLaunch {
         self.map_agent(|_| agent)
     }
@@ -438,9 +421,8 @@ impl From<QueuedLaunch> for LaunchRequest {
     }
 }
 
-/// The issue a queued agent works on: its URL, which the start looks up
-/// for the prompt, the title the queue shows and the labels that may give
-/// it a priority.
+/// The issue a queued agent works on. The start looks up its URL for the
+/// prompt; the queue shows its title and ranks by its labels.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaunchIssue {
     pub url: crate::forge::items::reference::ItemRef,
@@ -463,11 +445,10 @@ impl OperationSpec {
         }
     }
 
-    /// The workspace whose machine runs the operation, wherever that is:
-    /// a preparation's, which runs setup in that machine's worktree, and a
-    /// merge's or an unmerge's, which change the default branch of that
-    /// machine's checkout. None for one that runs on the caller's machine,
-    /// in the caller's environment, as a push does.
+    /// The workspace whose machine runs the operation: a preparation runs
+    /// setup in that machine's worktree, and a merge or unmerge changes that
+    /// machine's checkout. `None` runs it on the caller's machine, in the
+    /// caller's environment, as a push needs.
     pub fn machine_space(&self) -> Option<&SpaceSelector> {
         match self {
             Self::Prepare { workspace, .. }
@@ -494,7 +475,6 @@ impl OperationSpec {
 }
 
 shoal_states::states!(
-    /// What an operation does, as its [`OperationSpec`] says.
     OperationKind {
         Prepare => "prepare",
         OpenPull => "open_pull",
@@ -554,7 +534,6 @@ pub struct OperationEvent {
     pub progress: Progress,
 }
 
-/// What the worker reports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Report {
@@ -562,7 +541,6 @@ pub enum Report {
     Ended(Ended),
 }
 
-/// How an operation ended.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Ended {
@@ -614,7 +592,7 @@ outcomes!(
     Moved(crate::transfer::MoveReport)
 );
 
-/// Why an operation failed, as typed as its caller acts on it.
+/// Why an operation failed, typed as far as its caller acts on it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum Failure {
@@ -665,7 +643,6 @@ pub enum Failure {
 }
 
 impl Failure {
-    /// What the failure says, where it carries a message.
     pub fn message(&self) -> Option<&str> {
         match self {
             Self::WorktreeFailed { message }
@@ -700,11 +677,9 @@ impl Failure {
 }
 
 impl OperationMethod {
-    /// A move goes to the machine of its spaces, as an operation the caller
-    /// names with its space goes to that space's, whose events come on a
-    /// stream, and one that runs on its space's machine starts there; the
-    /// rest run or create spaces where the caller runs or report the
-    /// caller's own operations.
+    /// A move, an operation named with its space, and one that runs on its
+    /// space's machine go to that machine. The rest run where the caller
+    /// runs.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::CancelOperation { .. } => Forwarding::Online,

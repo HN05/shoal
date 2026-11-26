@@ -1,6 +1,5 @@
 //! The Shoal daemon's protocol: its requests and responses, the types they
-//! carry, and the logic over them that needs no connection. The daemon, the
-//! code it shares with the CLI, and `shoal-client`'s operations use it.
+//! carry, and the logic over them that needs no connection.
 pub mod absorb;
 pub mod acquirers;
 pub mod agent;

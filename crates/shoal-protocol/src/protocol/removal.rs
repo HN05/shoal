@@ -36,10 +36,10 @@ pub enum UntrackedProcesses {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RemovalMethod {
-    /// The workspaces and chats `stop --all` stops.
+    /// The spaces `stop --all` stops.
     StopTargets,
-    /// Stop the agents and commands of the workspace or chat `space`,
-    /// saving them for `shoal resume`.
+    /// Stop the agents and commands of `space`, saving them for
+    /// `shoal resume`.
     StopSpace {
         space: SpaceSelector,
         /// The caller confirmed that executions Shoal cannot prove ended did.
@@ -51,27 +51,26 @@ pub enum RemovalMethod {
         /// What becomes of its untracked processes, which the answer counts.
         processes: UntrackedProcesses,
     },
-    /// Refuse now what stopping the workspace or chat `space` would refuse,
-    /// so a batch checks every target before stopping any.
-    CheckStop { space: SpaceSelector },
-    /// Stop the untracked processes of the workspace or chat `space` that
-    /// `selection` takes, other than process `requester` and the processes
-    /// that started it.
+    /// Refuse now what stopping `space` would refuse, so that a batch
+    /// checks every target before stopping any.
+    CheckStop {
+        space: SpaceSelector,
+    },
+    /// Stop the untracked processes of `space` that `selection` takes,
+    /// other than process `requester` and the processes that started it.
     StopProcesses {
         space: SpaceSelector,
         selection: crate::processes::Selection,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         requester: Option<u32>,
     },
-    /// What removing the workspace or chat `space` would do, with its
-    /// worktree's changed files when `include_changes`.
     CheckRemoval {
         space: SpaceSelector,
         #[serde(default)]
         include_changes: bool,
     },
-    /// Remove the workspace or chat `space`, stopping its agent, first the
-    /// spaces below it, deleting only the `unsaved` work the caller saw.
+    /// Remove `space` after the spaces below it, deleting only the
+    /// `unsaved` work the caller saw.
     RemoveSpace {
         space: SpaceSelector,
         unsaved: UnsavedWork,
@@ -80,14 +79,13 @@ pub enum RemovalMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         keep_user_holds: bool,
         /// The cause of the removal of the space above it on another
-        /// machine, which takes it as that removal's child, as a removal
-        /// takes a child here; none for a removal asked of it.
+        /// machine, which records this removal as its child.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         above: Option<crate::model::EventCause>,
     },
     /// Remove `space` as `RemoveSpace` does, answering once removal has
-    /// reserved it and passed the checks it makes before changing anything,
-    /// while the rest goes on in the background.
+    /// reserved it and passed its checks. The rest goes on in the
+    /// background.
     StartRemoval {
         space: SpaceSelector,
         unsaved: UnsavedWork,
@@ -102,32 +100,37 @@ pub enum RemovalMethod {
         #[serde(flatten)]
         selection: crate::cleanup::Selection,
     },
-    /// Removed spaces that can still be restored, those the caller may.
+    /// The removed spaces the caller may restore.
     RemovedSpaces,
     /// The removed space `space` names, once the caller may restore it.
-    RemovedSpace { space: SpaceSelector },
-    /// The removed space `space` names by ID, with where its record is
-    /// kept: here, or on the other joined machine that keeps it, which is
-    /// asked for it; refused where the caller may not restore it.
-    LocateRemovedSpace { space: SpaceSelector },
-    /// Open a removed space again from its removal record.
-    RestoreSpace { space: SpaceSelector },
+    RemovedSpace {
+        space: SpaceSelector,
+    },
+    /// The removed space `space` names by ID, with the machine that keeps
+    /// its record. Refused where the caller may not restore it.
+    LocateRemovedSpace {
+        space: SpaceSelector,
+    },
+    RestoreSpace {
+        space: SpaceSelector,
+    },
     /// Delete the agents' session files the restore that opened `space`
     /// returned, once the caller has put them in place.
-    DropRestoredSessions { space: SpaceSelector },
-    /// Write the removal record of the removed space `space` names by ID,
-    /// which stays, with those of the spaces its removal took that
-    /// `carrying` carries, for another Shoal to the new file `file`.
+    DropRestoredSessions {
+        space: SpaceSelector,
+    },
+    /// Write the removal record of `space`, with those of the spaces its
+    /// removal took that `carrying` carries, to the new file `file`. The
+    /// record stays here.
     ExportRemovedSpace {
         space: SpaceSelector,
         file: std::path::PathBuf,
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
-    /// Write a copy of a workspace or chat, with copies of the spaces below
-    /// it that `carrying` carries, for another Shoal to the new file
-    /// `file`, leaving them running: a workspace at its checkpoint
-    /// `checkpoint`, or at a new one, and those below at new ones.
+    /// Write a copy of a space, with copies of the spaces below it that
+    /// `carrying` carries, to the new file `file`, leaving them running. A
+    /// workspace is copied at its checkpoint `checkpoint`, or at a new one.
     CopySpace {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -136,11 +139,10 @@ pub enum RemovalMethod {
         #[serde(default)]
         carrying: crate::transfer::Carrying,
     },
-    /// Record the move of the workspace or chat `space` and the spaces
-    /// below it that `carrying` carries to `destination`, letting it delete
-    /// the `unsaved` work the caller saw, then stop their agents, saving
-    /// their sessions, and write their package for another Shoal to the
-    /// new file the destination takes, without ending them here.
+    /// Record the move of `space` and the spaces below it that `carrying`
+    /// carries to `destination`, then stop their agents and write their
+    /// package. The move may delete the `unsaved` work the caller saw. The
+    /// spaces stay here until [`Self::EndMovedSpace`].
     ExportMovingSpace {
         space: SpaceSelector,
         unsaved: UnsavedWork,
@@ -152,47 +154,50 @@ pub enum RemovalMethod {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         again: bool,
     },
-    /// End `space` here with the spaces below it that its recorded move
-    /// carries, once the destination has their package, as the move's
-    /// record allows; the move ends either way.
-    EndMovedSpace { space: SpaceSelector },
-    /// Forget the recorded move of `space`, which failed, answering with the
-    /// executions whose stopped work its spaces saved once it stopped their
-    /// agents.
-    AbandonMove { space: SpaceSelector },
-    /// Read a package another Shoal exported, cloning the repositories it
-    /// needs that are not here, record its spaces as removed here once the
-    /// whole package checks out, and open its own space again.
+    /// End `space` here with the spaces below it that its move carries,
+    /// once the destination has their package. The move ends either way.
+    EndMovedSpace {
+        space: SpaceSelector,
+    },
+    /// Forget the failed move of `space`, answering with the executions
+    /// whose work its spaces saved when the move stopped their agents.
+    AbandonMove {
+        space: SpaceSelector,
+    },
+    /// Import a package another Shoal exported. Once the whole package
+    /// checks out, its spaces are recorded as removed here and its own space
+    /// opens again.
     ImportPackage(Box<crate::transfer::PackageImport>),
-    /// Deliver the package of the recorded move of `space` to the joined
-    /// machine it goes to, through the hub; answered with how the import
-    /// there went, and refused when it is unknown whether that machine
+    /// Deliver the package of the move of `space` to the machine it goes
+    /// to, through the hub. Refused when it is unknown whether that machine
     /// claimed the space.
-    DeliverMove { space: SpaceSelector },
-    /// Deliver the package of a copy of the space `space` to the joined
-    /// machine `destination` names, through the hub; answered with how the
-    /// import there went.
+    DeliverMove {
+        space: SpaceSelector,
+    },
+    /// Deliver the package of a copy of `space` to the machine `destination`
+    /// names, through the hub.
     DeliverCopy {
         space: SpaceSelector,
         destination: crate::transfer::MachineDestination,
     },
-    /// The package of `space` held here for the joined machine that
-    /// started its move: the recorded move's, or with `copy` a copy's or,
-    /// for a removed space, its record's, which goes once read; answered
-    /// with its size, then its bytes on the request's connection.
+    /// The package of `space` held here for the machine that started its
+    /// move, or with `copy` a copy's, which goes once read. Answered with
+    /// its size, then its bytes on the request's connection.
     ReadHeldPackage {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         copy: bool,
     },
-    /// Give back the recorded move of `space` that holds its package here
-    /// for the joined machine that started it, which could not take it:
-    /// `space` stays here, its agents' restores queued.
-    ReleaseHeldMove { space: SpaceSelector },
-    /// Ask the hub whether the joined machine the recorded move of `space`
-    /// goes to claimed the space, which then no longer can when it did
-    /// not; answered with how the hub settled it.
-    SettleMove { space: SpaceSelector },
+    /// Give back the move of `space` whose package the machine that started
+    /// it could not take. `space` stays here, its agents' restores queued.
+    ReleaseHeldMove {
+        space: SpaceSelector,
+    },
+    /// Ask the hub whether the machine the move of `space` goes to claimed
+    /// the space. When it did not, it no longer can.
+    SettleMove {
+        space: SpaceSelector,
+    },
     /// The removal records of the spaces the removal of `space` took that
     /// `carrying` carries, which its record carries on a move.
     TakenRecords {
@@ -201,10 +206,9 @@ pub enum RemovalMethod {
         carrying: crate::transfer::Carrying,
     },
     /// Deliver the removal record of `space`, with those of the spaces its
-    /// removal took that `carrying` carries, to the joined machine
-    /// `destination` names, which records them as removed there, their
-    /// claims at the hub carrying `ticket`, and forget here those it
-    /// recorded; answered with their package and how its delivery went.
+    /// removal took that `carrying` carries, to the machine `destination`
+    /// names. Their claims at the hub carry `ticket`. This machine forgets
+    /// the records that machine recorded.
     DeliverRemovedSpace {
         space: SpaceSelector,
         destination: crate::transfer::MachineDestination,
@@ -212,11 +216,9 @@ pub enum RemovalMethod {
         carrying: crate::transfer::Carrying,
         ticket: shoal_ids::move_tickets::MoveTicket,
     },
-    /// Settle at the hub the move `ticket` of the removal record of
-    /// `space`, with the records of the spaces `carried`, to the joined
-    /// machine `machine` names, whose arrival that machine could not
-    /// report, and forget here each record that machine claimed; answered
-    /// with how the hub settled the space's own.
+    /// Settle at the hub the move `ticket` of the removal records of
+    /// `space` and `carried` to `machine`, whose arrival it could not
+    /// report. This machine forgets each record that machine claimed.
     SettleRemovedMove {
         space: SpaceSelector,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -224,14 +226,11 @@ pub enum RemovalMethod {
         machine: String,
         ticket: shoal_ids::move_tickets::MoveTicket,
     },
-    /// Take the package of a move another joined machine sends on the
+    /// Take the package of a move that another machine sends on the
     /// request's connection once the first reply asks for it, and continue
-    /// its spaces here as `shoal restore --from -` does, their claims at
-    /// the hub carrying `ticket`, which a copy lacks, with their agents'
-    /// restores queued when `resume`, and tell their agents that the spaces
-    /// moved here from the machine named `from`, or when `removed`, a
-    /// removed space's package, only record them as removed here; answered
-    /// with how the import went.
+    /// its spaces here as `shoal restore --from -` does. Their claims at the
+    /// hub carry `ticket`, which a copy lacks. With `removed`, the package
+    /// holds removal records, which are only recorded here.
     ReceiveMove {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ticket: Option<shoal_ids::move_tickets::MoveTicket>,
@@ -243,12 +242,10 @@ pub enum RemovalMethod {
 }
 
 impl RemovalMethod {
-    /// A stop goes to the space's machine, waiting for it while it is
-    /// offline, and a removal there too, as does the end of a move another
-    /// machine took the package of, the read of a package it holds and its
-    /// return, and a removed space's record is read where it is kept; an
-    /// absorb needs both worktrees, and a restore, the other steps of a
-    /// move, an export and the caller's cleanup run where the caller does.
+    /// A request about a running space goes to its machine, and a stop
+    /// waits for one that is offline. A removed space's record is read
+    /// where it is kept. An absorb needs both worktrees, so it runs here, as
+    /// do a restore, an export, cleanup and the other steps of a move.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::StopSpace { .. } => Forwarding::Queued,

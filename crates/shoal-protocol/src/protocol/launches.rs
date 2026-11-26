@@ -12,32 +12,25 @@ use crate::{
     model::{QueueEntry, Space},
 };
 
-/// Requests that launch agents.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LaunchMethod {
-    /// Start an agent as `launch` asks, which a client made itself, so the
-    /// journal records it as manual: the daemon decides its mode, the kind
-    /// of space it starts in and the repository, creates or selects the
-    /// space and queues its agent. Answers with [`super::Body::Launched`].
+    /// Start an agent as `launch` asks. The daemon decides its mode, space
+    /// and repository, and the journal records it as manual. Answers with
+    /// [`super::Body::Launched`].
     Launch { launch: Box<Launch> },
     /// Refuse what the daemon would refuse of the new workspace `launch`
-    /// starts in, settling it as [`Self::Launch`] does up to where that
-    /// would create or fetch anything, with what a picker has yet to choose
-    /// left unset. Answers with [`super::Body::CheckedLaunch`], the
-    /// workspace that already has the branch it names, which the start goes
-    /// into, if any.
+    /// starts in, settling it as [`Self::Launch`] does until that would
+    /// create or fetch anything. What a picker has yet to choose stays
+    /// unset. Answers with [`super::Body::CheckedLaunch`], the workspace
+    /// that already has the branch it names, if any.
     CheckLaunch { launch: Box<Launch> },
-    /// Refuse what the daemon would refuse of the workspace a creation
-    /// `launch` makes, as [`Self::CheckLaunch`] checks a worker's start,
-    /// except that it starts no agent, so the agent of an existing
-    /// workspace it opens refuses nothing. Answers with
-    /// [`super::Body::CheckedLaunch`].
+    /// [`Self::CheckLaunch`] for a creation, which starts no agent, so the
+    /// agent of an existing workspace it opens refuses nothing.
     CheckCreation { launch: Box<Launch> },
     /// The modes `launch` may start in, each with the space it starts, as
-    /// the machine it starts on defines them where it would start: another
-    /// joined machine the launch names answers through the hub. Answers
-    /// with [`super::Body::LaunchModes`].
+    /// the machine it starts on defines them. Answers with
+    /// [`super::Body::LaunchModes`].
     LaunchModes { launch: Box<Launch> },
     /// The mode the labels of the issue or PR `launch` names call for
     /// among the modes it may start in that fit its other arguments, which
@@ -45,19 +38,16 @@ pub enum LaunchMethod {
     /// [`super::Body::LabelledMode`].
     LabelledMode { launch: Box<Launch> },
     /// Register the repository of the space `launch` goes below, which
-    /// another machine runs in a repository this one has not registered,
-    /// as a clone of the URL that machine reports, as a launch does first,
-    /// so that a client settles the rest of the start in that repository,
-    /// refusing first what the launch would refuse there. Answers with
-    /// [`super::Body::Ok`].
+    /// another machine runs, as a clone of the URL that machine reports.
+    /// A client then settles the rest of the start in that repository.
+    /// Refuses first what the launch would refuse there.
     TakeParentRepository { launch: Box<Launch> },
-    /// Put `files`, those of the session that another joined machine's
-    /// start here forks, where this machine's agents look for them, under
-    /// the settings of the repository whose origin is `origin`, registered
-    /// as a URL clone where there is none, else of the global config: once
-    /// the daemon answers with [`super::Body::Ok`], the caller writes each
-    /// file's contents in turn, as long as its size, and ends its side, and
-    /// the daemon answers again once they are in place.
+    /// Put `files`, those of the session that another machine's start here
+    /// forks, where this machine's agents look for them. The repository
+    /// whose origin is `origin` gives the settings, registered as a URL
+    /// clone where there is none. Once the daemon answers with
+    /// [`super::Body::Ok`], the caller writes each file's contents in turn
+    /// and ends its side. The daemon answers again once they are in place.
     ReceiveSession {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<String>,
@@ -98,8 +88,7 @@ pub struct Launched {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
     pub start: Started,
-    /// The joined machine that started it, by name, when another one than
-    /// the caller's did, whose daemon runs what follows its recording.
+    /// The machine that started it, when another than the caller's did.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machine: Option<String>,
     /// Where the hub placed a start that named no machine, and why.
@@ -143,7 +132,6 @@ pub struct DetachedRun {
 }
 
 impl From<StartedWorkspace> for Launched {
-    /// The launch of the workspace a request `started`, which prepares it.
     fn from(started: StartedWorkspace) -> Self {
         let StartedWorkspace {
             operation,
@@ -164,10 +152,8 @@ impl From<StartedWorkspace> for Launched {
 }
 
 impl LaunchMethod {
-    /// A start in an existing space, and what settles it, goes to that
-    /// space's machine; a creation, and the repository a start below
-    /// another machine's space takes, stay with the caller, and a session
-    /// another machine carries comes on a duplex stream, as commits do.
+    /// A start in an existing space goes to that space's machine. A
+    /// creation stays with the caller.
     pub fn forwarding(&self) -> Forwarding {
         match self {
             Self::Launch { .. }
