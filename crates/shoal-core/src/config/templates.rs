@@ -33,6 +33,9 @@ const SPACE_RULES: &str = include_str!("templates/space_rules.md");
 /// workspace is told after the space rules, as a start without a branch
 /// begins.
 const CONVERT_RULE: &str = include_str!("templates/convert_rule.md");
+/// What the agent of a workspace is told after the space rules about the
+/// commands that build and test, before the repository's configured ones.
+const COMMANDS_RULE: &str = include_str!("templates/commands_rule.md");
 /// A review's instructions: the fixed task, read-only rules, the commands
 /// that write the review and treatment of history, then the base the
 /// `review` rule replaces.
@@ -335,6 +338,9 @@ fn system_text(
     if converts_to_workspace(place, &resolved) {
         system.push(CONVERT_RULE.to_owned());
     }
+    if let Place::Workspace { .. } = place {
+        system.push(commands_rule(settings));
+    }
     for name in &resolved.rules {
         let rule = settings
             .rules
@@ -343,6 +349,24 @@ fn system_text(
         system.push(rule.text.clone());
     }
     Ok(fields.render(&join(system)))
+}
+
+/// What a workspace's agent is told of running builds and tests, naming
+/// the commands `settings` configure besides the agents Shoal knows.
+fn commands_rule(settings: &Settings) -> String {
+    let agents = crate::config::named_commands::defaults();
+    let configured: Vec<String> = (settings.commands.keys())
+        .filter(|name| !agents.contains_key(*name))
+        .map(|name| format!("`{name}`"))
+        .collect();
+    match configured.is_empty() {
+        true => COMMANDS_RULE.to_owned(),
+        false => format!(
+            "{}\nThis repository's commands: {}.",
+            COMMANDS_RULE.trim_end(),
+            configured.join(", ")
+        ),
+    }
 }
 
 /// Whether the agent at `place` in `mode` is a chat in a repository's

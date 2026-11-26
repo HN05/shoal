@@ -2923,15 +2923,29 @@ pub(crate) const GUIDANCE_START: &str = "You are working in Shoal workspace ";
 const SPACE_RULES: &str =
     include_str!("../../crates/shoal-core/src/config/templates/space_rules.md");
 
+/// What a workspace's agent is told of building through `shoal run`, after
+/// the space rules, with the repository's commands on a line of their own.
+const COMMANDS_RULE: &str =
+    include_str!("../../crates/shoal-core/src/config/templates/commands_rule.md");
+
 /// The built-in `work` rule, which the built-in modes list right after the
 /// guidance.
 const WORK_RULE: &str = include_str!("../../crates/shoal-core/src/config/rules/work.md");
 
 /// Where the guidance that starts at `start` in `text` ends, with the
-/// built-in `work` rule when it follows.
+/// `shoal run` rule and the built-in `work` rule when they follow.
 pub(crate) fn guidance_end(text: &str, start: usize) -> Option<usize> {
     let rules = SPACE_RULES.trim_end();
-    let end = start + text[start..].find(rules)? + rules.len();
+    let mut end = start + text[start..].find(rules)? + rules.len();
+    let commands = format!("\n\n{}", COMMANDS_RULE.trim_end());
+    if text[end..].starts_with(&commands) {
+        end += commands.len();
+        if text[end..].starts_with("\nThis repository's commands: ") {
+            end += text[end + 1..]
+                .find('\n')
+                .map_or(text.len() - end, |line| line + 1);
+        }
+    }
     let work = format!("\n\n{}", WORK_RULE.trim_end());
     Some(if text[end..].starts_with(&work) {
         end + work.len()

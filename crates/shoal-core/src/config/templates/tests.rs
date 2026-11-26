@@ -438,3 +438,38 @@ fn a_runs_subject_states_where_it_ran_how_it_ended_and_what_failed() {
     assert!(running.contains("State: running\n"), "{running}");
     assert!(!running.contains("Failed jobs"), "{running}");
 }
+
+#[test]
+fn a_workspace_agent_is_told_to_run_the_configured_commands_through_shoal() {
+    let configured = settings("[commands]\ntest = ['cargo', 'test']\nlint = ['cargo', 'clippy']\n");
+    let system = brief(
+        &configured,
+        &"worker".into(),
+        worker(Delivery::Pushed),
+        None,
+    )
+    .unwrap()
+    .system;
+    assert!(system.contains("`shoal run <name>`"), "{system}");
+    assert!(
+        system.contains("This repository's commands: `lint`, `test`."),
+        "{system}"
+    );
+    let plain = brief(
+        &settings(""),
+        &"worker".into(),
+        worker(Delivery::Pushed),
+        None,
+    );
+    let system = plain.unwrap().system;
+    assert!(system.contains("`shoal run <name>`"));
+    assert!(!system.contains("This repository's commands"), "{system}");
+    let repo = repository();
+    let chat = brief(
+        &configured,
+        &"chat".into(),
+        chat(ChatHome::Checkout(&repo), Delivery::Pushed),
+        None,
+    );
+    assert!(!chat.unwrap().system.contains("shoal run"));
+}
