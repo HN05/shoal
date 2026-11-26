@@ -41,7 +41,6 @@ pub async fn changed_on_both_sides(
         .collect())
 }
 
-/// The paths matching `patterns` that differ between `from` and `to`.
 async fn changed_paths(
     repo: &Path,
     from: &str,

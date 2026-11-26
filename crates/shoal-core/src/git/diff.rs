@@ -1,4 +1,3 @@
-//! Diff queries, separate from the daemon's workspace base selection.
 use std::path::Path;
 
 use anyhow::Result;

@@ -26,8 +26,6 @@ pub async fn verify_revision(
     named_object(repo, rev, git).await
 }
 
-/// The object `rev` names, as `git rev-parse` prints it, read in process
-/// for a ref or object, else by `git`.
 async fn named_object(
     repo: &Path,
     rev: &str,
@@ -68,7 +66,6 @@ impl Head {
         super::strip_local(reference).map(BranchName::from)
     }
 
-    /// HEAD's commit, which a branch without commits lacks.
     pub(crate) fn commit(self) -> Result<CommitId> {
         self.commit.context("HEAD names no commit yet")
     }
@@ -90,7 +87,6 @@ pub(crate) fn head_in_process(repo: &gix::Repository) -> Result<Head> {
     })
 }
 
-/// The [`Head`] Git reads for `repo`.
 async fn head_from_git(repo: &Path) -> Result<Head> {
     let mut reference = super::command(repo);
     reference.args(["symbolic-ref", "--quiet", "HEAD"]);
@@ -137,7 +133,6 @@ pub(crate) async fn head_state(repo: &Path) -> Result<HeadState> {
     reader::read(repo, in_process, head_state_from_git).await
 }
 
-/// The [`HeadState`] Git reads for `repo`.
 async fn head_state_from_git(repo: &Path) -> Result<HeadState> {
     let output = run(repo, &["rev-parse", "HEAD^{tree}", "HEAD"]).await?;
     let mut lines = output.lines();
@@ -150,7 +145,6 @@ async fn head_state_from_git(repo: &Path) -> Result<HeadState> {
     })
 }
 
-/// The branch the worktree at `repo` is on; `None` when detached.
 pub async fn checked_out_branch(repo: &Path) -> Result<Option<BranchName>> {
     Ok(head(repo).await?.branch())
 }
@@ -230,7 +224,6 @@ pub async fn checkout_dirs(repo: &Path) -> Result<CheckoutDirs> {
     reader::read(repo, in_process, checkout_dirs_from_git).await
 }
 
-/// The [`CheckoutDirs`] Git prints for `repo`.
 async fn checkout_dirs_from_git(repo: &Path) -> Result<CheckoutDirs> {
     let output = run(
         repo,
@@ -264,7 +257,6 @@ fn canonical(path: &Path) -> Result<PathBuf> {
     std::fs::canonicalize(path).with_context(|| format!("cannot resolve {}", path.display()))
 }
 
-/// The three paths `rev-parse` prints, one per line, in the order asked.
 fn parse_checkout_dirs(output: &str) -> Result<[PathBuf; 3]> {
     let mut lines = output.lines().map(PathBuf::from);
     let mut next = |what| {

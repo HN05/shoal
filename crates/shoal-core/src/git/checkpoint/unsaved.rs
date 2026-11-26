@@ -55,8 +55,6 @@ async fn read_status(worktree: &Path) -> Result<Option<Unsaved>> {
     Ok(parse_status(&status))
 }
 
-/// The [`Unsaved`] files the `-z` porcelain v2 `status` lists; `None` when
-/// it lists an untracked nested repository or a changed submodule.
 fn parse_status(status: &str) -> Option<Unsaved> {
     let mut unsaved = Unsaved::default();
     let mut entries = status.split('\0').filter(|entry| !entry.is_empty());
@@ -141,7 +139,6 @@ fn diff_lists(code: &str) -> bool {
     }
 }
 
-/// Whether a file exists at any of `paths` in `worktree`.
 async fn any_exists(worktree: &Path, paths: &[String]) -> Result<bool> {
     if paths.is_empty() {
         return Ok(false);
@@ -153,7 +150,6 @@ async fn any_exists(worktree: &Path, paths: &[String]) -> Result<bool> {
     .await
 }
 
-/// The changed paths `git diff HEAD` lists.
 async fn changed_by_diff(worktree: &Path) -> Result<Vec<String>> {
     let changed = run_isolated(worktree, &["diff", "-z", "--name-only", "HEAD", "--"]).await?;
     Ok((changed.split('\0'))

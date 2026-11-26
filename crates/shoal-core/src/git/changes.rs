@@ -1,7 +1,5 @@
-//! Snapshots of a worktree's files and what changed between two, from
-//! which Shoal records what an agent's commands change: a snapshot is the
-//! tree of HEAD's files with the unsaved ones Git does not ignore, written
-//! through a temporary index as a checkpoint's is.
+//! Snapshots of a worktree's files and what changed between two. A snapshot
+//! is the tree of HEAD's files with the unsaved ones Git does not ignore.
 use std::{
     collections::{BTreeSet, HashMap},
     path::Path,
@@ -29,12 +27,10 @@ pub struct Changed {
     pub hunks: Vec<Hunk>,
 }
 
-/// The tree of the worktree's files now.
 pub async fn snapshot(worktree: &Path) -> Result<String> {
     TemporaryIndex::copy_of(worktree).await?.tree().await
 }
 
-/// The blob of the file `path` in the tree `tree`, none without it.
 pub async fn blob_in(worktree: &Path, tree: &str, path: &str) -> Result<Option<String>> {
     let listed = run_isolated(
         worktree,
@@ -120,7 +116,6 @@ pub async fn changed(worktree: &Path, from: &str, to: &str) -> Result<Vec<Change
         .collect())
 }
 
-/// One file of a raw diff between two trees.
 struct Entry {
     path: String,
     old: Option<String>,
@@ -256,7 +251,6 @@ impl Text {
     }
 }
 
-/// The size of each blob of `blobs`.
 async fn sizes(worktree: &Path, blobs: &[&str]) -> Result<HashMap<String, u64>> {
     if blobs.is_empty() {
         return Ok(HashMap::new());
@@ -279,7 +273,6 @@ async fn sizes(worktree: &Path, blobs: &[&str]) -> Result<HashMap<String, u64>> 
         .collect()
 }
 
-/// The contents of each blob of `blobs`.
 async fn read_blobs(worktree: &Path, blobs: &[&str]) -> Result<HashMap<String, Vec<u8>>> {
     if blobs.is_empty() {
         return Ok(HashMap::new());

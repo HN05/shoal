@@ -1,5 +1,4 @@
-//! Undoing a local merge into the default branch: the history queries the
-//! daemon checks an undo against, and the moves the unmerge worker makes.
+//! Undoing a local merge into the default branch.
 use std::{collections::HashMap, path::Path};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -229,7 +228,6 @@ async fn rebased_commits(
     Ok(listed.lines().map(CommitId::from).collect())
 }
 
-/// The first commit after `previous` in `tip`'s first-parent history.
 async fn first_after(repo: &Path, tip: &str, previous: &CommitId) -> Result<Option<CommitId>> {
     let chain = first_parent_chain(repo, tip, previous.as_str()).await?;
     Ok(chain.and_then(|mut chain| chain.pop()))
@@ -481,8 +479,6 @@ async fn replay_in(plan: &UnmergePlan, worktree: &Path) -> Result<(CommitId, u64
     Ok((commit, replayed as u64))
 }
 
-/// `git rebase` replaying `worktree`'s HEAD after `upstream` onto `onto`,
-/// keeping merge commits and commits that become empty, without hooks.
 fn rebase_command(worktree: &Path, onto: &str, upstream: &str) -> tokio::process::Command {
     let mut command = git::isolated_command_without_submodules(worktree);
     command.args([
@@ -522,7 +518,6 @@ pub async fn rollback_unmerge(plan: &UnmergePlan) -> Result<()> {
         .context("could not remove the interrupted unmerge's replay worktree")
 }
 
-/// The commit `rev` names.
 pub async fn tip_commit(repo: &Path, rev: &str) -> Result<CommitId> {
     git::resolve_commit(repo, rev, git_run).await
 }

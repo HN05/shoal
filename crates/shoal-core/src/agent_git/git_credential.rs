@@ -1,10 +1,6 @@
 //! The Git settings that give an agent launch's Git over HTTPS the agent
-//! token of each host that has one, through Shoal's credential helper. For
-//! each such host, an empty helper first clears the user's helpers for that
-//! host only, so none of them answers for it or saves the token, and Git
-//! asks Shoal's helper before its first request, so libcurl never sends a
-//! login of the user's `.netrc` for the host first, which Git 2.46 and newer
-//! do.
+//! token of each host that has one, through Shoal's credential helper. See
+//! `docs/design/forge.md`.
 
 use std::ffi::OsStr;
 
@@ -67,22 +63,18 @@ pub fn strip(command: &mut tokio::process::Command) {
 /// helper for a Basic login before its first request to the URL.
 const PROACTIVE: &str = "basic";
 
-/// The key of the credential helper for the URL `context`.
 fn helper_key(context: &str) -> String {
     format!("credential.{context}.helper")
 }
 
-/// The key of the proactive login for the URL `context`.
 fn proactive_key(context: &str) -> String {
     format!("http.{context}.proactiveAuth")
 }
 
-/// The URL context of [`helper_key`]'s `key`.
 fn helper_context(key: &str) -> Option<&str> {
     key.strip_prefix("credential.")?.strip_suffix(".helper")
 }
 
-/// Whether the Git setting `value` is Shoal's helper.
 fn is_helper(value: &OsStr) -> bool {
     let value = value.to_string_lossy();
     value.starts_with('!') && value.ends_with(&format!(" {GROUP} {GIT_CREDENTIAL}"))

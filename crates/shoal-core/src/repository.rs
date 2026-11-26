@@ -39,12 +39,10 @@ pub struct Origins {
 }
 
 impl Origins {
-    /// The remote identity of `source`, as [`identity`] reads it.
     async fn identity(&self, source: &str) -> Result<Option<String>> {
         Ok(self.source_url(source).await?.map(|url| url_key(&url)))
     }
 
-    /// The URL of `source`, as [`remote_url_from_source`] reads it.
     async fn source_url(&self, source: &str) -> Result<Option<String>> {
         let path = Path::new(source);
         if path.exists() {
@@ -54,8 +52,6 @@ impl Origins {
         }
     }
 
-    /// The origin URL of the checkout at `path`, as
-    /// [`remote_url_from_path`] reads it.
     async fn of(&self, path: &Path) -> Result<Option<String>> {
         if let Some(origin) = self.lock().get(path) {
             return Ok(origin.clone());
@@ -88,7 +84,6 @@ pub async fn bare_flag_problem(path: &Path) -> Result<Option<String>> {
     )))
 }
 
-/// Resolve the same repository selectors in the CLI and daemon.
 pub async fn select(
     repositories: &[Repository],
     selector: impl Into<Selector>,
@@ -215,7 +210,6 @@ impl std::fmt::Display for NotRegistered {
 struct ItemOf {
     /// What the URL names, as in `an issue URL`.
     kind: &'static str,
-    /// The repository's URL.
     repository: String,
     /// The name of the registered repository with that URL, if any.
     registered: Option<String>,

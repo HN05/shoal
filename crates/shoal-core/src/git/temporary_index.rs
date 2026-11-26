@@ -22,7 +22,6 @@ impl<'a> TemporaryIndex<'a> {
         Ok(index)
     }
 
-    /// An index of nothing yet.
     pub(super) fn empty(worktree: &'a Path) -> Result<Self> {
         let dir = tempfile::tempdir().context("create a temporary index directory")?;
         let index = dir.path().join("index");

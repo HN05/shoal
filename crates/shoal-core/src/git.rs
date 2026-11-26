@@ -1,4 +1,5 @@
-//! Git invocations shared by workspace creation, removal, branch refreshes, and merging.
+//! Shoal's production Git access: the Git commands it runs and the reads it
+//! makes in process with `gix`. See `docs/design/git.md`.
 pub mod branch;
 pub mod changes;
 pub use branch::check_branch_name;
@@ -67,12 +68,10 @@ use crate::subprocess;
 /// with the repository, have no limit.
 const TIMEOUT: Duration = Duration::from_secs(600);
 
-/// A run of the Git command `command`, stopped after [`TIMEOUT`].
 pub(crate) fn bounded(command: Command) -> subprocess::Run {
     subprocess::Run::new(command).timeout(TIMEOUT)
 }
 
-/// The stdout of [`bounded`] `command`, which must succeed.
 async fn output(command: Command) -> Result<String> {
     bounded(command).output().await
 }
@@ -163,8 +162,6 @@ async fn remote_branch_name<'a>(repo: &Path, base: &'a str) -> Result<Option<&'a
     Ok(Some(qualified))
 }
 
-/// The remote among `remotes` and the branch on it that `qualified`, such
-/// as `origin/feature`, names; the longest remote wins.
 fn split_remote_branch(qualified: &str, remotes: &[String]) -> Option<(String, BranchName)> {
     let mut remotes: Vec<&str> = remotes.iter().map(String::as_str).collect();
     remotes.sort_by_key(|remote| std::cmp::Reverse(remote.len()));
@@ -299,8 +296,6 @@ const REPOSITORY_ENV: [&str; 12] = [
     "GIT_PREFIX",
 ];
 
-/// Git that works in the repository its arguments name, never in one the
-/// caller's [`REPOSITORY_ENV`] names.
 fn without_inherited_repository(command: &mut Command) {
     for name in REPOSITORY_ENV {
         command.env_remove(name);
@@ -330,7 +325,6 @@ pub fn isolated_command(repo: &Path) -> Command {
     command
 }
 
-/// Isolated Git with recursive submodule operations disabled.
 pub(crate) fn isolated_command_without_submodules(repo: &Path) -> Command {
     let mut command = isolated_command(repo);
     command.args(["-c", "submodule.recurse=false"]);
@@ -365,8 +359,7 @@ pub async fn run_isolated(repo: &Path, args: &[&str]) -> Result<String> {
     output(command).await
 }
 
-/// Build the tracked command used by `shoal diff`, preserving the caller's
-/// Git configuration, pager, and external diff settings.
+/// Runs with the caller's Git configuration, pager and external diff.
 pub fn diff_command(rev: &str) -> Vec<OsString> {
     [Tool::Git.program(), "diff", rev, "--"]
         .into_iter()
@@ -374,7 +367,6 @@ pub fn diff_command(rev: &str) -> Vec<OsString> {
         .collect()
 }
 
-/// Build the tracked command used when opening a pull request for a workspace.
 pub fn push_command(remote: &str, branch: &BranchName) -> Vec<OsString> {
     let branch = local_ref(branch);
     [
@@ -424,28 +416,24 @@ pub fn approved_push_command(push: &shoal_protocol::approvals::PushSpecification
     command
 }
 
-/// The arguments that list the refs at `url`, for a push to it.
 pub fn list_remote_args(url: &str) -> Vec<String> {
     ["ls-remote", "--", url].map(String::from).to_vec()
 }
 
-/// The arguments that list the push URLs of the configured remote `remote`.
 pub fn push_urls_args(remote: &str) -> Vec<String> {
     ["remote", "get-url", "--push", "--all", remote]
         .map(String::from)
         .to_vec()
 }
 
-/// The arguments that resolve `rev` to its object name.
 pub fn resolve_args(rev: &str) -> Vec<String> {
     ["rev-parse", "--verify", "--end-of-options", rev]
         .map(String::from)
         .to_vec()
 }
 
-/// The arguments that push `refspecs` to `url` without running hooks,
-/// reporting each ref in porcelain form, with `leases` as the objects
-/// `--force-with-lease` expects of the refs that have one.
+/// `leases` pairs each destination ref with the object `--force-with-lease`
+/// expects there.
 pub fn porcelain_push_args(url: &str, refspecs: &[String], leases: &[(&str, &str)]) -> Vec<String> {
     let mut args = vec![
         "push".to_owned(),
@@ -488,7 +476,6 @@ pub async fn clone(source: &str, destination: &Path, fork: Option<&str>) -> Resu
     Ok(())
 }
 
-/// The command [`clone`] runs.
 fn clone_command(source: &str, destination: &Path, fork: Option<&str>) -> Command {
     let mut command = Command::new(Tool::Git.program());
     without_inherited_repository(&mut command);
@@ -529,7 +516,6 @@ pub async fn resolve_commit(
     refs::read_revision(repo, rev, in_process, git).await
 }
 
-/// The commit Git peels `rev` to in `repo`.
 async fn resolve_commit_by_git(
     repo: &Path,
     rev: &str,
@@ -563,7 +549,6 @@ pub async fn resolve_named_commit(
     refs::read_revision(repo, rev, in_process, git).await
 }
 
-/// The commit and ref name Git reads for `rev` in `repo`.
 async fn resolve_named_commit_by_git(
     repo: &Path,
     rev: &str,

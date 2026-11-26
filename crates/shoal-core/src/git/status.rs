@@ -15,7 +15,6 @@ pub async fn porcelain(repo: &Path) -> Result<String> {
     run(repo, &["status", "--porcelain", "--untracked-files=normal"]).await
 }
 
-/// The status codes with which [`porcelain`] lists an unmerged path.
 const UNMERGED: [&str; 7] = ["DD", "AU", "UD", "UA", "DU", "AA", "UU"];
 
 /// Whether the [`porcelain`] status `status` lists an unmerged path: the
@@ -64,7 +63,6 @@ pub(crate) async fn changed_files(repo: &Path) -> Result<String> {
     .await
 }
 
-/// Commits on HEAD that `base` does not contain.
 pub async fn commits_since(repo: &Path, base: &str) -> Result<u64> {
     commits_between(repo, base, "HEAD").await
 }
@@ -77,7 +75,6 @@ pub async fn subjects_since(repo: &Path, base: &str, limit: usize) -> Result<Vec
     Ok(subjects.lines().map(str::to_owned).collect())
 }
 
-/// Commits reachable from `rev`.
 pub async fn commits_of(repo: &Path, rev: &str) -> Result<u64> {
     Ok(run(repo, &["rev-list", "--count", rev])
         .await?
@@ -85,7 +82,6 @@ pub async fn commits_of(repo: &Path, rev: &str) -> Result<u64> {
         .parse()?)
 }
 
-/// Commits on `rev` that `base` does not contain.
 pub async fn commits_between(repo: &Path, base: &str, rev: &str) -> Result<u64> {
     let range = format!("{base}..{rev}");
     Ok(run(repo, &["rev-list", "--count", &range])
@@ -94,14 +90,12 @@ pub async fn commits_between(repo: &Path, base: &str, rev: &str) -> Result<u64> 
         .parse()?)
 }
 
-/// Commits on `rev` that are reachable from neither a remote nor the given ref.
 pub async fn unretained_commits(repo: &Path, rev: &str, retained: &[&str]) -> Result<u64> {
     let mut args = vec!["rev-list", "--count", rev, "--not", "--remotes"];
     args.extend(retained);
     Ok(run(repo, &args).await?.trim().parse()?)
 }
 
-/// The full ref of a local branch, when it exists.
 pub(crate) async fn local_branch(repo: &Path, name: &BranchName) -> Result<Option<String>> {
     let reference = super::local_ref(name);
     Ok(super::ref_exists(repo, &reference)
@@ -121,7 +115,6 @@ pub async fn local_branch_commit(repo: &Path, name: &BranchName) -> Result<Optio
         .map(Some)
 }
 
-/// The tree HEAD records, to compare with other revisions by content.
 pub(crate) async fn head_tree(repo: &Path) -> Result<String> {
     super::revision(repo, "HEAD^{tree}", run).await
 }
@@ -153,8 +146,6 @@ pub async fn operation_in_progress_at(repo: &Path, git_dir: &Path) -> Result<boo
     Ok(operation_marked(git_dir).await? || has_unmerged(repo).await?)
 }
 
-/// Whether the Git directory `git_dir` marks a merge, rebase, cherry-pick,
-/// revert or bisect under way.
 async fn operation_marked(git_dir: &Path) -> Result<bool> {
     pub(crate) const MARKERS: &[&str] = &[
         "MERGE_HEAD",
@@ -172,7 +163,6 @@ async fn operation_marked(git_dir: &Path) -> Result<bool> {
     Ok(false)
 }
 
-/// Whether the index of the checkout at `repo` has conflicts.
 async fn has_unmerged(repo: &Path) -> Result<bool> {
     Ok(!run(repo, &["ls-files", "--unmerged"]).await?.is_empty())
 }
@@ -248,7 +238,6 @@ pub(crate) async fn retains(
     Ok(false)
 }
 
-/// Whether any of the default branch's refs retains HEAD.
 pub async fn default_branch_retains_head(repo: &Path, default: &DefaultBranch) -> Result<bool> {
     let references = default_refs(repo, default).await?;
     retains(repo, &references, "HEAD", &head_tree(repo).await?).await

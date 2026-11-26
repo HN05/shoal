@@ -11,7 +11,6 @@ use shoal_refs::{BranchName, CommitId};
 
 use super::{run, run_isolated, run_without_submodules};
 
-/// The commit a local branch points at.
 pub async fn branch_commit(repo: &Path, branch: &BranchName) -> Result<CommitId> {
     super::resolve_commit(repo, &super::local_ref(branch), run).await
 }

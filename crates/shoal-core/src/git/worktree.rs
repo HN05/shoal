@@ -1,6 +1,5 @@
-//! The linked worktrees of workspaces on a branch: creating one, and
-//! removing any workspace's worktree, with its branch when the caller says
-//! so, or what is left of one Git disowned. No hooks run.
+//! Creating and removing workspaces' linked worktrees, and deleting what is
+//! left of one Git disowned. No hooks run.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, ensure};
@@ -34,9 +33,7 @@ pub async fn add(repo: &Path, path: &Path, branch: &BranchName, base: Option<&st
         .with_context(|| format!("create a worktree on {branch} at {}", path.display()))
 }
 
-/// The `git worktree add` that creates `branch` at revision `base`, without
-/// an upstream, and checks it out in a new linked worktree of `repo` at
-/// `path`. A failure leaves the branch it created.
+/// A failure leaves the branch it created.
 fn add_on_new_branch(repo: &Path, path: &Path, branch: &BranchName, base: &str) -> Command {
     let mut command = super::isolated_command_without_submodules(repo);
     command
@@ -46,8 +43,6 @@ fn add_on_new_branch(repo: &Path, path: &Path, branch: &BranchName, base: &str) 
     command
 }
 
-/// The `git worktree add` that checks out the existing `branch` in a new
-/// linked worktree of `repo` at `path`.
 fn add_on_branch(repo: &Path, path: &Path, branch: &BranchName) -> Command {
     let mut command = super::isolated_command_without_submodules(repo);
     command
@@ -109,7 +104,6 @@ async fn registered_branch(repo: &Path, path: &Path) -> Result<Option<BranchName
         .map(BranchName::from))
 }
 
-/// The worktree Git lists at `path`, if any.
 async fn listed(repo: &Path, path: &Path) -> Result<Option<super::Worktree>> {
     let path = resolved(path).await;
     for worktree in super::listed_worktrees(repo, super::run_isolated).await? {
@@ -164,7 +158,6 @@ async fn remove_worktree(repo: &Path, path: &Path, files: FileRemoval) -> Result
     Ok(())
 }
 
-/// The text of the `.git` link of the worktree at `path`, if it has one.
 async fn link_text(path: &Path) -> Result<Option<String>> {
     let link = path.join(".git");
     off_runtime::run(move || Ok(crate::fsutil::read_optional(&link)?)).await
@@ -183,14 +176,12 @@ async fn mark_removal(path: &Path, link: Option<&str>) -> Result<Option<PathBuf>
     Ok(Some(admin_dir))
 }
 
-/// A `worktree remove` that did not succeed.
 struct Unfinished {
     error: anyhow::Error,
     /// It was stopped, by its timeout or a signal, rather than exiting.
     stopped: bool,
 }
 
-/// Run the `worktree remove` `command`.
 async fn run_removal(command: tokio::process::Command) -> Result<(), Unfinished> {
     let ran = super::bounded(command).capture().await;
     let stopped = match &ran {
@@ -492,7 +483,6 @@ pub(crate) async fn delete_with_admin_dir(path: &Path, admin_dir: Option<PathBuf
     delete_admin_dir(admin_dir).await
 }
 
-/// Delete the admin directory `admin_dir`, unless it is gone.
 async fn delete_admin_dir(admin_dir: PathBuf) -> Result<()> {
     off_runtime::run(move || match std::fs::remove_dir_all(&admin_dir) {
         Err(error) if error.kind() != std::io::ErrorKind::NotFound => {

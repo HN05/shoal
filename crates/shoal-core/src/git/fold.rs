@@ -1,9 +1,7 @@
 //! Folding a worktree's work into another worktree of its repository: its
-//! branch merged into the other's by a merge method, and its unsaved files
-//! carried over as unsaved changes there, never as a commit. Everything is
-//! worked out before anything changes, so a fold that would not apply
-//! cleanly, or would touch a file the receiving worktree has unsaved
-//! changes to, changes nothing.
+//! branch merges in and its unsaved files carry over as unsaved changes. A
+//! fold works everything out first, so one that would not apply cleanly, or
+//! would touch a file the receiver has unsaved changes to, changes nothing.
 use std::path::Path;
 
 use anyhow::{Context as _, Result, bail};
@@ -19,7 +17,6 @@ use super::{
     run_isolated,
 };
 
-/// What a fold takes and where it goes.
 pub struct Fold<'a> {
     pub repo: &'a Path,
     /// The branch that merges; none when no code merges.
@@ -30,7 +27,6 @@ pub struct Fold<'a> {
     pub into: Target<'a>,
 }
 
-/// What a fold did.
 #[derive(Debug, Default)]
 pub struct Folded {
     pub merged: Option<merge_into::Merged>,
@@ -58,7 +54,6 @@ struct Planned {
     carried: Option<(String, Vec<String>)>,
 }
 
-/// Fold as `fold` says.
 pub async fn fold(fold: Fold<'_>) -> Result<Folded> {
     let planned = plan(&fold).await?;
     let mut folded = Folded::default();
@@ -227,7 +222,6 @@ async fn unsaved(worktree: &Path) -> Result<Unsaved> {
     })
 }
 
-/// The paths whose files differ between the trees of `from` and `to`.
 async fn changed_paths(repo: &Path, from: &str, to: &str) -> Result<Vec<String>> {
     let names = run_isolated(
         repo,
@@ -254,7 +248,6 @@ fn overlap(paths: &[String], own: &Unsaved) -> Vec<String> {
         .collect()
 }
 
-/// The commits of `source` that `previous` lacks, oldest first.
 async fn commits(repo: &Path, previous: &CommitId, source: &CommitId) -> Result<Vec<String>> {
     let range = format!("{previous}..{source}");
     let log = run_isolated(

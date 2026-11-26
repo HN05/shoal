@@ -67,7 +67,6 @@ pub async fn listed_checkout_of(
     Ok(on_branch(listed_worktrees(repo, run).await?, branch))
 }
 
-/// The first of `worktrees` on the literal local `branch`.
 fn on_branch(worktrees: Vec<Worktree>, branch: &BranchName) -> Option<Worktree> {
     worktrees.into_iter().find(|tree| tree.is_branch(branch))
 }
@@ -172,7 +171,6 @@ fn absolute(admin_dir: &Path, named: &str) -> PathBuf {
     resolved(&admin_dir.join(named))
 }
 
-/// `path` with symbolic links resolved as far as it exists.
 fn resolved(path: &Path) -> PathBuf {
     if let Ok(path) = std::fs::canonicalize(path) {
         return path;

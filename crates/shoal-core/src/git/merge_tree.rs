@@ -69,7 +69,6 @@ fn conflict_report(stdout: &[u8]) -> String {
     report.trim().to_owned()
 }
 
-/// The tree of `commit`.
 pub(crate) async fn tree_of(repo: &Path, commit: &str) -> Result<String> {
     let tree = super::revision(repo, &format!("{commit}^{{tree}}"), super::run_isolated).await?;
     Ok(tree.trim().to_owned())

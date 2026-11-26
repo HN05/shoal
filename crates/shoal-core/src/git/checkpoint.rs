@@ -21,7 +21,6 @@ pub fn reference(commit: &CommitId) -> String {
     format!("{REFS}{commit}")
 }
 
-/// Every checkpoint ref in the repository, with the commit it keeps.
 pub async fn saved_refs(repo: &Path) -> Result<Vec<(String, CommitId)>> {
     refs(repo, REFS).await
 }
@@ -34,7 +33,6 @@ async fn refs(repo: &Path, prefix: &str) -> Result<Vec<(String, CommitId)>> {
         .collect())
 }
 
-/// The branch and HEAD a snapshot was taken at, and its commit.
 pub struct Snapshot {
     /// `None` for a detached HEAD.
     pub branch: Option<BranchName>,
@@ -70,7 +68,6 @@ pub async fn files_state(worktree: &Path) -> Result<(CommitId, String)> {
     Ok((head, tree))
 }
 
-/// The branch checked out, `None` when detached, and the commit HEAD names.
 async fn head_state(worktree: &Path) -> Result<(Option<BranchName>, CommitId)> {
     let head = super::queries::head(worktree).await?;
     Ok((head.branch(), head.commit()?))
@@ -233,7 +230,6 @@ pub(crate) fn collides(first: &str, second: &str, ignores_case: bool) -> bool {
     inside(&first, &second) || inside(&second, &first)
 }
 
-/// Point `reference` at `commit`, keeping it reachable.
 pub async fn save(repo: &Path, reference: &str, commit: &CommitId) -> Result<()> {
     run_isolated(repo, &["update-ref", reference, commit.as_str()]).await?;
     Ok(())

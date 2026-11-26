@@ -1,7 +1,5 @@
-//! A removal of a linked worktree that stopped before Git finished, as when
-//! its `worktree remove` was stopped: the marker that says one began, and
-//! putting back what it deleted that a later decision about the worktree
-//! must not mistake for anyone's work, its `.git` link and tracked files.
+//! A worktree removal that stopped before Git finished: the marker that says
+//! one began, and putting back the `.git` link and tracked files it deleted.
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
@@ -32,7 +30,6 @@ impl std::fmt::Display for Unrestored {
 /// admin directory once the removal finishes.
 const MARKER: &str = "shoal-removal";
 
-/// What a removal records of the worktree it begins deleting.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Marker {
     /// The text of the worktree's `.git` link.
@@ -165,7 +162,6 @@ async fn restore_tracked_files(path: &Path, deleted_before: &BTreeSet<String>) -
         .map(drop)
 }
 
-/// The tracked files missing from the worktree at `path`.
 async fn deleted_files(path: &Path) -> Result<BTreeSet<String>> {
     let listed = crate::git::run_isolated(path, &["ls-files", "-z", "--deleted"]).await?;
     Ok((listed.split_terminator('\0')).map(str::to_owned).collect())

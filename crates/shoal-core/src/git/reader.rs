@@ -1,10 +1,6 @@
-//! Reads of a repository's own state, such as its location, HEAD, refs,
-//! remotes and config, in this process through gix instead of a Git
-//! process. Where gix would not read a repository as Git does, such as one
-//! that keeps its refs in a reftable, or where this process's environment
-//! points Git at another repository, the read starts Git instead, so either
-//! way it gives Git's answer. Each read opens the repository afresh and
-//! keeps nothing, so it sees a moved or replaced worktree as Git would.
+//! Reads of a repository's own state in process through gix, which start Git
+//! instead where gix would read the repository otherwise. See
+//! `docs/design/git.md`.
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
@@ -31,7 +27,6 @@ const READABLE_EXTENSIONS: &[&str] = &[
     "worktreeconfig",
 ];
 
-/// The reference storage gix reads.
 const READABLE_REF_STORAGE: &str = "files";
 
 /// The newest repository format gix reads.
@@ -169,14 +164,12 @@ fn git_on_path() -> Option<PathBuf> {
     std::fs::canonicalize(found).ok()
 }
 
-/// The system config file a parent process handed down as `git`'s.
 fn handed_down_system_config(git: Option<&Path>) -> Option<PathBuf> {
     let value = std::env::var(HANDED_DOWN_SYSTEM_CONFIG).ok()?;
     let (named_by, file) = value.split_once('\n')?;
     (git == Some(Path::new(named_by)) && !file.is_empty()).then(|| PathBuf::from(file))
 }
 
-/// `git var GIT_CONFIG_SYSTEM`'s answer.
 fn ask_system_config() -> Option<PathBuf> {
     let mut command = std::process::Command::new(Tool::Git.program());
     command
@@ -242,8 +235,6 @@ fn environment_diverges() -> bool {
     set || relative
 }
 
-/// Whether gix reads `repo` as Git does: its format and every extension it
-/// enables are ones gix supports.
 fn readable(repo: &gix::Repository) -> bool {
     let config = repo.config_snapshot();
     format_readable(&config)
@@ -252,8 +243,6 @@ fn readable(repo: &gix::Repository) -> bool {
         && !names_remotes_in_files(repo)
 }
 
-/// Whether gix reads the repository format `config` declares: its version
-/// and every extension it enables in the repository's own config.
 fn format_readable(config: &gix::config::Snapshot<'_>) -> bool {
     let format = config.integer("core.repositoryFormatVersion").unwrap_or(0);
     let local = |section: &gix::config::file::SectionRef<'_>| {
@@ -272,8 +261,6 @@ fn format_readable(config: &gix::config::Snapshot<'_>) -> bool {
     format <= READABLE_FORMAT && readable_extensions
 }
 
-/// Whether gix reads a repository whose `extensions` section `section` sets
-/// the extension `name`.
 fn extension_readable(section: &gix::config::file::SectionRef<'_>, name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     READABLE_EXTENSIONS.contains(&name.as_str())

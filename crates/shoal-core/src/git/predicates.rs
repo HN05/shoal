@@ -59,7 +59,6 @@ pub async fn has_commit(repo: &Path, rev: &str) -> Result<bool> {
     refs::read_revision(repo, rev, in_process, git).await
 }
 
-/// Whether Git finds the commit `rev` names in `repo`.
 async fn has_commit_by_git(repo: &Path, rev: &str) -> Result<bool> {
     let mut command = super::isolated_command(repo);
     command.args([

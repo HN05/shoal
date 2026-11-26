@@ -44,7 +44,6 @@ pub async fn write(repo: &Path, contents: impl Into<Vec<u8>>) -> Result<String> 
     Ok(blob.trim().to_owned())
 }
 
-/// The text of the blob `blob`.
 pub async fn read(repo: &Path, blob: &str) -> Result<String> {
     run_isolated(repo, &["cat-file", "blob", blob]).await
 }

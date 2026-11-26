@@ -1,9 +1,6 @@
-//! Holding a tracked agent's `git push` for the user's approval where
-//! its `push` permission is `"propose"`, or refusing it where it is `"deny"`.
-//! Git settings in the agent's environment rewrite the push URLs of the
-//! workspace repository's remotes to the `shoal::` transport, so Git hands
-//! every push to them to Shoal's remote helper, which asks the daemon before
-//! it pushes. Fetches keep their URLs.
+//! Holding a tracked agent's `git push` for approval, or refusing it, as its
+//! `push` permission says. Fetches keep their URLs. See
+//! `docs/design/permissions.md`.
 use crate::paths::PathsExt;
 use std::{ffi::OsStr, os::unix::fs::PermissionsExt, path::Path};
 
@@ -14,7 +11,6 @@ use crate::{env, git, paths::Paths};
 /// The transport the rewritten URLs name: Git runs `git-remote-shoal` for
 /// a URL that starts with `shoal::`.
 const PREFIX: &str = "url.shoal::";
-/// The remote helper Git looks for on the PATH.
 const HELPER: &str = "git-remote-shoal";
 
 /// The push URL rewrites an agent launch adds to the agent's Git settings,
@@ -39,7 +35,6 @@ impl Launch {
         })
     }
 
-    /// The Git settings that send pushes through the helper.
     pub fn settings(&self) -> &[(String, String)] {
         &self.settings
     }

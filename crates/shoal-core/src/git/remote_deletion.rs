@@ -1,14 +1,7 @@
-//! Deleting a branch of a repository Shoal reaches by its URL, signed in as
-//! an account, only while the branch points to the commit the caller
-//! checked: Git sends that commit with the deletion, and the remote keeps a
-//! branch that moved since, such as by a push that landed after the check.
-//!
-//! The push runs from an empty repository made for it, without the
-//! configuration or `.netrc` it would otherwise inherit, which could send it
-//! elsewhere or as someone else. Its
-//! login reaches Git only on standard input, held by Git's in-memory
-//! credential cache, which answers only for the repository's host, so the
-//! token never enters a file, the environment or argv.
+//! Deleting a remote branch as an account, only while it points to the
+//! commit the caller checked: Git sends that commit with the deletion. The
+//! push inherits no configuration or `.netrc`, which could send it elsewhere
+//! or as someone else. See `docs/design/forge.md`.
 use std::{
     io,
     os::unix::fs::PermissionsExt as _,
@@ -44,7 +37,6 @@ pub async fn delete_at(
 /// requires of its socket's.
 struct Scratch {
     directory: tempfile::TempDir,
-    /// The URL the push goes to.
     url: String,
     /// The scheme and host of `url`, which the login is for.
     scheme: String,
@@ -52,7 +44,6 @@ struct Scratch {
 }
 
 impl Scratch {
-    /// The repository for pushing to `url`, in the object format of `head`.
     async fn create(url: &str, head: &CommitId) -> Result<Self> {
         let (scheme, host) = scheme_and_host(url)?;
         let scratch = Self {
@@ -65,7 +56,6 @@ impl Scratch {
         Ok(scratch)
     }
 
-    /// Create the empty repository in the object format of `head`.
     async fn init(&self, head: &CommitId) -> Result<()> {
         let format = format!("--object-format={}", object_format(head));
         let repository = self.repository();
@@ -76,8 +66,6 @@ impl Scratch {
         Ok(())
     }
 
-    /// Push the deletion of `branch` at `head` as `login`, with what Git
-    /// printed.
     async fn delete(
         &self,
         login: &GitLogin,
@@ -88,7 +76,6 @@ impl Scratch {
         Ok(self.push_deletion(branch, head).await)
     }
 
-    /// Hand `login` for the URL's host to the credential cache.
     async fn cache(&self, login: &GitLogin) -> Result<()> {
         let mut approve = self.git();
         approve.args(["credential", "approve"]);
@@ -107,7 +94,6 @@ impl Scratch {
         Ok(())
     }
 
-    /// Push the deletion of `branch` while it points to `head`.
     async fn push_deletion(&self, branch: &BranchName, head: &CommitId) -> io::Result<Output> {
         let destination = git::local_ref(branch);
         let mut push = self.git();
@@ -173,18 +159,15 @@ impl Scratch {
         command
     }
 
-    /// The empty repository.
     fn repository(&self) -> PathBuf {
         self.directory.path().join("repository")
     }
 
-    /// Where the credential cache listens.
     fn socket(&self) -> PathBuf {
         self.directory.path().join("credentials")
     }
 }
 
-/// The scheme and host of `url`.
 fn scheme_and_host(url: &str) -> Result<(&str, &str)> {
     let (scheme, rest) = url
         .split_once("://")
@@ -201,7 +184,6 @@ async fn private_directory() -> Result<tempfile::TempDir> {
     .await
 }
 
-/// Git's name for the object format `head` is an ID in.
 fn object_format(head: &CommitId) -> &'static str {
     match head.as_str().len() {
         64 => "sha256",
@@ -209,7 +191,6 @@ fn object_format(head: &CommitId) -> &'static str {
     }
 }
 
-/// The outcome of the deletion of `branch` at `head` that `pushed` ran.
 fn concluded(pushed: io::Result<Output>, branch: &BranchName, head: &CommitId) -> Result<()> {
     let destination = git::local_ref(branch);
     let reported = (pushed.as_ref().ok())
@@ -227,7 +208,6 @@ fn concluded(pushed: io::Result<Output>, branch: &BranchName, head: &CommitId) -
     }
 }
 
-/// What Git reported of a deletion.
 #[derive(Debug, PartialEq)]
 enum Report {
     Deleted,

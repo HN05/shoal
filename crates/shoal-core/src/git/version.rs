@@ -7,7 +7,6 @@ use tokio::process::Command;
 
 use crate::{subprocess, tools::Tool};
 
-/// A Git release by its major and minor version.
 pub(crate) type Release = (u32, u32);
 
 /// Git's exit status for arguments it does not take, as an older Git exits
@@ -37,7 +36,6 @@ pub(crate) async fn checked_output(
     Err(error)
 }
 
-/// The installed Git's release; none when it cannot be read.
 async fn installed() -> Option<Release> {
     let mut command = Command::new(Tool::Git.program());
     command.args(["--no-optional-locks", "--version"]);

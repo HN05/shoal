@@ -34,7 +34,6 @@ pub struct Target<'a> {
     pub worktree: Option<&'a Path>,
 }
 
-/// What a merge left the target branch at.
 #[derive(Debug)]
 pub struct Merged {
     pub commit: CommitId,
@@ -45,7 +44,6 @@ pub struct Merged {
     pub fast_forward: bool,
 }
 
-/// Merge `source` into `target` in `repo`.
 pub async fn merge(repo: &Path, source: &Source<'_>, target: &Target<'_>) -> Result<Merged> {
     let contained = git::is_ancestor(
         repo,

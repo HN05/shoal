@@ -13,12 +13,9 @@ use crate::{
     git,
 };
 
-/// The scratch worktree of one command.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Scratch {
-    /// The directory in the Git directory that holds the worktree.
     directory: &'static str,
-    /// The owner the directory is marked with.
     owner: &'static str,
     /// The command that uses it, as a refusal names it.
     command: &'static str,
@@ -73,12 +70,10 @@ impl Scratch {
         git::detached::remove(&directory.join("replay")).await
     }
 
-    /// The directory in `repo`'s Git directory that holds the worktree.
     async fn directory(self, repo: &Path) -> Result<PathBuf> {
         git::git_path(repo, self.directory).await
     }
 
-    /// Refuse a directory Shoal did not create.
     async fn ensure_own(self, directory: &Path) -> Result<()> {
         let (checked, owner) = (directory.to_owned(), self.owner);
         let marked =

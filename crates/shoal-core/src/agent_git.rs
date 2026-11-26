@@ -49,12 +49,10 @@ impl Launch {
         Ok(())
     }
 
-    /// Add `settings` after the profile's.
     pub fn add(&mut self, settings: &[(String, String)]) {
         self.git.extend_from_slice(settings);
     }
 
-    /// Keep only the settings whose key `keep` accepts, in their order.
     pub fn retain(&mut self, mut keep: impl FnMut(&str) -> bool) {
         self.git.retain(|(key, _)| keep(key));
     }

@@ -47,7 +47,6 @@ pub(crate) async fn merge(
     Ok(Applied::Commit(commit.context("make the merge commit")?))
 }
 
-/// Whether `first` is `second` or an ancestor of it.
 async fn is_ancestor(repo: &Path, first: &CommitId, second: &CommitId) -> Result<bool> {
     git::is_ancestor(repo, first.as_str(), second.as_str(), git::isolated_command).await
 }
@@ -144,7 +143,6 @@ pub(crate) async fn rebase(repo: &Path, previous: &CommitId, source: &CommitId) 
     rebased
 }
 
-/// Rebase `worktree`'s HEAD onto `previous`.
 async fn rebase_in(worktree: &Path, previous: &CommitId) -> Result<Applied> {
     let output = git::bounded(rebase_command(worktree, previous.as_str()))
         .capture()

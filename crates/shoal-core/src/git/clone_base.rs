@@ -66,10 +66,8 @@ pub async fn carried_commit(repo: &Path, rev: &str) -> Result<CommitId> {
     resolve_commit(repo, rev, run_isolated).await
 }
 
-/// The refs that keep the commits carried to a clone there.
 const CARRIED: &str = "refs/shoal/carried/";
 
-/// The ref a commit carried to another clone goes under there.
 fn carried_reference(commit: &CommitId) -> String {
     format!("{CARRIED}{commit}")
 }

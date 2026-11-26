@@ -8,9 +8,7 @@ use shoal_refs::BranchName;
 
 use super::{reader, run};
 
-/// The names of the repository's remotes, sorted as `git remote` lists
-/// them, for an operation that passes them to each lookup that picks among
-/// them.
+/// The names of the repository's remotes, sorted as `git remote` lists them.
 pub async fn remote_names(repo: &Path) -> Result<Vec<String>> {
     let in_process = |repo: &gix::Repository| {
         let config = repo.config_snapshot();
@@ -80,7 +78,6 @@ pub(crate) async fn remote_urls(repo: &Path) -> Result<RemoteUrls> {
     reader::read(repo, in_process, remote_urls_from_git).await
 }
 
-/// The [`RemoteUrls`] Git lists for `repo`.
 async fn remote_urls_from_git(repo: &Path) -> Result<RemoteUrls> {
     let listed = run(repo, &["config", "--null", "--list"]).await?;
     let mut urls = RemoteUrls::default();
@@ -307,7 +304,6 @@ fn mapped(refspec: &str, name: &str) -> Option<String> {
     }
 }
 
-/// The [`Upstream`] Git lists for `reference` in `repo`.
 async fn upstream_from_git(repo: &Path, reference: &str) -> Result<Option<Upstream>> {
     let format =
         "--format=%(refname)%00%(upstream:remotename)%00%(upstream:remoteref)%00%(upstream)";

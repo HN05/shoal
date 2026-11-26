@@ -79,7 +79,6 @@ fn matches(pattern: &str, name: &str) -> bool {
         .is_some_and(|rest| rest.is_empty() || pattern.ends_with('/') || rest.starts_with('/'))
 }
 
-/// The [`list`] Git prints for `repo`.
 async fn list_from_git(repo: &Path, patterns: &[&str]) -> Result<Vec<Listed>> {
     let mut args = vec![
         "for-each-ref",
@@ -242,7 +241,6 @@ pub(crate) fn named_object(repo: &gix::Repository, rev: &str) -> Result<Option<g
     Ok(object.peel_to_kind(kind).ok().map(|object| object.id))
 }
 
-/// The object HEAD, the full ref name or the object ID `name` names.
 fn unpeeled(repo: &gix::Repository, name: &str) -> Result<Option<gix::ObjectId>> {
     if name == "HEAD" {
         let commit = super::queries::head_in_process(repo)?.commit;

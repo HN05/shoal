@@ -29,7 +29,6 @@ pub async fn selectors(repo: &Path) -> Result<Vec<String>> {
     Ok(switch_selectors(&branch_refs(repo).await?))
 }
 
-/// [`selectors`] of the branches whose full ref names `refs` lists.
 fn switch_selectors(refs: &[String]) -> Vec<String> {
     let local: Vec<&str> = refs
         .iter()
@@ -52,7 +51,6 @@ fn switch_selectors(refs: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// Every local and remote-tracking branch's full ref name.
 async fn branch_refs(repo: &Path) -> Result<Vec<String>> {
     let refs = git::refs::list(repo, &[git::LOCAL_REFS, git::REMOTE_REFS]).await?;
     Ok(refs.into_iter().map(|reference| reference.name).collect())
@@ -123,7 +121,6 @@ pub async fn delete_at(repo: &Path, name: &BranchName, commit: &CommitId) -> Res
     remove_config(repo, name).await
 }
 
-/// Remove the branch's configuration section, when it has one.
 async fn remove_config(repo: &Path, name: &BranchName) -> Result<()> {
     let prefix = format!("branch.{name}.");
     let keys = git::run_isolated(repo, &["config", "--local", "--list", "--name-only"]).await?;
@@ -158,8 +155,6 @@ pub async fn in_operation(repo: &Path, name: &BranchName) -> Result<bool> {
     off_runtime::run(move || operation_on(common, &name)).await
 }
 
-/// Whether a rebase or bisect that the common Git directory `common` or one
-/// of its linked worktrees' directories records is on the branch `name`.
 fn operation_on(common: PathBuf, name: &BranchName) -> Result<bool> {
     let linked = match std::fs::read_dir(common.join("worktrees")) {
         Ok(entries) => entries
@@ -187,7 +182,6 @@ fn operation_on(common: PathBuf, name: &BranchName) -> Result<bool> {
     Ok(false)
 }
 
-/// When `rev`'s commit was made, and its subject line.
 pub async fn commit_summary(repo: &Path, rev: &str) -> Result<(UnixTime, String)> {
     let output = git::run(repo, &["log", "-1", "--format=%ct%x00%s", rev, "--"]).await?;
     let (time, subject) = output

@@ -168,7 +168,6 @@ async fn ensure_unmoved(plan: &MergePlan) -> Result<()> {
     Ok(())
 }
 
-/// What merging `plan` left the default branch at, as `merged` says.
 fn merged_branch(plan: MergePlan, merged: merge_into::Merged) -> MergedBranch {
     MergedBranch {
         workspace_id: plan.workspace.id,

@@ -1,7 +1,6 @@
-//! The ignored files of a repository's main checkout, such as `.env`,
-//! copied into a new worktree before its setup. Ported from Worktrunk
-//! 0.81.0's `wt step copy-ignored` (<https://github.com/max-sixty/worktrunk>),
-//! used under its MIT License:
+//! Copying the main checkout's ignored files, such as `.env`, into a new
+//! worktree. Ported from Worktrunk 0.81.0's `wt step copy-ignored`
+//! (<https://github.com/max-sixty/worktrunk>), used under its MIT License:
 //!
 //! Copyright (c) 2025 Maximilian Roos
 //!
@@ -138,7 +137,6 @@ async fn ignored_entries(checkout: &Path) -> Result<Vec<Entry>> {
         .collect())
 }
 
-/// The output of isolated Git with `args` in `dir`.
 async fn run(dir: &Path, args: &[&str]) -> Result<String> {
     let mut command = super::isolated_command(dir);
     command.args(args);
@@ -164,7 +162,6 @@ impl Matchers {
         .await
     }
 
-    /// The parts of `entries` to copy, read on the blocking pool.
     async fn selected_parts(self, checkout: &Path, entries: Vec<Entry>) -> Result<Vec<Entry>> {
         let checkout = checkout.to_owned();
         off_runtime::run(move || {
@@ -235,7 +232,6 @@ fn matches(matcher: &Gitignore, entry: &Entry) -> bool {
         .is_ignore()
 }
 
-/// The patterns of the checkout's `.worktreeinclude`, when it has one.
 fn include_matcher(checkout: &Path) -> Result<Option<Gitignore>> {
     let path = checkout.join(INCLUDE_FILE);
     if !path.try_exists()? {

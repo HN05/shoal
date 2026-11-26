@@ -1,4 +1,5 @@
-//! Resolve repository policy without assuming a particular branch spelling.
+//! Finding a repository's default branch from its remote's HEAD, never a
+//! guessed spelling such as `main`.
 use std::path::Path;
 
 use anyhow::{Context, Result, ensure};
@@ -28,7 +29,6 @@ fn default_remote(remotes: &[String]) -> Result<Option<&str>> {
     Ok(Some(&remotes[0]))
 }
 
-/// The default branch, with the remote whose HEAD names it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultBranch {
     /// `None` without remotes, where the local HEAD names the branch.
@@ -36,7 +36,6 @@ pub struct DefaultBranch {
     pub name: BranchName,
 }
 
-/// The default branch's name, as [`locate`] finds it.
 pub async fn resolve(repo: &Path, lookup: DefaultBranchLookup) -> Result<BranchName> {
     Ok(locate(repo, lookup).await?.name)
 }

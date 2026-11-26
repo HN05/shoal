@@ -1,8 +1,7 @@
 //! The files left of a worktree Git disowned, read against a commit of its
-//! repository: Git no longer has the worktree's HEAD, index or the ignore
-//! rules it deleted, so what is left counts as unsaved where it differs from
-//! that commit, and a file the commit has that is gone counts as deleted by
-//! the removal, not by anyone's work.
+//! repository. Git no longer has the worktree's HEAD, index or ignore rules,
+//! so a file left counts as unsaved where it differs from the commit, and a
+//! file the commit has that is gone counts as the removal's deletion.
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -27,10 +26,8 @@ pub struct LeftFiles {
 /// tracked changes or untracked files.
 const SUBMODULES: &str = "--ignore-submodules=none";
 
-/// The mode of a submodule's entry.
 const GITLINK: &str = "160000";
 
-/// A file left that differs from the commit's.
 struct Changed {
     path: String,
     /// The commit records a submodule there.
@@ -57,8 +54,6 @@ impl LeftFiles {
         Ok(left)
     }
 
-    /// Mark the commit's files that are gone from the directory
-    /// skip-worktree, so Git takes them as unchanged.
     async fn mark_gone(&self) -> Result<()> {
         let gone = self.run(&["ls-files", "-z", "--deleted"]).await?;
         let command = self.command(&["update-index", "-z", "--skip-worktree", "--stdin"]);
@@ -70,7 +65,6 @@ impl LeftFiles {
             .map(drop)
     }
 
-    /// The commit the files are read against.
     pub fn head(&self) -> &CommitId {
         &self.head
     }
@@ -141,7 +135,6 @@ impl LeftFiles {
         Ok(commit.trim().into())
     }
 
-    /// The files that differ from the commit's.
     async fn changed(&self) -> Result<Vec<Changed>> {
         let listed = self.run(&["diff-files", "-z", "--raw", SUBMODULES]).await?;
         let mut fields = listed.split_terminator('\0');
