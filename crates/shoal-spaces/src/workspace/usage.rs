@@ -1,6 +1,5 @@
-//! What the daemon measures about workspaces: activity that restarts idle
-//! timers and each workspace's process usage.
-//! Each is locked only inside an operation, never across an await.
+//! Workspace activity, which restarts idle timers, and process usage. Each
+//! lock is held only inside an operation, never across an await.
 use shoal_ids::space_ids::SpaceId;
 use std::{
     collections::HashMap,
@@ -11,14 +10,12 @@ use crate::workspace_usage::WorkspaceUsages;
 
 #[derive(Default)]
 pub struct Usage {
-    /// Per-workspace activity counters folded into cleanup fingerprints.
+    /// Folded into cleanup fingerprints.
     activity: Mutex<HashMap<SpaceId, u64>>,
-    /// What each workspace's processes used at the latest sample.
     workspaces: Mutex<WorkspaceUsages>,
 }
 
 impl Usage {
-    /// Count activity in the workspace `id`.
     pub fn record_activity(&self, id: &SpaceId) {
         *lock(&self.activity).entry(id.to_owned()).or_default() += 1;
     }
@@ -27,7 +24,6 @@ impl Usage {
         lock(&self.activity).get(id).copied().unwrap_or(0)
     }
 
-    /// Forget the activity of a workspace that no longer exists.
     pub fn forget_workspace(&self, id: &SpaceId) {
         lock(&self.activity).remove(id);
     }

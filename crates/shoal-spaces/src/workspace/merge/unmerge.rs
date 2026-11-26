@@ -1,6 +1,5 @@
-//! Unmerge preparation: find a workspace's latest local merge and check that
-//! undoing it changes only what it should before the unmerge worker moves
-//! the default branch back or replays the history after it.
+//! Preparing an unmerge: finding a workspace's latest local merge and
+//! checking that undoing it changes only what it should.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context, Result, bail};
@@ -24,8 +23,8 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// The workspace `selector` names for an unmerge, which runs in it: one
-    /// cleanup removed has to be restored first.
+    /// The unmerge runs in the workspace, so one cleanup removed has to be
+    /// restored first.
     pub async fn unmerge_workspace(&self, selector: &SpaceSelector) -> Result<Workspace> {
         let error = match self.workspace(selector).await {
             Ok(workspace) => return Ok(workspace),
@@ -46,9 +45,8 @@ impl Spaces {
         }
     }
 
-    /// Plan undoing the latest merge of the workspace `selector` names while
-    /// the caller holds the repository Git gate. The gate must stay held
-    /// until the tracked execution completes.
+    /// The caller holds the repository's Git gate until the tracked
+    /// execution completes.
     pub async fn prepare_unmerge(
         &self,
         daemon: &dyn Daemon,
@@ -87,7 +85,6 @@ impl Spaces {
     }
 }
 
-/// The name of the removed workspace `selector` names by name or ID.
 fn removed_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String>> {
     Ok(db
         .query_row(
@@ -98,7 +95,7 @@ fn removed_name(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<String
         .optional()?)
 }
 
-/// The latest of the `held` merges of `branch`, and the merges after it.
+/// Also returns the merges after it.
 fn latest_merge_of<'a>(
     held: &'a [RecordedMerge],
     branch: &BranchName,
@@ -109,8 +106,8 @@ fn latest_merge_of<'a>(
     Some((&held[index], &held[index + 1..]))
 }
 
-/// Refuse to undo a merge whose result the default branch's upstream holds,
-/// as the last fetch saw it: others may have its commits.
+/// Refuses a merge whose result the upstream holds, as the last fetch saw
+/// it: others may have its commits.
 async fn ensure_unpushed(
     repo: &Repository,
     default: &BranchName,
@@ -136,10 +133,10 @@ async fn ensure_unpushed(
     )
 }
 
-/// The Git command that reverts `merge`: a squash commit or a merge commit
-/// made on the default branch as one; a rebase or fast-forward by each
-/// commit it brought, unless merges among them, which git revert takes
-/// only one at a time, need the inverse diff.
+/// Reverts a squash commit, or a merge commit made on the default branch,
+/// as one. A rebase or fast-forward reverts each commit it brought, unless
+/// merges among them, which `git revert` takes only one at a time, need the
+/// inverse diff.
 async fn revert_command(repo: &Repository, merge: &RecordedMerge) -> Result<String> {
     let path = &repo.path;
     let (previous, result) = (merge.merge.previous.as_str(), merge.merge.result.as_str());
@@ -157,11 +154,10 @@ async fn revert_command(repo: &Repository, merge: &RecordedMerge) -> Result<Stri
     })
 }
 
-/// Refuse to replay the history from the merge's result to `tip` when it
-/// does not follow first parents, or when a merge in it brings in the
-/// commits the unmerge takes out: the replay would put them back. A
-/// recorded merge is named by its workspace, so the user can unmerge it
-/// first.
+/// Refuses history that does not follow first parents, or a merge in it
+/// that brings in the commits the unmerge takes out: the replay would put
+/// them back. A recorded merge is named by its workspace, so the user can
+/// unmerge it first.
 async fn ensure_replayable(
     repo: &Repository,
     tip: &CommitId,

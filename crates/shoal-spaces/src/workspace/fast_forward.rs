@@ -1,5 +1,5 @@
-//! Fast-forward a workspace to its branch's pushed head, as a PR review does
-//! before reviewing it, or to what a refresh brings it up to date with.
+//! Fast-forwarding a workspace to its branch's pushed head, as a PR review
+//! does first, or to what a refresh brings it up to date with.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::{git, model::Workspace, state::WorkspaceState};
@@ -8,11 +8,10 @@ use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
 
 impl Spaces {
-    /// Fast-forward the workspace recorded on `branch` to the fetched
-    /// `origin/<branch>`, returning whether it moved. The lifecycle reservation
-    /// and the repository's Git gate exclude removal, renames and restores
-    /// meanwhile, and a worktree that is no longer the recorded one or is off
-    /// `branch` is refused before Git changes anything.
+    /// Returns whether it moved. The lifecycle reservation and the
+    /// repository's Git gate exclude removal, renames and restores
+    /// meanwhile. A worktree that is no longer the recorded one, or is off
+    /// `branch`, is refused before Git changes anything.
     pub async fn fast_forward_workspace(
         &self,
         daemon: &dyn Daemon,
@@ -52,11 +51,9 @@ impl Spaces {
         self.fast_forward_to(daemon, workspace, &target).await
     }
 
-    /// Fast-forward the recorded branch of the reserved `workspace` to the
-    /// revision `target`, returning whether it moved; the caller holds the
-    /// repository's Git gate. A worktree that is no longer the recorded one,
-    /// is off its branch or has diverged from `target` is refused before Git
-    /// changes anything.
+    /// Returns whether it moved. The caller holds the repository's Git gate.
+    /// A worktree that is no longer the recorded one, is off its branch or
+    /// has diverged from `target` is refused before Git changes anything.
     pub(super) async fn fast_forward_to(
         &self,
         daemon: &dyn Daemon,

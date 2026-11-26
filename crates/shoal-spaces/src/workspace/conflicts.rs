@@ -18,8 +18,8 @@ use shoal_protocol::space_names::SpaceSelector;
 pub mod recorded;
 
 impl Spaces {
-    /// Whether the workspace's committed HEAD merges cleanly into `target`,
-    /// which defaults to the base workspace's branch, then the default branch.
+    /// `target` defaults to the base workspace's branch, then the default
+    /// branch.
     pub async fn check_conflicts(
         &self,
         daemon: &dyn Daemon,
@@ -36,7 +36,6 @@ impl Spaces {
         Ok(check)
     }
 
-    /// Whether the workspace's repository lists sensitive files.
     async fn lists_sensitive_files(
         &self,
         daemon: &dyn Daemon,
@@ -46,8 +45,6 @@ impl Spaces {
         Ok(!settings.conflicts.sensitive.is_empty())
     }
 
-    /// The paths the last check against the workspace's default target
-    /// found changed on both sides.
     pub async fn recorded_changed_on_both_sides(
         &self,
         workspace_id: &SpaceId,
@@ -56,8 +53,7 @@ impl Spaces {
         self.store.run(move |db| recorded::get(db, &id)).await
     }
 
-    /// The last check against the workspace's default target, when it
-    /// checked the committed HEAD.
+    /// None unless the last check covered the committed HEAD.
     pub async fn current_changed_on_both_sides(
         &self,
         workspace: &Workspace,
@@ -74,12 +70,11 @@ impl Spaces {
         self.store.run(move |db| recorded::save(db, &check)).await
     }
 
-    /// The conflicts a workspace watch reports: those of
-    /// [`Self::check_conflicts`] with the default target, unless the target
-    /// already has HEAD's changes as [`Self::conflicts_settled`] decides; or
-    /// none when `only_sensitive` and the repository lists no sensitive
-    /// files. Every read of the worktree, its configuration included, runs
-    /// under the file-access guard, so a stalled worktree fails at once.
+    /// None when the target already has HEAD's changes, as
+    /// [`Self::conflicts_settled`] decides, or with `only_sensitive` when
+    /// the repository lists no sensitive files. Every read of the worktree,
+    /// its configuration included, runs under the file-access guard, so a
+    /// stalled worktree fails at once.
     pub async fn watched_conflicts(
         &self,
         daemon: &dyn Daemon,
@@ -117,8 +112,7 @@ impl Spaces {
         Ok(Some(check))
     }
 
-    /// Whether `target_commit` already has `head`'s changes and a merge could
-    /// only repeat them, or the assignment is done at `head` with its work
+    /// Also true when the assignment is done at `head` with its work
     /// integrated elsewhere.
     async fn conflicts_settled(
         &self,
@@ -134,8 +128,8 @@ impl Spaces {
         Ok(integrated || git::status::merged_into(&workspace.path, head_rev, target_rev).await?)
     }
 
-    /// The repository's sensitive paths that `head` and `target_commit` both
-    /// changed since their merge base, unless the conflicts are settled.
+    /// Changed since their merge base. Empty when the conflicts are
+    /// settled.
     async fn sensitive_changes(
         &self,
         daemon: &dyn Daemon,
@@ -157,7 +151,6 @@ impl Spaces {
         Ok(files)
     }
 
-    /// The conflicts of `workspace`'s committed HEAD with `target`.
     async fn conflicts_with(
         &self,
         daemon: &dyn Daemon,

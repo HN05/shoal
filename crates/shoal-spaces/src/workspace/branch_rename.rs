@@ -1,5 +1,5 @@
-//! Renaming a workspace's Git branch, reconciling durable rename intent
-//! with Git without replaying a ref mutation.
+//! Renaming a workspace's Git branch through a stored rename intent, which
+//! a retry reconciles with Git instead of repeating the ref change.
 mod intent;
 
 use super::super::target_checks;
@@ -66,8 +66,8 @@ impl Spaces {
         self.reserve_workspace_rename(&workspace, branch, caller_execution)
             .await?;
         let result = git::branch::rename(&workspace.path, &old_name, &new_name).await;
-        // Git may have completed even if capturing its output failed. Inspect
-        // the owned worktree instead of blindly rolling back a ref mutation.
+        // Git may have completed even if capturing its output failed, so
+        // inspect the owned worktree instead of rolling back the ref change.
         if let Err(error) = self
             .finish_workspace_rename(daemon, &workspace, false)
             .await
@@ -161,8 +161,7 @@ impl Spaces {
             .await
     }
 
-    /// Finish a rename an earlier attempt left unfinished before starting
-    /// another. The caller holds the repository Git gate and the workspace's
+    /// The caller holds the repository's Git gate and the workspace's
     /// resource guard, so the lifecycle is reserved in the store directly.
     async fn finish_pending_rename(
         &self,
@@ -190,9 +189,7 @@ impl Spaces {
         self.workspace_by_id(&workspace.id).await
     }
 
-    /// Move a ready or failed workspace without executions other than the
-    /// caller's into reconciling for finishing its pending rename, without
-    /// the resource guard its caller already holds.
+    /// Reserves without the resource guard, which the caller already holds.
     async fn reserve_rename_repair(
         &self,
         workspace: &Workspace,
@@ -228,9 +225,10 @@ impl Spaces {
             .await
     }
 
-    /// Caller holds the repository Git gate and has reserved the lifecycle.
-    /// An unchanged branch cancels intent; a completed Git rename commits it.
-    /// Other HEADs and unverifiable ownership retain intent for human repair.
+    /// The caller holds the repository's Git gate and has reserved the
+    /// lifecycle. An unchanged branch cancels the intent; a completed Git
+    /// rename commits it. Other HEADs and unverifiable ownership keep the
+    /// intent for a person to repair.
     pub async fn finish_workspace_rename(
         &self,
         daemon: &dyn Daemon,

@@ -1,6 +1,5 @@
-//! Whether what a new workspace takes is free: its branch in its repository,
-//! the name of its directory among every workspace's, and its path apart
-//! from where a repository directory is moving.
+//! Whether what a new workspace takes is free: its branch, the name of its
+//! directory, and its path apart from where a repository directory moves.
 use std::{collections::HashSet, ffi::OsStr, path::Path};
 
 use anyhow::{Result, ensure};
@@ -13,9 +12,8 @@ use shoal_protocol::space_names::{self, SpaceName};
 
 use crate::refusal::{Reason, Refusal};
 
-/// The first of `base`, `base-2`, `base-3`, ... that no workspace of any
-/// repository has as its directory's name, each cut to the longest name
-/// allowed.
+/// Unique across every repository's workspaces, each cut to the longest
+/// name allowed.
 pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
     let recorded = workspace_paths(db)?;
     let taken: HashSet<&OsStr> = (recorded.iter())
@@ -27,9 +25,9 @@ pub fn free_directory(db: &Connection, base: &str) -> Result<String> {
     Ok(free.expect("an unused suffix exists"))
 }
 
-/// Refuse `path`, a directory Shoal named for a new workspace, when another
-/// workspace's directory took its name since it was chosen, which a start in
-/// another repository may have done meanwhile.
+/// Refuses a directory Shoal named for a new workspace when another
+/// workspace's directory took its name since, as a start in another
+/// repository may have done.
 pub fn ensure_directory_free(db: &Connection, path: &Path) -> Result<()> {
     let name = path.file_name().unwrap_or_default();
     let taken = workspace_paths(db)?
@@ -43,7 +41,6 @@ pub fn ensure_directory_free(db: &Connection, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Every recorded workspace's path.
 fn workspace_paths(db: &Connection) -> Result<Vec<String>> {
     Ok(db
         .prepare("SELECT path FROM workspaces")?
@@ -51,8 +48,7 @@ fn workspace_paths(db: &Connection) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
-/// Refuse a workspace path that overlaps where a repository directory is
-/// moving: a failed move deletes its destination.
+/// A failed move deletes its destination.
 pub fn ensure_path_outside_moves(db: &Connection, path: &Path) -> Result<()> {
     let destinations = db
         .prepare("SELECT destination FROM repository_moves")?
@@ -68,9 +64,8 @@ pub fn ensure_path_outside_moves(db: &Connection, path: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Refuse `branch` of the repository when another workspace than
-/// `except_id` owns it, before inserting a workspace or reserving a rename
-/// in a transaction.
+/// Checked in a transaction, before inserting a workspace or reserving a
+/// rename.
 pub fn ensure_branch_available(
     db: &Connection,
     repository_id: &RepositoryId,

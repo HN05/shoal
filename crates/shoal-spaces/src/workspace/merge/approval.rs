@@ -1,6 +1,5 @@
-//! The user's approval of a scoped merge or unmerge: requesting it for the
-//! commit and push a merge plans or the merge an unmerge undoes, and refusing
-//! a merge's once the branch moved.
+//! The user's approval of a scoped merge or unmerge, bound to the commit it
+//! merges or the merge it undoes.
 use crate::Spaces;
 use crate::approvals::ApprovalRequestExt;
 use crate::daemon::Daemon;
@@ -22,11 +21,11 @@ use crate::{
 };
 
 impl Spaces {
-    /// A scoped `caller`'s merge needs approval for the branch at the commit
-    /// `plan` merges, and the push it makes, unless its `merge` permission is
-    /// "direct" and its `push` permission lets the merge push the default
-    /// branch without it. The caller holds the repository Git gate, so the
-    /// approved commit is the one that merges.
+    /// Needs approval for the branch at the commit `plan` merges, and the
+    /// push it makes, unless the `merge` permission is `direct` and the
+    /// `push` permission lets the merge push without it. The caller holds
+    /// the repository's Git gate, so the approved commit is the one that
+    /// merges.
     pub async fn authorize_scoped_merge(
         &self,
         daemon: &dyn Daemon,
@@ -43,8 +42,7 @@ impl Spaces {
         self.await_merge_decision(daemon, request).await
     }
 
-    /// A scoped unmerge needs the user's approval for undoing the merge
-    /// `plan` names under the same settings a scoped merge does.
+    /// Follows the settings a scoped merge does.
     pub async fn authorize_scoped_unmerge(
         &self,
         daemon: &dyn Daemon,
@@ -61,8 +59,6 @@ impl Spaces {
             .await
     }
 
-    /// Whether the `merge` and `push` permissions of `caller` let it merge,
-    /// push and unmerge `workspace` without approval.
     async fn merges_directly(
         &self,
         daemon: &dyn Daemon,
@@ -77,7 +73,7 @@ impl Spaces {
         Ok(permissions.merge.value == Opening::Direct && permissions.push.value == Pushes::Direct)
     }
 
-    /// Request `request`, refusing until the user approves it.
+    /// Refuses until the user approves.
     async fn await_merge_decision(
         &self,
         daemon: &dyn Daemon,
@@ -94,10 +90,10 @@ impl Spaces {
         }
     }
 
-    /// Refuse to approve a pending merge request whose branch has moved since
-    /// the request: drop it and tell the agent to request again. A failed Git
-    /// lookup keeps the request. The merge itself merges only the approved
-    /// commit. Every other decision passes.
+    /// Drops a pending merge request whose branch has moved since, and tells
+    /// the agent to request again. A failed Git lookup keeps the request.
+    /// The merge itself merges only the approved commit. Every other
+    /// decision passes.
     pub async fn ensure_merge_current(
         &self,
         daemon: &dyn Daemon,
@@ -131,8 +127,7 @@ impl Spaces {
         )
     }
 
-    /// Retire a stale merge request and tell the requesting agent; failing to
-    /// queue the message only logs.
+    /// Failing to queue the message only logs.
     async fn retire_stale_merge_request(
         &self,
         daemon: &dyn Daemon,
@@ -158,8 +153,7 @@ impl Spaces {
     }
 }
 
-/// The merge request a scoped merge of `plan` asks the user to decide, which
-/// says what `preview` says the merge does.
+/// Says what `preview` says the merge does.
 fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
     ApprovalRequest::new(
         &plan.workspace.id,
@@ -179,7 +173,6 @@ fn merge_request(plan: &MergePlan, preview: &MergePreview) -> ApprovalRequest {
     )
 }
 
-/// The unmerge request a scoped unmerge of `plan` asks the user to decide.
 fn unmerge_request(plan: &UnmergePlan) -> ApprovalRequest {
     ApprovalRequest::new(
         &plan.workspace.id,
@@ -196,7 +189,6 @@ fn unmerge_request(plan: &UnmergePlan) -> ApprovalRequest {
     )
 }
 
-/// What undoing the merge does to the default branch.
 fn unmerge_reason(plan: &UnmergePlan) -> String {
     let default = &plan.default_branch;
     match plan.tip == plan.result {

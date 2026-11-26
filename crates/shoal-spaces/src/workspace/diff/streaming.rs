@@ -1,6 +1,5 @@
-//! A workspace's diff streamed to its caller, as to one on another machine:
-//! what Git writes as it writes it, then its exit code. It runs as a plain
-//! read of the worktree, so it counts as no use of the workspace.
+//! A workspace's diff streamed to a caller on another machine. It runs as a
+//! plain read of the worktree, so it counts as no use of the workspace.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use std::process::Stdio;
@@ -22,13 +21,10 @@ use crate::{
     git,
 };
 
-/// Git writing a workspace's diff, which a client reads.
 pub struct RunningDiff(Child);
 
 impl Spaces {
-    /// Start `git diff` in the worktree of the workspace `selector` names,
-    /// from the commit `shoal diff` compares against, shown as `display`
-    /// says.
+    /// Compares against the commit `shoal diff` compares against.
     pub async fn start_diff(
         &self,
         daemon: &dyn Daemon,
@@ -46,9 +42,8 @@ impl Spaces {
         Ok(RunningDiff(child))
     }
 
-    /// Send what `diff`'s Git writes as the answer to the request `id`,
-    /// then its exit code, until the client hangs up, which stops Git, or
-    /// a daemon restart closes the answer.
+    /// Sends the exit code last. Stops when the client hangs up, which stops
+    /// Git, or a daemon restart closes the answer.
     pub async fn stream_diff(
         &self,
         stream: UnixStream,
@@ -91,7 +86,7 @@ impl Spaces {
     }
 }
 
-/// What `source` writes next into `buffer`; none once it ends.
+/// None once `source` ends.
 async fn read_some<'b>(
     source: &mut (impl AsyncRead + Unpin),
     buffer: &'b mut [u8],

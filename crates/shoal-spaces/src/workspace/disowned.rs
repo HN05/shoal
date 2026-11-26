@@ -1,7 +1,5 @@
-//! What Git left of a workspace's worktree it disowned: whether the
-//! directory at its path is that leftover, which a removal deletes without
-//! Git, the identity of the directory a removal began deleting that proves a
-//! leftover whose `.git` link went too, and the files left there.
+//! What Git left of a worktree it disowned, which a removal deletes without
+//! Git.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::{
@@ -16,10 +14,9 @@ use shoal_daemon_base::ownership::directory_identity;
 use std::path::Path;
 
 impl Spaces {
-    /// Whether Git disowned the worktree of `workspace`, whose repository is
-    /// checked out at `repo`, and what is left at its path is the
-    /// workspace's: a `.git` link proves it, and without one the identity
-    /// of the directory a removal of it began deleting must still match.
+    /// The leftover must be the workspace's: a `.git` link proves it, and
+    /// without one the identity of the directory a removal began deleting
+    /// must still match.
     pub async fn disowned(&self, workspace: &Workspace, repo: &Path) -> Result<bool> {
         Ok(match removal::disowned(workspace, repo).await? {
             None => false,
@@ -28,9 +25,8 @@ impl Spaces {
         })
     }
 
-    /// The files left of the worktree of `workspace` once Git disowned it,
-    /// as [`Self::disowned`] proves, read against its branch's commit;
-    /// `None` while Git knows it.
+    /// Read against the branch's commit. `None` while Git knows the
+    /// worktree.
     pub async fn left_files(
         &self,
         daemon: &dyn Daemon,
@@ -45,9 +41,8 @@ impl Spaces {
         removal::read_left(workspace, &repo.path).await.map(Some)
     }
 
-    /// Record the identity of the directory of `workspace`, whose ownership
-    /// the removal verified, before Git begins deleting it, so that a later
-    /// removal may delete what is left without Git.
+    /// Recorded before Git begins deleting the directory, so a later removal
+    /// may delete what is left without Git.
     pub async fn record_removal_directory(&self, workspace: &Workspace) -> Result<()> {
         let path = workspace.path.clone();
         let identity = off_runtime::run(move || directory_identity(&path)).await?;
@@ -63,8 +58,6 @@ impl Spaces {
             .await
     }
 
-    /// Whether the directory at the path of `workspace` is the one a
-    /// removal of it began deleting.
     async fn holds_removal_directory(&self, workspace: &Workspace) -> Result<bool> {
         let id = workspace.id.clone();
         let recorded = self

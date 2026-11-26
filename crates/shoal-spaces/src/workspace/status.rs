@@ -18,8 +18,6 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// What the status of the workspace `selector` names shows for its
-    /// worktree.
     pub async fn worktree_status(
         &self,
         daemon: &dyn Daemon,
@@ -87,7 +85,6 @@ impl Spaces {
 }
 
 impl Spaces {
-    /// What the workspace changed since its base.
     async fn diff_summary(
         &self,
         daemon: &dyn Daemon,
@@ -103,8 +100,7 @@ impl Spaces {
 }
 
 impl Spaces {
-    /// The selected items in link order, each with the relations the space
-    /// links it under, and the worktree to look them up from. With
+    /// In link order, each with the relations the space links it under. With
     /// `elsewhere`, an issue or PR URL of another repository selects that
     /// item.
     pub async fn select_items(
@@ -135,8 +131,7 @@ impl Spaces {
         })
     }
 
-    /// The issue, PR or CI run whose URL `selection` names, when it is of
-    /// another repository than the one whose origin `checkout` has.
+    /// None when the URL is of the repository whose origin `checkout` has.
     pub async fn item_elsewhere(
         &self,
         checkout: &std::path::Path,
@@ -154,8 +149,7 @@ impl Spaces {
         Ok(Some(item))
     }
 
-    /// The issue, PR or CI run whose URL `selection` names, in whichever
-    /// repository, with that repository's forge.
+    /// In whichever repository, with that repository's forge.
     pub async fn item_at_url(
         &self,
         selection: &link::Selection,
@@ -198,7 +192,6 @@ pub fn parse_numstat(output: &str) -> Result<DiffSummary> {
     Ok(summary)
 }
 
-/// Whether the workspace's setup command finished.
 pub fn setup_finished(db: &Connection, workspace_id: &SpaceId) -> Result<bool> {
     Ok(db.query_row(
         "SELECT setup_finished FROM workspaces WHERE id=?1",

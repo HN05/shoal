@@ -1,4 +1,4 @@
-//! Validate explicit worktree locations before claiming ownership.
+//! Validating worktree locations before claiming ownership.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::{
@@ -17,11 +17,11 @@ use std::{
 };
 
 impl Spaces {
-    /// Choose a new workspace's directory: a validated explicit path, or one
-    /// named after `from`, such as its branch, inside the repository's
-    /// reserved directory, resolved so overlap checks compare real
-    /// locations. Any existing entry, including a dangling symlink, or a
-    /// directory the daemon cannot write is refused.
+    /// A validated explicit path, or one named after `from`, such as its
+    /// branch, inside the repository's reserved directory. Resolved, so
+    /// overlap checks compare real locations. Refuses any existing entry,
+    /// including a dangling symlink, and a directory the daemon cannot
+    /// write.
     pub(super) async fn new_workspace_path(
         &self,
         daemon: &dyn Daemon,
@@ -41,8 +41,7 @@ impl Spaces {
         Ok(path)
     }
 
-    /// Refuse what [`Self::new_workspace_path`] and recording the workspace
-    /// would refuse for a workspace named after `from`. Without `from`, an explicit path may still reopen the workspace
+    /// Without `from`, an explicit path may still reopen the workspace
     /// already there, so only its location is checked.
     pub(super) async fn check_new_workspace_path(
         &self,
@@ -69,8 +68,6 @@ impl Spaces {
             .await
     }
 
-    /// The name of a new workspace's directory made from `from`, such as
-    /// its branch, that no workspace's directory has.
     async fn free_directory(&self, from: &str) -> Result<String> {
         let base = shoal_protocol::space_names::directory_name(from);
         self.store
@@ -124,7 +121,7 @@ impl Spaces {
                 );
             }
         }
-        // Also reject nesting in an unregistered checkout.
+        // Also refuse nesting in an unregistered checkout.
         let mut ancestor = path.parent();
         while let Some(parent) = ancestor {
             ensure!(
@@ -141,8 +138,7 @@ fn overlaps(a: &Path, b: &Path) -> bool {
     a.starts_with(b) || b.starts_with(a)
 }
 
-/// Refuse any existing entry at a new workspace's path, including a dangling
-/// symlink.
+/// Including a dangling symlink.
 fn ensure_unused(path: &Path) -> Result<()> {
     ensure!(
         path.symlink_metadata()

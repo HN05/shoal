@@ -7,7 +7,7 @@ use shoal_refs::CommitId;
 
 use crate::model::{ChangedOnBothSides, ConflictCheck};
 
-/// Keep `check` as the workspace's latest, unless the workspace is gone.
+/// Does nothing once the workspace is gone.
 pub(super) fn save(db: &Connection, check: &ConflictCheck) -> Result<()> {
     db.execute(
         "INSERT OR REPLACE INTO changed_on_both_sides(workspace_id,target,target_commit,head,files)
@@ -34,7 +34,7 @@ pub fn get(db: &Connection, workspace_id: &SpaceId) -> Result<Option<ChangedOnBo
     .transpose()
 }
 
-/// Each workspace's record that lists files, by workspace ID.
+/// By workspace ID.
 pub fn listing_files(db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides)>> {
     let mut statement = db.prepare(&format!(
         "SELECT {COLUMNS} FROM changed_on_both_sides WHERE files != '[]'"
@@ -49,7 +49,7 @@ pub fn listing_files(db: &Connection) -> Result<Vec<(SpaceId, ChangedOnBothSides
 
 const COLUMNS: &str = "workspace_id,target,target_commit,head,files";
 
-/// A row of [`COLUMNS`], its files still JSON.
+/// Its files are still JSON.
 struct Row {
     workspace_id: SpaceId,
     target: String,

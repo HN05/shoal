@@ -1,4 +1,4 @@
-//! Durable rename intent: the reserved branch a workspace is moving to.
+//! The stored rename intent: the reserved branch a workspace is moving to.
 use crate::Spaces;
 use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -7,13 +7,13 @@ use shoal_refs::BranchName;
 
 use crate::{git, model::Workspace};
 
-/// The branch a workspace takes once Git has renamed it; its name stays.
+/// The workspace's name stays.
 pub(super) struct RenameIntent {
     pub branch: BranchName,
 }
 
 impl RenameIntent {
-    /// Reserve the branch inside the caller's transaction.
+    /// Runs in the caller's transaction.
     pub(super) fn record(&self, db: &Connection, workspace_id: &SpaceId) -> Result<()> {
         db.execute(
             "INSERT INTO workspace_renames(workspace_id,branch) VALUES (?1,?2)",
@@ -46,8 +46,8 @@ impl Spaces {
             .await
     }
 
-    /// Take the intended identity and move dependent bases to the new branch,
-    /// releasing the reservation in the same transaction.
+    /// Moves dependent bases to the new branch and releases the reservation
+    /// in the same transaction.
     pub(super) async fn commit_rename(
         &self,
         workspace: &Workspace,
@@ -73,7 +73,7 @@ impl Spaces {
             .await
     }
 
-    /// Release the reservation and keep the recorded identity.
+    /// Keeps the recorded identity.
     pub(super) async fn cancel_rename(&self, workspace_id: &SpaceId) -> Result<()> {
         let id = workspace_id.to_owned();
         self.store.run(move |db| release(db, &id)).await

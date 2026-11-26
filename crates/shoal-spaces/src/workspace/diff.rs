@@ -1,5 +1,4 @@
-//! Fork-point resolution for `shoal diff`, and the diff it streams to a
-//! caller on another machine.
+//! The fork point `shoal diff` compares against.
 mod streaming;
 
 use crate::Spaces;
@@ -13,9 +12,9 @@ use crate::{
 use shoal_protocol::space_names::SpaceSelector;
 
 impl Spaces {
-    /// The commit `shoal diff` compares against: the fork point from the
-    /// recorded base ref, falling back to a plain merge base, or without a
-    /// ref the merge base with the recorded base commit.
+    /// The fork point from the recorded base ref, falling back to a plain
+    /// merge base, or without a ref the merge base with the recorded base
+    /// commit.
     pub async fn diff_base(
         &self,
         daemon: &dyn Daemon,

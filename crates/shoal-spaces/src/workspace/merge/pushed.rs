@@ -11,10 +11,9 @@ use shoal_refs::CommitId;
 use crate::{git, log, model::MergePlan};
 
 impl Spaces {
-    /// Follow the default branch's CI runs for the commit the execution
-    /// behind `change` pushed, if it merged and pushed. The caller holds the
-    /// repository Git gate. Failure only logs, so the execution's outcome
-    /// stands.
+    /// Does nothing unless the execution merged and pushed. The caller holds
+    /// the repository's Git gate. A failure only logs, so the execution's
+    /// outcome stands.
     pub async fn follow_pushed_merge_runs(&self, daemon: &dyn Daemon, change: &RecordChange) {
         let RecordChange::Merge(plan) = change else {
             return;
@@ -31,10 +30,10 @@ impl Spaces {
     }
 }
 
-/// What the execution of `plan` pushed: the default branch's tip, once it
-/// holds the merge and the branch's upstream, as Git tracks it after the
-/// push, holds the tip. A merge an earlier push failed to publish counts,
-/// though this execution merged nothing new, since its push publishes it.
+/// The default branch's tip, once it holds the merge and its upstream, as
+/// Git tracks it after the push, holds the tip. A merge an earlier push
+/// failed to publish counts, though this execution merged nothing new,
+/// since its push publishes it.
 pub async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     let Some(push) = &plan.push else {
         return Ok(None);
@@ -61,9 +60,8 @@ pub async fn pushed_merge(plan: &MergePlan) -> Result<Option<PushedMerge>> {
     }))
 }
 
-/// Whether the default branch at `tip` holds the merge of `plan`, by any
-/// method: the merged branch, or its changes, which a squash or rebase
-/// copied, as this execution or an earlier one merged them.
+/// By any method: the merged branch, or its changes, which a squash or
+/// rebase copied, merged by this execution or an earlier one.
 async fn holds_merge(plan: &MergePlan, tip: &CommitId) -> Result<bool> {
     git::status::merged_into(&plan.repo.path, plan.source.as_str(), tip.as_str()).await
 }

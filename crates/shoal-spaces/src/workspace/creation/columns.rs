@@ -6,8 +6,6 @@ use shoal_refs::{BranchName, CommitId};
 use crate::model::{Checkout, Head};
 use crate::store;
 
-/// The `base_commit`, `base_ref` and `git_dir` columns that hold what
-/// `checkout` records.
 pub(super) fn checkout_columns(
     checkout: &Checkout,
 ) -> (Option<&CommitId>, Option<&str>, Option<String>) {
@@ -19,7 +17,6 @@ pub(super) fn checkout_columns(
     )
 }
 
-/// The `branch`, `start_commit` and `made_for` columns that hold `head`.
 pub(super) fn head_columns(
     head: &Head,
 ) -> Result<(Option<&BranchName>, Option<&CommitId>, Option<String>)> {
