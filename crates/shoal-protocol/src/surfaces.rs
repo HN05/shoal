@@ -112,11 +112,12 @@ impl Surface {
     }
 
     /// The value at the JSON pointer `path` of its initial data model.
+    /// A relative path, outside a list's item, reads from the root.
     fn data(&self, path: &str) -> Option<&Value> {
         let model = self.body()?.get("dataModel")?;
-        match path {
-            "" | "/" => Some(model),
-            path => model.pointer(path),
+        match path.trim_start_matches('/') {
+            "" => Some(model),
+            _ => model.pointer(&scoped("", path)),
         }
     }
 }

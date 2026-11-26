@@ -465,3 +465,26 @@ fn images_by_reference_name_attached_files_too() {
     );
     plain.checked(&[]).unwrap();
 }
+
+#[test]
+fn a_relative_binding_reads_from_the_root_of_the_data() {
+    let relative = surface(
+        json!([
+            {"id": "root", "component": "Column", "children": ["note", "go"]},
+            {"id": "note", "component": "TextField", "label": "Note", "value": {"@path": "/note"}},
+            {"id": "go", "component": "Button", "child": "go-label",
+             "action": {"event": {"name": "go",
+                 "context": {"count": {"@path": "count"}, "note": {"@path": "note"}}}}},
+            {"id": "go-label", "component": "Text", "text": "Go"},
+        ]),
+        json!({"count": 3, "note": "draft"}),
+    );
+    let go = relative.action("go").unwrap();
+    assert_eq!(go.inputs.len(), 1);
+    assert_eq!(go.inputs[0].initial, Some(json!("draft")));
+    let resolved = relative.resolve("go", serde_json::Map::new()).unwrap();
+    assert_eq!(
+        Value::Object(resolved),
+        json!({"count": 3, "note": "draft"})
+    );
+}

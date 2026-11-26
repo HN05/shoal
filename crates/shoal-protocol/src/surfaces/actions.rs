@@ -198,7 +198,8 @@ const INPUTS: &[&str] = &[
 
 /// Whether `component` is an input that enters the data at `path`.
 fn entering(component: Component<'_>, path: &str) -> bool {
-    component.binding("value") == Some(path) && INPUTS.contains(&component.kind)
+    let binds = |bound: &str| super::scoped("", bound) == super::scoped("", path);
+    component.binding("value").is_some_and(binds) && INPUTS.contains(&component.kind)
 }
 
 impl Surface {
