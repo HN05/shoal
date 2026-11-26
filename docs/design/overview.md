@@ -21,7 +21,8 @@ substantial data of its runs behind. [Cleanup](cleanup.md) says how.
   repository's registered checkout, in a workspace's worktree, or without a
   repository, as [Chats](chats.md) says.
 - A caller's **scope** is the spaces it may act on: its own space and the
-  spaces below it. Only the user's own terminal is unscoped.
+  spaces below it. A [master session](chats.md#master-session)'s scope reaches
+  every space. Only the user's own terminal is unscoped.
   [Scope](permissions.md#scope) says how a scope is given and checked.
 - A space's **coordinator** is the agent of the nearest space above it that
   has an agent. The space's alerts, threads and completion reach its
