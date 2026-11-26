@@ -19,6 +19,7 @@ mod signal_report;
 mod spawn;
 mod supervise;
 mod takeover;
+mod tree_memory;
 mod wake;
 
 use anyhow::{Context as _, Result, ensure};

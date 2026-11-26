@@ -22,6 +22,7 @@ use super::{
     recovery, scope_memory,
     signal_report::SignalReport,
     spawn::{AgentLaunch, spawn},
+    tree_memory,
 };
 use crate::{
     model::ExecutionPlan,
@@ -154,8 +155,7 @@ pub(super) async fn supervise(
     let baseline = (!launcher.is_empty()).then(scope_memory::Baseline::read);
     let (mut child, group, _terminal, _scope) =
         spawn_registered_child(paths, plan, command, mode, auth, launcher, link.status())?;
-    let using = mode.admission().map(|admission| admission.usage());
-    let watch = baseline.map(|baseline| baseline.watch(group.pid(), using));
+    let watch = MemoryWatch::start(baseline, mode, group.pid());
     register_child(link, plan, mode, &group, saving.restored_from).await?;
     let report = SignalReport { paths, plan };
     let outcome = wait_for_child(link, &mut child, &group, signals, saving.ending, report).await?;
@@ -166,6 +166,35 @@ pub(super) async fn supervise(
     drop(group);
     let memory = watch.and_then(|watch| watch.finish(outcome.code()));
     Ok((outcome, memory))
+}
+
+/// What reads a running command's memory: the scope it runs in, or for an
+/// admitted command without one its process tree.
+enum MemoryWatch {
+    Scope(scope_memory::Watch),
+    Tree(tree_memory::Watch),
+}
+
+impl MemoryWatch {
+    /// Read the memory of the command `pid` of `mode`, in the scope
+    /// `baseline` was read for when it has one, telling its admission what
+    /// it holds.
+    fn start(baseline: Option<scope_memory::Baseline>, mode: &Mode, pid: u32) -> Option<Self> {
+        let using = mode.admission().map(|admission| admission.usage());
+        match (baseline, using) {
+            (Some(baseline), using) => Some(Self::Scope(baseline.watch(pid, using))),
+            (None, Some(using)) => Some(Self::Tree(tree_memory::Watch::start(pid, using))),
+            (None, None) => None,
+        }
+    }
+
+    /// What the reads recorded once the command ended with `code`.
+    fn finish(self, code: i32) -> Option<ScopeMemory> {
+        match self {
+            Self::Scope(watch) => watch.finish(code),
+            Self::Tree(watch) => Some(watch.finish()),
+        }
+    }
 }
 
 /// The command the child of `mode` starts through: Shoal's work runs in
