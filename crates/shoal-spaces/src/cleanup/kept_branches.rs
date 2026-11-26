@@ -82,8 +82,8 @@ pub async fn sweep(daemon: &dyn Daemon, state: &mut State) -> Result<()> {
     Ok(())
 }
 
-/// The kept branches' Git runs in the checkout. [`Manager::sweep_skips`]
-/// tells whether it answers.
+/// The kept branches' Git runs in the checkout. A checkout whose file
+/// access stalled does not answer.
 async fn checkout_answers(daemon: &dyn Daemon, repository_id: &RepositoryId) -> Result<bool> {
     let repo = daemon
         .repository(crate::repository::Selector::from(repository_id))

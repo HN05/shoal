@@ -569,7 +569,7 @@ pub fn recorded_within(
         .collect()
 }
 
-/// Leaves out the agents, which [`Manager::agent_of`] reads. `owner`, the
+/// Leaves out the agents, which [`Spaces::with_agents`] adds. `owner`, the
 /// daemon's state directory, marks the temporary directory of a chat
 /// without a repository in the `root_dir` it started in.
 fn recorded(

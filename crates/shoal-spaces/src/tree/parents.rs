@@ -41,7 +41,7 @@ impl Spaces {
             .await
     }
 
-    /// [`Self::open_branch`] below `parent`. A scoped `caller` takes over no
+    /// [`Self::open_branch_with`] below `parent`. A scoped `caller` takes over no
     /// existing workspace outside its scope.
     #[allow(
         clippy::too_many_arguments,

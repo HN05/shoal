@@ -164,7 +164,7 @@ impl Spaces {
 
     /// `None` removes the section from every PR. Logs each PR that fails
     /// without stopping at it, and returns whether every one succeeded. The
-    /// caller holds the gates [`shoal_links::Links::lock_change_gates`]
+    /// caller holds the gates [`crate::daemon::Links::lock_change_gates`]
     /// takes for the space.
     async fn write_sections(
         &self,
@@ -200,7 +200,7 @@ impl Spaces {
     /// Writes only to a draft, and removes the section for `None` or a PR out
     /// of draft, as the agent account. Skips a PR that is no longer open or
     /// already shows it. The caller holds the gates
-    /// [`shoal_links::Links::lock_change_gates`] takes for the space.
+    /// [`crate::daemon::Links::lock_change_gates`] takes for the space.
     async fn write_section(
         &self,
         daemon: &dyn Daemon,

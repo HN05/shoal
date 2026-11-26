@@ -56,7 +56,7 @@ pub enum TargetCheck {
     DirectorySpace,
 }
 
-/// What a check reads besides the space. [`Manager::facts`] loads only what
+/// What a check reads besides the space. [`Spaces::facts`] loads only what
 /// the check reads.
 #[derive(Debug, Default)]
 pub struct Facts {
@@ -91,7 +91,7 @@ impl TargetCheck {
     /// Whether the request path reads the space to judge it: only a check
     /// that can refuse what the handler would not refuse first. Every
     /// recorded space passes `Space`. A workspace check refuses only a chat,
-    /// which `Manager::workspace` refuses alike. A check of what a space has
+    /// which `Spaces::workspace` refuses alike. A check of what a space has
     /// only leaves out one without it, which its handler answers.
     fn refuses_before_handler(self) -> bool {
         match self {
@@ -140,7 +140,7 @@ impl TargetCheck {
     }
 }
 
-/// A chat lacks the worktree and is refused as [`Manager::workspace`]
+/// A chat lacks the worktree and is refused as [`Spaces::workspace`]
 /// refuses it.
 fn workspace(space: &Space, judged: impl FnOnce(&Worktree) -> Verdict) -> Verdict {
     match &space.part {
