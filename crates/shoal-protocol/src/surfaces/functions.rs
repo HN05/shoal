@@ -203,12 +203,17 @@ fn regex(pattern: &str) -> Option<fancy_regex::Regex> {
 /// Most steps a regex check's match may backtrack.
 const MAX_BACKTRACKS: usize = 100_000;
 
+/// ECMAScript's whitespace and line terminators, which its `\s` matches,
+/// as a character class's members.
+const SPACE: &str = "\\t\\n\\x0B\\x0C\\r \\x{A0}\\x{1680}\\x{2000}-\\x{200A}\\x{2028}\\x{2029}\\x{202F}\\x{205F}\\x{3000}\\x{FEFF}";
+
 /// An ASCII word character, as ECMAScript's `\w` is.
 const WORD: &str = "[A-Za-z0-9_]";
 
 /// `pattern`, written in ECMAScript's syntax, with what Rust's syntax
 /// means otherwise spelled as ECMAScript means it: `\d`, `\w` and `\b`
-/// ASCII, and `.` excluding every line terminator.
+/// ASCII, `\s` ECMAScript's whitespace, and `.` excluding every line
+/// terminator.
 fn ecmascript(pattern: &str) -> String {
     let mut translated = String::new();
     let mut in_class = false;
@@ -220,6 +225,8 @@ fn ecmascript(pattern: &str) -> String {
                 Some('D') => "[^0-9]".to_owned(),
                 Some('w') => WORD.to_owned(),
                 Some('W') => "[^A-Za-z0-9_]".to_owned(),
+                Some('s') => format!("[{SPACE}]"),
+                Some('S') => format!("[^{SPACE}]"),
                 Some('b') if !in_class => {
                     format!("(?:(?<={WORD})(?!{WORD})|(?<!{WORD})(?={WORD}))")
                 }

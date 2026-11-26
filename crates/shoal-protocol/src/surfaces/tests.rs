@@ -746,6 +746,9 @@ fn a_regex_check_reads_its_pattern_as_ecmascript_does() {
     let named = pattern(r"^(?!admin$)[a-z]+$");
     assert!(answer(&named, "admin").is_err());
     answer(&named, "ada").unwrap();
+    let unspaced = pattern(r"^\S+$");
+    assert!(answer(&unspaced, "a\u{FEFF}b").is_err());
+    answer(&pattern(r"^[\s\d]+$"), "1 2").unwrap();
     let bounded = pattern(r"\bcat\b");
     assert!(answer(&bounded, "concatenate").is_err());
     answer(&bounded, "a cat").unwrap();
