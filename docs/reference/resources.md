@@ -42,9 +42,9 @@ it: the user, an agent or a demo.
 The user's lease is one acquired from an unscoped terminal. It stays until
 `shoal release` releases it or the workspace is removed.
 
-An agent's lease is one the agent, or a command it started, acquired for its
-own space or a space below it. It belongs to the agent of that space. It ends
-when that agent ends for good:
+An agent's lease is one the agent, or a command it started, acquired. It
+belongs to that agent, also when it was acquired for a space below the
+agent's own. It ends when that agent ends for good:
 
 - the agent quits on its own;
 - `shoal stop` stops it;
