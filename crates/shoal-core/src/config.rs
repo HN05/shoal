@@ -225,7 +225,7 @@ impl Config {
         Self::parse_over(&text, &shared, paths).with_context(|| format!("parse {}", path.display()))
     }
 
-/// Both files as written, layered without validating their values.
+    /// Both files as written, layered without validating their values.
     pub fn load_unchecked(home: &Path) -> Result<Self> {
         let path = Shared::path_for_home(home);
         let shared = parse::shared(&read_file(&path)?)
@@ -241,8 +241,8 @@ impl Config {
         })
     }
 
-/// [`Self::load`] with the template files beside each file standing in
-/// for its omitted inline templates.
+    /// [`Self::load`] with the template files beside each file standing in
+    /// for its omitted inline templates.
     pub fn load_with_templates(paths: &Paths) -> Result<Self> {
         let mut config = Self::load(paths)?;
         let [shared, own] = template_directories(paths)?;
