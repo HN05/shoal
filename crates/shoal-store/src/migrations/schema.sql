@@ -389,7 +389,7 @@ CREATE TABLE removed_spaces (
     name TEXT NOT NULL,
     expires_at INTEGER NOT NULL,
     record TEXT NOT NULL
-);
+, chat_workspace_id TEXT, checkpoint_expires_at INTEGER);
 
 CREATE TABLE spaces (
     id TEXT PRIMARY KEY,

@@ -9,6 +9,7 @@ use shoal_ids::space_ids::SpaceId;
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, params};
+use shoal_store::split::{self, Column};
 
 use crate::{
     git,
@@ -44,6 +45,20 @@ fn kept_chat(space: &Space) -> RemovedKind {
 
 /// True when no space has the record's ID.
 const GONE: &str = "space_id NOT IN (SELECT id FROM spaces)";
+
+/// Each column but `chat`, with the field of the record it keeps.
+const FIELDS: &[Column] = &[
+    ("space_id", &["workspace_id"]),
+    ("repository_id", &["repository_id"]),
+    ("name", &["name"]),
+    ("expires_at", &["expires_at"]),
+    ("chat_workspace_id", &["chat", "workspace", "id"]),
+    ("checkpoint_expires_at", &["checkpoint", "expires_at"]),
+];
+
+/// What a query selects to read a record.
+pub(crate) const COLUMNS: &str =
+    "space_id,repository_id,name,expires_at,chat_workspace_id,checkpoint_expires_at,record";
 
 impl Spaces {
     /// Takes the checkpoint and records the space before any file is
@@ -237,13 +252,13 @@ impl Spaces {
     pub async fn removed_spaces(&self) -> Result<Vec<RemovedSpace>> {
         self.store
             .run(|db| {
-                db.prepare(&format!(
-                    "SELECT record FROM removed_spaces WHERE expires_at > unixepoch()
+                Ok(db
+                    .prepare(&format!(
+                        "SELECT {COLUMNS} FROM removed_spaces WHERE expires_at > unixepoch()
                             AND {GONE} ORDER BY rowid DESC"
-                ))?
-                .query_map([], |row| row.get::<_, String>(0))?
-                .map(|record| Ok(serde_json::from_str(&record?)?))
-                .collect()
+                    ))?
+                    .query_map([], removed_space)?
+                    .collect::<rusqlite::Result<_>>()?)
             })
             .await
     }
@@ -292,27 +307,25 @@ pub fn kept_record_ids(db: &Connection) -> Result<Vec<SpaceId>> {
 /// transaction that commits the conversion, so one that fails leaves them
 /// the workspace's.
 pub fn rekey_converted(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<()> {
-    let recorded = crate::store::exists(
-        tx,
-        "SELECT 1 FROM removed_spaces WHERE space_id=?1 AND NOT chat",
-        [id],
-    )?;
-    if !recorded {
+    let recorded = tx
+        .query_row(
+            &format!("SELECT {COLUMNS} FROM removed_spaces WHERE space_id=?1 AND NOT chat"),
+            [id],
+            removed_space,
+        )
+        .optional()?;
+    let Some(mut removed) = recorded else {
         return Ok(());
-    }
+    };
     let own = SpaceId::generate();
     super::super::workspace::checkpoints::reassign(tx, id, &own)?;
-    tx.execute(
-        "UPDATE removed_spaces SET space_id=?2, record=json_set(record,
-            '$.workspace_id', ?2, '$.checkpoint.workspace_id', ?2)
-         WHERE space_id=?1 AND NOT chat",
-        params![id, own],
-    )?;
+    removed.space_id = own.clone();
+    removed.kept_workspace_mut()?.checkpoint.workspace_id = own.clone();
+    rewrite(tx, id, &removed)?;
     // The chats the conversion removed from its worktree ran in the
     // workspace the record restores, which the ID no longer names.
     tx.execute(
-        "UPDATE removed_spaces SET record=json_set(record, '$.chat.workspace.id', ?2)
-         WHERE chat AND json_extract(record, '$.chat.workspace.id')=?1",
+        "UPDATE removed_spaces SET chat_workspace_id=?2 WHERE chat AND chat_workspace_id=?1",
         params![id, own],
     )?;
     Ok(())
@@ -321,18 +334,39 @@ pub fn rekey_converted(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<(
 /// Replaces one an earlier attempt left.
 pub fn record(db: &Connection, removed: &RemovedSpace) -> Result<()> {
     db.execute(
-        "INSERT OR REPLACE INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
-            VALUES (?1,?2,?3,?4,?5,?6)",
-        params![
-            removed.space_id,
-            removed.repository_id,
-            removed.workspace().is_none(),
-            removed.name,
-            removed.expires_at,
-            serde_json::to_string(removed)?,
-        ],
+        &format!(
+            "INSERT OR REPLACE INTO removed_spaces({COLUMNS},chat)
+                VALUES (?1,?2,?3,?4,?5,?6,?7,?8)"
+        ),
+        rusqlite::params_from_iter(row_values(removed)?),
     )?;
     Ok(())
+}
+
+/// Writes `removed` over the record of `id`, which keeps its place among
+/// the newest.
+fn rewrite(db: &Connection, id: &SpaceId, removed: &RemovedSpace) -> Result<()> {
+    let mut values = row_values(removed)?;
+    values.push(id.to_string().into());
+    db.execute(
+        &format!(
+            "UPDATE removed_spaces SET ({COLUMNS},chat)=(?1,?2,?3,?4,?5,?6,?7,?8) WHERE space_id=?9"
+        ),
+        rusqlite::params_from_iter(values),
+    )?;
+    Ok(())
+}
+
+/// The values of [`COLUMNS`] and `chat`, in their order.
+fn row_values(removed: &RemovedSpace) -> Result<Vec<rusqlite::types::Value>> {
+    let (record, mut values) = split::split(removed, FIELDS)?;
+    values.extend([record.into(), removed.workspace().is_none().into()]);
+    Ok(values)
+}
+
+/// Reads the columns [`COLUMNS`] names.
+pub(crate) fn removed_space(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemovedSpace> {
+    split::decode_row(row, "record", FIELDS)
 }
 
 /// As a root move that took its files there says, when it has a removal
@@ -362,21 +396,16 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
         return Ok(None);
     };
     let until = UnixTime::now() + RESTORE_CLAIM;
-    tx.execute(
-        "UPDATE removed_spaces SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
-         WHERE space_id=?1 AND expires_at < ?2",
-        params![removed.space_id, until],
-    )?;
-    tx.execute(
-        "UPDATE checkpoints SET expires_at=?2 WHERE workspace_id=?1 AND expires_at < ?2",
-        params![removed.space_id, until],
-    )?;
-    tx.execute(
-        "UPDATE removed_spaces
-         SET record=json_set(record, '$.checkpoint.expires_at', ?2)
-         WHERE space_id=?1 AND json_extract(record, '$.checkpoint.expires_at') < ?2",
-        params![removed.space_id, until],
-    )?;
+    for (table, key, column) in [
+        ("removed_spaces", "space_id", "expires_at"),
+        ("removed_spaces", "space_id", "checkpoint_expires_at"),
+        ("checkpoints", "workspace_id", "expires_at"),
+    ] {
+        tx.execute(
+            &format!("UPDATE {table} SET {column}=?2 WHERE {key}=?1 AND {column} < ?2"),
+            params![removed.space_id, until],
+        )?;
+    }
     crate::workspace_files::claim(tx, &removed.space_id, until)?;
     removed.expires_at = removed.expires_at.max(until);
     if let Ok(kept) = removed.kept_workspace_mut() {
@@ -386,19 +415,16 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
 }
 
 fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
-    let record: Option<String> = db
+    Ok(db
         .query_row(
             &format!(
-                "SELECT record FROM removed_spaces WHERE space_id=?1
+                "SELECT {COLUMNS} FROM removed_spaces WHERE space_id=?1
                     AND expires_at > unixepoch() AND {GONE}"
             ),
             [id],
-            |row| row.get(0),
+            removed_space,
         )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
+        .optional()?)
 }
 
 #[cfg(test)]

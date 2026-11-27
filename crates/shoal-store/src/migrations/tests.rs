@@ -252,6 +252,7 @@ mod journal_columns;
 mod journal_shapes;
 mod pending_plan_columns;
 mod post_files;
+mod removed_space_columns;
 mod review_targets;
 mod schema;
 mod simulator_columns;

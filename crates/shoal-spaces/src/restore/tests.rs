@@ -33,12 +33,14 @@ async fn record(manager: &Fixture, id: &str) -> Option<RemovedSpace> {
     manager
         .store
         .run(move |db| {
-            let record: Option<String> = rusqlite::OptionalExtension::optional(db.query_row(
-                "SELECT record FROM removed_spaces WHERE space_id=?1",
+            Ok(rusqlite::OptionalExtension::optional(db.query_row(
+                &format!(
+                    "SELECT {} FROM removed_spaces WHERE space_id=?1",
+                    super::records::COLUMNS
+                ),
                 [id],
-                |row| row.get(0),
-            ))?;
-            Ok(record.map(|record| serde_json::from_str(&record).unwrap()))
+                super::records::removed_space,
+            ))?)
         })
         .await
         .unwrap()
@@ -146,8 +148,8 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
         .store
         .run(move |db| {
             db.execute(
-                "UPDATE removed_spaces SET expires_at=?2, record=json_set(record,
-                    '$.expires_at', ?2, '$.checkpoint.expires_at', ?2) WHERE space_id=?1",
+                "UPDATE removed_spaces SET expires_at=?2, checkpoint_expires_at=?2
+                    WHERE space_id=?1",
                 rusqlite::params![id, soon],
             )?;
             db.execute(

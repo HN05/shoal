@@ -18,12 +18,13 @@ mod json_rows;
 mod pending_plan_columns;
 mod post_files;
 mod post_surfaces;
+mod removed_space_columns;
 mod review_targets;
 mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 330;
+pub const SCHEMA_VERSION: i64 = 331;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -216,6 +217,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         330,
         include_str!("migrations/0330_pending_plan_columns.sql"),
         Some(Step::After(pending_plan_columns::move_source_fields)),
+    ),
+    (
+        331,
+        include_str!("migrations/0331_removed_space_columns.sql"),
+        Some(Step::After(removed_space_columns::move_fields)),
     ),
 ];
 
