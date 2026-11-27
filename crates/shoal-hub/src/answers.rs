@@ -163,6 +163,11 @@ impl Hub {
                 request.caller = member.id.clone();
                 Reply::Placed(self.place_for(&**daemon, request).await?)
             }
+            Call::RankJob { mut request } => {
+                ensure_machine(member)?;
+                request.caller = member.id.clone();
+                Reply::Ranked(self.rank_job_for(&**daemon, request).await?)
+            }
             Call::Owner { space } => Reply::Owner(
                 self.local_space_owner(&**daemon, &space, &member.id)
                     .await?,

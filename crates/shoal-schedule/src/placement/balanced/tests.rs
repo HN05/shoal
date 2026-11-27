@@ -454,3 +454,30 @@ fn a_machine_whose_exclusive_repositories_kept_it_busy_ranks_later() {
     let rarely = serving_alone(machine("mac", true, capacity(1, 64, 0)), demand(5, 0));
     assert_eq!(order(request(true), vec![rarely, linux]), ["mac", "linux"]);
 }
+
+#[test]
+fn a_ci_job_ranks_machines_without_agent_tools_by_where_it_has_room() {
+    let mut job = disposable(true);
+    job.agent = None;
+    job.caller = "server".into();
+    let launches_none = |mut machine: Machine| {
+        for capacity in machine.capacity.iter_mut() {
+            capacity.agents.clear();
+            (capacity.repositories.iter_mut()).for_each(|registered| registered.agents.clear());
+        }
+        machine
+    };
+    let machines = vec![
+        launches_none(machine("server", true, capacity(1, 64, 0))),
+        launches_none(machine("desk", false, capacity(1, 8, 0))),
+        held("tablet", false),
+    ];
+    let placement = Balanced.place(&Snapshot {
+        request: job,
+        machines,
+    });
+    assert_eq!(placement.rank_of(&"desk".into()), 0);
+    assert_eq!(placement.rank_of(&"server".into()), 1);
+    // A machine without room ranks after all that have it.
+    assert_eq!(placement.rank_of(&"tablet".into()), 2);
+}

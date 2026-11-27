@@ -41,6 +41,14 @@ impl Placement {
     pub fn chosen(&self) -> Option<&Placed> {
         self.ranked.first()
     }
+
+    /// Where `machine` ranks, 0 first, after every ranked machine where it
+    /// ranks nowhere.
+    pub fn rank_of(&self, machine: &MemberId) -> usize {
+        (self.ranked.iter())
+            .position(|placed| &placed.machine == machine)
+            .unwrap_or(self.ranked.len())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

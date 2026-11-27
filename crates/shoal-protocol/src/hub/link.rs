@@ -465,6 +465,12 @@ pub enum Call {
     Place {
         request: shoal_schedule::placement::snapshot::Request,
     },
+    /// Where the calling machine ranks, 0 first, among the hub's machines
+    /// for a CI job of `request`; the hub takes the caller's machine as its
+    /// own. Answered with [`Reply::Ranked`].
+    RankJob {
+        request: shoal_schedule::placement::snapshot::Request,
+    },
     /// A machine's claim of `space`, which it imports, so that its report
     /// of the space takes the ID over. A claim with a move's `ticket` is
     /// refused once that move's source settled it unclaimed. A `takeover` is
@@ -577,6 +583,7 @@ pub enum Reply {
     Directory(Directory),
     Owner(Option<super::Member>),
     Placed(Option<super::placement::Decision>),
+    Ranked(usize),
     Claimed(Option<SpaceNumber>),
     Settled(bool),
     Kept(Option<Box<super::packages::KeptPackage>>),

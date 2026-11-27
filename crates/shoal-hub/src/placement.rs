@@ -28,6 +28,7 @@ use crate::{
     refusal::{Reason, Refusal},
 };
 
+mod jobs;
 mod placer;
 
 pub(crate) use placer::Placers;
