@@ -8,8 +8,8 @@ use shoal_protocol::space_names::SpaceName;
 use std::path::Path;
 
 use super::{
-    ApprovalRequest, DecisionStatus, Specification, Target,
-    store::{COLUMNS, by_key, current, decode_record, list, record_row, retire, write_record},
+    ApprovalRequest, DecisionStatus, Specification, Target, row,
+    store::{COLUMNS, by_key, current, list, retire},
 };
 use crate::forge::items::attach::Attachment;
 use crate::{item_numbers, store};
@@ -108,24 +108,7 @@ fn insert(tx: &Transaction<'_>, mut request: ApprovalRequest) -> Result<Approval
     request.space = Some(space_record(tx, &request.space_id)?.0);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
-    // A repository-owned request names no space's row, so it stays when the
-    // space goes, and keeps its space's number from another space.
-    let space = request.repository_id.is_none().then_some(&request.space_id);
-    tx.execute(
-        "INSERT INTO access_requests(id,space_id,repository_id,target_key,name,record,
-                space_number,number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        params![
-            request.key,
-            space,
-            request.repository_id,
-            request.target,
-            request.name,
-            serde_json::to_string(&request)?,
-            request.number.space,
-            request.number.item
-        ],
-    )?;
+    row::insert(tx, &request)?;
     crate::events::record_approval(tx, crate::events::EventKind::ApprovalRequested, &request)?;
     Ok(request)
 }
@@ -149,8 +132,8 @@ fn repository_proposals(
         "{} WHERE repository_id=?1 AND target_key=?2 ORDER BY rowid",
         COLUMNS
     ))?
-    .query_map(params![repository, Target::IssueOpen], record_row)?
-    .map(|row| decode_record(row?))
+    .query_map(params![repository, Target::IssueOpen], row::read)?
+    .map(|row| row::decode(row?))
     .collect()
 }
 
@@ -163,11 +146,7 @@ pub fn save(tx: &Transaction<'_>, request: &ApprovalRequest) -> Result<()> {
         "approval request {} is no longer pending",
         request.number
     );
-    tx.execute(
-        "UPDATE access_requests SET record=?2 WHERE id=?1",
-        params![request.key, serde_json::to_string(request)?],
-    )?;
-    Ok(())
+    row::write(tx, request)
 }
 
 /// Forget a decided proposal; the agent's message carries the outcome.
@@ -204,7 +183,7 @@ pub fn rebase_files(tx: &Transaction<'_>, source: &Path, destination: &Path) -> 
             moved |= rebase(body, attachments, source, destination);
         }
         if moved {
-            write_record(tx, &request)?;
+            row::write(tx, &request)?;
         }
     }
     Ok(())

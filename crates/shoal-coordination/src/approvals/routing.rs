@@ -6,8 +6,8 @@ use rusqlite::{Connection, Transaction, params};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 
 use super::{
-    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, proposals,
-    store::{CANDIDATES, by_key, decode_record, record_row, write_record},
+    ApprovalRequest, ApprovalRequestExt, DecisionStatus, Specification, proposals, row,
+    store::{CANDIDATES, by_key},
 };
 use crate::{
     config::permissions::PermissionKey,
@@ -46,8 +46,8 @@ fn needed(
 fn holds_grant(db: &Connection, workspace: &SpaceId, request: &ApprovalRequest) -> Result<bool> {
     let candidates = db
         .prepare(CANDIDATES)?
-        .query_map(params![workspace, request.target], record_row)?
-        .map(|row| decode_record(row?))
+        .query_map(params![workspace, request.target], row::read)?
+        .map(|row| row::decode(row?))
         .collect::<Result<Vec<_>>>()?;
     Ok(candidates.iter().any(|grant| {
         grant.status == DecisionStatus::Approved
@@ -95,7 +95,7 @@ pub(super) fn route(
     }
     request.decider = candidates.first().cloned();
     request.routed = true;
-    write_record(tx, &request)?;
+    row::write(tx, &request)?;
     Ok(request)
 }
 
@@ -153,7 +153,7 @@ pub fn decide(tx: &Transaction<'_>, key: &str, approve: bool) -> Result<Decision
     if new {
         request.status = status;
         request.decided_at = Some(crate::time::UnixTime::now());
-        write_record(tx, &request)?;
+        row::write(tx, &request)?;
         events::record_approval(tx, EventKind::ApprovalDecided, &request)?;
     }
     Ok(Decision { request, new })

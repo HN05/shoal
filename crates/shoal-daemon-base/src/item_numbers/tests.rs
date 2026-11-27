@@ -21,12 +21,7 @@ fn thread(db: &Connection, space: &str, number: ItemNumber) -> Result<()> {
 }
 
 fn request(db: &Connection, key: &str, number: ItemNumber) -> Result<()> {
-    db.execute(
-        "INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
-            VALUES (?1,'first','port/web',?1,'{}',?2,?3)",
-        params![key, number.space, number.item],
-    )?;
-    Ok(())
+    seeds::access_request(db, key, &SpaceId::from("first"), ("port/web", key), number)
 }
 
 #[tokio::test]

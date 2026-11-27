@@ -1658,18 +1658,27 @@ async fn a_chat_decides_its_workspaces_requests_until_it_ends() {
     // A malformed record of another space's history, its own or one its
     // repository owns, leaves the chat's requests readable.
     let (other, repository) = (child.id.clone(), child.repository_id.clone());
+    let repository = repository.expect("the child is in a repository");
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO access_requests(id,space_id,target_key,name,record,active,number)
-                    VALUES ('broken',?1,'secret/other','default','not json',0,99)",
-                [&other],
+            let number = |item| shoal_protocol::item_numbers::ItemNumber {
+                space: shoal_ids::space_ids::SpaceNumber::new(0),
+                item,
+            };
+            shoal_store::test_support::seeds::access_request(
+                db,
+                "broken",
+                &other,
+                ("secret/other", "default"),
+                number(99),
             )?;
-            db.execute(
-                "INSERT INTO access_requests(id,repository_id,target_key,name,record,active,number)
-                    VALUES ('broken-issue',?1,'issue_open','issue','not json',1,98)",
-                [&repository],
+            shoal_store::test_support::seeds::issue_proposal(
+                db,
+                "broken-issue",
+                &repository,
+                &other,
+                number(98),
             )?;
             Ok(())
         })
@@ -2213,7 +2222,7 @@ async fn numbered_requests_can_be_inspected_only_within_the_callers_tree() {
             manager.store.run(move |db| {
                 if approval_request {
                     db.execute(
-                        "UPDATE access_requests SET space_id=?1, record=json_set(record,'$.space_id',?1) WHERE space_number=?2 AND number=?3",
+                        "UPDATE access_requests SET space_id=?1 WHERE space_number=?2 AND number=?3",
                         rusqlite::params![replacement_owner, number.space, number.item],
                     )?;
                 } else {

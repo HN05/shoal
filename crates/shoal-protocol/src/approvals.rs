@@ -391,6 +391,29 @@ pub enum GateStep {
     },
 }
 
+states!(
+    /// Which [`GateStep`] a request is at, without what the step says.
+    GateState {
+        Deciding => "deciding",
+        Allowed => "allowed",
+        Unapplied => "unapplied",
+        Unjudged => "unjudged",
+        Escalated => "escalated",
+    }
+);
+
+impl GateStep {
+    pub fn state(&self) -> GateState {
+        match self {
+            Self::Deciding => GateState::Deciding,
+            Self::Allowed => GateState::Allowed,
+            Self::Unapplied { .. } => GateState::Unapplied,
+            Self::Unjudged { .. } => GateState::Unjudged,
+            Self::Escalated { .. } => GateState::Escalated,
+        }
+    }
+}
+
 impl ApprovalRequest {
     /// Whether the user decides it now: it is pending, no space above its
     /// own decides it, and the gate is neither deciding it nor carrying out

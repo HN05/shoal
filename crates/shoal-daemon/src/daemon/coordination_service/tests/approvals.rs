@@ -6,7 +6,7 @@ use crate::daemon::{
     scope::Caller,
 };
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension};
 use shoal_coordination::approvals::store::{by_key, list};
 use shoal_coordination::approvals::text::RequestText;
 use shoal_coordination::approvals::*;
@@ -57,22 +57,14 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
         Some(number) => number,
         None => item_numbers::next(db, &request.space_id)?,
     };
-    db.execute(
-        "INSERT OR REPLACE INTO access_requests(id,space_id,target_key,name,record,active,
-                space_number,number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        params![
-            request.key,
-            request.space_id,
-            request.target,
-            request.name,
-            serde_json::to_string(request)?,
-            request.active,
-            number.space,
-            number.item
-        ],
-    )?;
-    Ok(())
+    db.execute("DELETE FROM access_requests WHERE id=?1", [&request.key])?;
+    shoal_coordination::approvals::row::insert(
+        db,
+        &ApprovalRequest {
+            number,
+            ..request.clone()
+        },
+    )
 }
 
 /// Item `item` of the space numbered `space`.
@@ -97,7 +89,9 @@ fn sample(owner: &SpaceId, target: Target) -> ApprovalRequest {
 #[tokio::test]
 async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result<()> {
     let (_root, manager) = crate::daemon::test_support::manager().await;
-    manager.store.run(|db| {
+    manager
+        .store
+        .run(|db| {
             owners(db)?;
             for key in ["approve", "deny"] {
                 let mut request = sample(&SpaceId::from("owner"), Target::Simulator);
@@ -105,9 +99,16 @@ async fn decisions_decode_only_the_selected_id_and_remain_idempotent() -> Result
                 request.name = key.into();
                 save(db, &request)?;
             }
-            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,space_number,number) VALUES ('broken','other','simulator','default','invalid',0,2,3)", [])?;
+            seeds::access_request(
+                db,
+                "broken",
+                &SpaceId::from("other"),
+                ("simulator", "default"),
+                item(2, 3),
+            )?;
             Ok(())
-        }).await?;
+        })
+        .await?;
     for (id, approve, status) in [
         (item(1, 1), true, DecisionStatus::Approved),
         (item(1, 2), false, DecisionStatus::Denied),
@@ -459,8 +460,8 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
             db.execute("INSERT INTO resource_leases(id,workspace_id,scope,pool,name,resource,created_at,mode)
                 VALUES ('lease','owner','global','lock','default','lock',1,'read')", [])?;
             // Unrelated port history cannot block release, even without configured definitions.
-            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('port','owner','port/web','default','invalid',1,100)", [])?;
-            db.execute("UPDATE access_requests SET record=json_set(record,'$.status','unknown') WHERE id='repo'", [])?;
+            seeds::access_request(db, "port", &SpaceId::from("owner"), ("port/web", "default"), item(0, 100))?;
+            db.execute("UPDATE access_requests SET status='unknown' WHERE id='repo'", [])?;
             Ok(())
         }).await?;
     assert!(
@@ -470,12 +471,22 @@ async fn resource_release_targets_both_scopes_and_rolls_back_invalid_candidates(
             .await
             .is_err()
     );
-    manager.store.run(|db| {
+    manager
+        .store
+        .run(|db| {
             assert!(by_key(db, "global")?.is_some());
-            assert_eq!(db.query_row("SELECT COUNT(*) FROM resource_leases", [], |r| r.get::<_, i64>(0))?, 1);
-            db.execute("UPDATE access_requests SET record=json_set(record,'$.status','approved') WHERE id='repo'", [])?;
+            assert_eq!(
+                db.query_row("SELECT COUNT(*) FROM resource_leases", [], |r| r
+                    .get::<_, i64>(0))?,
+                1
+            );
+            db.execute(
+                "UPDATE access_requests SET status='approved' WHERE id='repo'",
+                [],
+            )?;
             Ok(())
-        }).await?;
+        })
+        .await?;
     manager
         .leases
         .release_resource(&*manager, &"owner".into(), "lock".into(), "default".into())

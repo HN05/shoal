@@ -424,19 +424,6 @@ CREATE TABLE space_holds (
     PRIMARY KEY(space_id,name)
 );
 
-CREATE TABLE "access_requests" (
-    id TEXT PRIMARY KEY,
-    space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
-    repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
-    target_key TEXT NOT NULL,
-    name TEXT NOT NULL,
-    record TEXT NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
-    number INTEGER NOT NULL DEFAULT 0,
-    space_number INTEGER NOT NULL DEFAULT 0,
-    CHECK((space_id IS NULL) <> (repository_id IS NULL))
-);
-
 CREATE TABLE space_scopes (
     token TEXT PRIMARY KEY,
     space_id TEXT NOT NULL REFERENCES spaces(id) ON DELETE CASCADE
@@ -1160,6 +1147,25 @@ CREATE TABLE hub_numbering_spares (number INTEGER PRIMARY KEY);
 
 CREATE TABLE hub_alert_numbering_spares (number INTEGER PRIMARY KEY);
 
+CREATE TABLE "access_requests" (
+    id TEXT PRIMARY KEY,
+    space_id TEXT REFERENCES spaces(id) ON DELETE CASCADE,
+    repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
+    proposer_id TEXT,
+    target_key TEXT NOT NULL,
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    decider TEXT,
+    gate TEXT,
+    operation TEXT,
+    record TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    number INTEGER NOT NULL DEFAULT 0,
+    space_number INTEGER NOT NULL DEFAULT 0,
+    CHECK((space_id IS NULL) <> (repository_id IS NULL)),
+    CHECK((repository_id IS NULL) = (proposer_id IS NULL))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1199,15 +1205,6 @@ CREATE INDEX spaces_repository ON spaces(repository_id);
 CREATE INDEX chats_workspace ON chats(workspace_id);
 
 CREATE INDEX space_files_space ON space_files(space_id, id);
-
-CREATE UNIQUE INDEX access_request_name
-    ON access_requests(space_id,target_key,name) WHERE active=1;
-
-CREATE INDEX access_request_target ON access_requests(space_id,target_key);
-
-CREATE UNIQUE INDEX access_request_number ON access_requests(space_number, number);
-
-CREATE INDEX access_request_repository ON access_requests(repository_id);
 
 CREATE INDEX space_scopes_space ON space_scopes(space_id);
 
@@ -1283,6 +1280,20 @@ CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 CREATE INDEX alert_attachments_path ON alert_attachments(path);
 
 CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
+
+CREATE UNIQUE INDEX access_request_name
+    ON access_requests(space_id,target_key,name) WHERE active=1;
+
+CREATE INDEX access_request_target ON access_requests(space_id,target_key);
+
+CREATE UNIQUE INDEX access_request_number ON access_requests(space_number, number);
+
+CREATE INDEX access_request_repository ON access_requests(repository_id);
+
+CREATE INDEX access_request_decider ON access_requests(decider) WHERE decider IS NOT NULL;
+
+CREATE INDEX access_request_proposer ON access_requests(proposer_id)
+    WHERE proposer_id IS NOT NULL;
 
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL

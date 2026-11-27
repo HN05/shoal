@@ -4,6 +4,7 @@ mod delivery;
 pub mod gated;
 pub mod proposals;
 pub mod routing;
+pub mod row;
 pub mod store;
 pub mod text;
 

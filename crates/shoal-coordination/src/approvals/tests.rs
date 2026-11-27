@@ -6,9 +6,7 @@ use shoal_protocol::resources::{Definition, LockMode, Scope};
 use shoal_store::test_support::seeds;
 
 use super::routing::decide;
-use super::store::{
-    BY_KEY, CANDIDATES, CURRENT, by_key, decode_record, list, record_row, request_merge, withdraw,
-};
+use super::store::{BY_KEY, CANDIDATES, CURRENT, by_key, list, request_merge, withdraw};
 use super::text::RequestText;
 use super::*;
 use crate::{
@@ -59,22 +57,14 @@ fn save(db: &Connection, request: &ApprovalRequest) -> Result<()> {
         Some(number) => number,
         None => item_numbers::next(db, &request.space_id)?,
     };
-    db.execute(
-        "INSERT OR REPLACE INTO access_requests(id,space_id,target_key,name,record,active,
-                space_number,number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        params![
-            request.key,
-            request.space_id,
-            request.target,
-            request.name,
-            serde_json::to_string(request)?,
-            request.active,
-            number.space,
-            number.item
-        ],
-    )?;
-    Ok(())
+    db.execute("DELETE FROM access_requests WHERE id=?1", [&request.key])?;
+    row::insert(
+        db,
+        &ApprovalRequest {
+            number,
+            ..request.clone()
+        },
+    )
 }
 
 /// Item `item` of the space numbered `space`.
@@ -153,7 +143,7 @@ async fn current_lookup_isolates_names_and_ignores_unrelated_history() -> Result
                 save(db, &request)?;
                 assert_eq!(current(db, owner, &target, "default")?.unwrap().key, id);
             }
-            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('history','owner',?1,'default','invalid',0,100)", [&target])?;
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number) VALUES ('history','owner',?1,'default','pending','invalid',0,100)", [&target])?;
             assert!(list(db, Some(&SpaceId::from("owner"))).is_err());
             assert_eq!(current(db, &SpaceId::from("owner"), &target, "default")?.unwrap().key, "wanted");
             assert!(current(db, &SpaceId::from("owner"), &target, "absent")?.is_none());
@@ -354,19 +344,35 @@ async fn reuse_validates_all_candidates_but_not_unrelated_history() -> Result<()
             let mut broken = grant.clone();
             broken.key = "broken".into();
             // Put corruption after a reusable grant: a match must not short-circuit decoding.
-            for (field, value) in [
-                ("status", serde_json::json!("unknown")),
-                ("lifetime", serde_json::json!("forever")),
-                ("target", serde_json::json!("resource/lock")),
-                ("specification", serde_json::json!({"member": "lock"})),
-            ] {
-                save(&tx, &broken)?;
-                let mut record = serde_json::to_value(&broken)?;
+            let corrupt_record = |field: &str, value: serde_json::Value| -> Result<()> {
+                let text: String = tx.query_row(
+                    "SELECT record FROM access_requests WHERE id='broken'",
+                    [],
+                    |row| row.get(0),
+                )?;
+                let mut record: serde_json::Value = serde_json::from_str(&text)?;
                 record[field] = value;
                 tx.execute(
                     "UPDATE access_requests SET record=?1 WHERE id='broken'",
                     [record.to_string()],
                 )?;
+                Ok(())
+            };
+            let corrupt_status = || -> Result<()> {
+                tx.execute(
+                    "UPDATE access_requests SET status='unknown' WHERE id='broken'",
+                    [],
+                )?;
+                Ok(())
+            };
+            let corruptions: [&dyn Fn() -> Result<()>; 3] = [
+                &corrupt_status,
+                &|| corrupt_record("lifetime", serde_json::json!("forever")),
+                &|| corrupt_record("specification", serde_json::json!({"member": "lock"})),
+            ];
+            for corrupt in corruptions {
+                save(&tx, &broken)?;
+                corrupt()?;
                 assert!(check(&tx, request.clone()).is_err());
                 assert!(by_key(&tx, "broken").is_err());
             }
@@ -389,8 +395,8 @@ fn plan(db: &Connection, sql: &str, params: impl Params) -> Result<String> {
 fn query_work(db: &Connection, sql: &str, params: impl Params) -> Result<(usize, i32)> {
     let mut statement = db.prepare(sql)?;
     let records = statement
-        .query_map(params, record_row)?
-        .map(|row| decode_record(row?))
+        .query_map(params, row::read)?
+        .map(|row| row::decode(row?))
         .collect::<Result<Vec<_>>>()?;
     assert_eq!(
         statement.get_status(rusqlite::StatementStatus::FullscanStep),
@@ -574,19 +580,13 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
                 assert!(check(&tx, changed).is_err());
                 let mut decision = pending.clone();
                 decision.status = DecisionStatus::Denied;
-                tx.execute(
-                    "UPDATE access_requests SET record=?2 WHERE id=?1",
-                    params![decision.key, serde_json::to_string(&decision)?],
-                )?;
+                row::write(&tx, &decision)?;
                 assert_eq!(
                     check(&tx, request.clone())?.unwrap().status,
                     DecisionStatus::Denied
                 );
                 decision.status = DecisionStatus::Approved;
-                tx.execute(
-                    "UPDATE access_requests SET record=?2 WHERE id=?1",
-                    params![decision.key, serde_json::to_string(&decision)?],
-                )?;
+                row::write(&tx, &decision)?;
                 assert!(check(&tx, request.clone())?.is_none());
                 assert!(release(
                     &tx,
@@ -616,10 +616,10 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
 fn unrelated_history(db: &Connection, count: i64) -> Result<()> {
     db.execute(
         "WITH RECURSIVE n(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM n WHERE x<?1)
-            INSERT INTO access_requests(id,space_id,target_key,name,record,active,number)
+            INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number)
             SELECT 'history-'||x, CASE WHEN x%2=0 THEN 'owner' ELSE 'other' END,
                 CASE WHEN x%2=0 THEN 'port/other' ELSE 'resource/global/lock' END,
-                'default', 'invalid', 0, 100000+x FROM n",
+                'default', 'pending', 'invalid', 0, 100000+x FROM n",
         [count],
     )?;
     Ok(())

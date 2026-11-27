@@ -12,6 +12,7 @@ use shoal_ids::{
     space_ids::{SpaceId, SpaceNumber},
 };
 use shoal_protocol::{
+    item_numbers::ItemNumber,
     model::{Chat, Checkout, Execution, Head, QueuedJob, Repository, Space, SpaceKind, Workspace},
     scope_tokens::ScopeToken,
     state::{ExecutionState, QueueKind, QueueState},
@@ -248,6 +249,43 @@ pub fn parent(db: &Connection, child: &SpaceId, parent: &SpaceId) -> Result<()> 
     db.execute(
         "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
         [child, parent],
+    )?;
+    Ok(())
+}
+
+/// Record the pending approval request `key` of the space `space` for
+/// `target_key` and `name`, numbered `number`, whose record holds nothing
+/// a test reads.
+pub fn access_request(
+    db: &Connection,
+    key: &str,
+    space: &SpaceId,
+    (target_key, name): (&str, &str),
+    number: ItemNumber,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO access_requests(id,space_id,target_key,name,status,record,space_number,
+                number)
+            VALUES (?1,?2,?3,?4,'pending','{}',?5,?6)",
+        params![key, space, target_key, name, number.space, number.item],
+    )?;
+    Ok(())
+}
+
+/// Record the pending issue proposal `key` of the space `proposer`, which
+/// the repository `repository` owns, numbered `number`.
+pub fn issue_proposal(
+    db: &Connection,
+    key: &str,
+    repository: &RepositoryId,
+    proposer: &SpaceId,
+    number: ItemNumber,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO access_requests(id,repository_id,proposer_id,target_key,name,status,record,
+                space_number,number)
+            VALUES (?1,?2,?3,'issue_open','issue','pending','{}',?4,?5)",
+        params![key, repository, proposer, number.space, number.item],
     )?;
     Ok(())
 }

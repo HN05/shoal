@@ -5,6 +5,7 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
 mod alert_attachments;
+mod approval_columns;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
@@ -14,7 +15,7 @@ mod post_surfaces;
 mod review_targets;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 318;
+pub const SCHEMA_VERSION: i64 = 320;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -139,6 +140,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         318,
         include_str!("migrations/0318_drop_hub_number_json.sql"),
         Some(hub_numbers::move_numbers),
+    ),
+    (
+        319,
+        include_str!("migrations/0319_approval_columns.sql"),
+        None,
+    ),
+    (
+        320,
+        include_str!("migrations/0320_approval_records.sql"),
+        Some(approval_columns::move_queried_fields),
     ),
 ];
 

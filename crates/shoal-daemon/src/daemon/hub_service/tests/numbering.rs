@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use rusqlite::{Transaction, params};
+use rusqlite::Transaction;
 use shoal_hub::daemon::Records as _;
 use shoal_hub::numbering::{forget_unless_joined, keep_spares, next};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
@@ -108,18 +108,16 @@ async fn a_renumbered_space_takes_its_threads_and_their_waits_along() -> Result<
                 .await
         }
     });
-    // An issue proposal belongs to the repository and names its space in
-    // its record.
+    // An issue proposal belongs to the repository and names its space as
+    // the proposer.
     let (repository, proposer) = (repo.id.clone(), asker.id.clone());
     (manager.store)
         .write(move |tx| {
-            tx.execute(
-                "INSERT INTO access_requests(id, repository_id, target_key, name, record,
-                        space_number, number)
-                    VALUES ('proposal', ?1, 'issue', 'issue', json_object('space_id', ?2), 1, 2)",
-                params![repository, proposer],
-            )?;
-            Ok(())
+            let number = ItemNumber {
+                space: SpaceNumber::new(1),
+                item: 2,
+            };
+            seeds::issue_proposal(tx, "proposal", &repository, &proposer, number)
         })
         .await?;
     let renumbering = |space: &SpaceId| Numbering {
@@ -216,12 +214,11 @@ async fn a_machine_reserves_the_numbers_it_holds_without_a_space() -> Result<()>
                 let checkout = std::path::Path::new("/").join(key);
                 let repository = shoal_protocol::test_support::repository(key, &checkout);
                 seeds::repository(tx, &repository)?;
-                tx.execute(
-                    "INSERT INTO access_requests(id, repository_id, target_key, name, record,
-                            space_number, number)
-                        VALUES (?1, ?1, 'issue', 'issue', json_object('space_id', ?2), ?3, 1)",
-                    params![key, space, number],
-                )?;
+                let item = ItemNumber {
+                    space: number,
+                    item: 1,
+                };
+                seeds::issue_proposal(tx, key, &key.into(), &space.into(), item)?;
             }
             spaces::records::remove(tx, &SpaceId::from("gone"))?;
             super::super::HubRecords.reserved_numbers(tx)

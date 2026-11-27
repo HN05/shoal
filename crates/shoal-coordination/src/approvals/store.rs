@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, Params, Transaction, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::config::repo::Lifetime;
 
-use super::{ApprovalRequest, DecisionStatus, MERGE, ReasonRequired, Target, proposals};
+use super::{ApprovalRequest, DecisionStatus, MERGE, ReasonRequired, Target, proposals, row};
 use crate::{
     events::{self, EventKind},
     item_numbers::{self, ItemKind, ItemNumber},
@@ -14,62 +14,24 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// A stored request's key, record, active flag, numbers, and whether its
-/// space is gone, which only a proposed issue outlives.
-macro_rules! select {
-    ($($filter:literal)?) => {
-        concat!(
-            "SELECT id,record,active,space_number,number,
-                repository_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM spaces
-                    WHERE spaces.number=access_requests.space_number)
-            FROM access_requests "$(, $filter)?
-        )
-    };
-}
-
-pub(super) const COLUMNS: &str = select!();
-pub const BY_KEY: &str = select!("WHERE id=?1");
-const BY_NUMBER: &str = select!("WHERE space_number=?1 AND number=?2");
-pub const CURRENT: &str = select!("WHERE space_id=?1 AND target_key=?2 AND name=?3 AND active=1");
-pub const CANDIDATES: &str = select!("WHERE space_id=?1 AND target_key=?2 ORDER BY rowid");
+pub(super) const COLUMNS: &str = row::select!();
+pub const BY_KEY: &str = row::select!("WHERE id=?1");
+const BY_NUMBER: &str = row::select!("WHERE space_number=?1 AND number=?2");
+pub const CURRENT: &str =
+    row::select!("WHERE space_id=?1 AND target_key=?2 AND name=?3 AND active=1");
+pub const CANDIDATES: &str = row::select!("WHERE space_id=?1 AND target_key=?2 ORDER BY rowid");
 
 /// Whether a request the repository owns, an issue proposal, was made by
-/// the space `?1`; a malformed record of another space's history stays out
-/// of the selection.
-const REPOSITORY_OWNED: &str = "(repository_id IS NOT NULL
-    AND CASE WHEN json_valid(record) THEN json_extract(record, '$.space_id') END=?1)";
+/// the space `?1`.
+const REPOSITORY_OWNED: &str = "proposer_id=?1";
 
-/// Whether the space `?1` decides a request routed to it; a malformed
-/// record of another space's history stays out of the selection.
-const DECIDED_BY: &str =
-    "CASE WHEN json_valid(record) THEN json_extract(record, '$.decider') END=?1";
-
-/// A stored request's key, record, active flag, number and whether its
-/// space is gone.
-pub(super) type RecordRow = (String, String, bool, ItemNumber, bool);
-
-pub fn decode_record((key, record, active, number, removed): RecordRow) -> Result<ApprovalRequest> {
-    let mut request: ApprovalRequest = serde_json::from_str(&record)
-        .with_context(|| format!("approval request {number} has an invalid record"))?;
-    request.key = key;
-    request.number = number;
-    request.active = active;
-    request.space_removed = removed;
-    Ok(request)
-}
-
-pub fn record_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RecordRow> {
-    let number = ItemNumber {
-        space: row.get(3)?,
-        item: row.get(4)?,
-    };
-    Ok((row.get(0)?, row.get(1)?, row.get(2)?, number, row.get(5)?))
-}
+/// Whether the space `?1` decides a request routed to it.
+const DECIDED_BY: &str = "decider=?1";
 
 fn lookup(db: &Connection, sql: &str, params: impl Params) -> Result<Option<ApprovalRequest>> {
-    db.query_row(sql, params, record_row)
+    db.query_row(sql, params, row::read)
         .optional()?
-        .map(decode_record)
+        .map(row::decode)
         .transpose()
 }
 
@@ -80,8 +42,8 @@ pub fn by_key(db: &Connection, key: &str) -> Result<Option<ApprovalRequest>> {
 /// The requests routed to the space `id`, in the order they were made.
 pub(super) fn list_decided(db: &Connection, id: &SpaceId) -> Result<Vec<ApprovalRequest>> {
     db.prepare(&format!("{COLUMNS} WHERE {DECIDED_BY} ORDER BY rowid"))?
-        .query_map([id], record_row)?
-        .map(|row| decode_record(row?))
+        .query_map([id], row::read)?
+        .map(|row| row::decode(row?))
         .collect()
 }
 
@@ -100,7 +62,7 @@ pub fn release_decided_by(tx: &Transaction<'_>, id: &SpaceId) -> Result<Vec<Appr
     released.retain(|request| request.status == DecisionStatus::Pending);
     for request in &mut released {
         request.decider = None;
-        write_record(tx, request)?;
+        row::write(tx, request)?;
     }
     Ok(released)
 }
@@ -124,17 +86,8 @@ pub(super) fn give_back(tx: &Transaction<'_>, key: &str, decider: Option<&SpaceI
     };
     if stored.status == DecisionStatus::Pending && stored.decider.as_ref() == decider {
         stored.decider = None;
-        write_record(tx, &stored)?;
+        row::write(tx, &stored)?;
     }
-    Ok(())
-}
-
-/// Store `request`'s record in place of the one under its key.
-pub(super) fn write_record(db: &Connection, request: &ApprovalRequest) -> Result<()> {
-    db.execute(
-        "UPDATE access_requests SET record=?2 WHERE id=?1",
-        params![request.key, serde_json::to_string(request)?],
-    )?;
     Ok(())
 }
 
@@ -168,8 +121,8 @@ pub fn list(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<ApprovalRequ
         "{COLUMNS} WHERE ?1 IS NULL OR space_id=?1 OR {REPOSITORY_OWNED}
         ORDER BY rowid"
     ))?
-    .query_map([owner], record_row)?
-    .map(|row| decode_record(row?))
+    .query_map([owner], row::read)?
+    .map(|row| row::decode(row?))
     .collect()
 }
 
@@ -184,11 +137,11 @@ pub fn oldest_for_user(
     let pending = db
         .prepare(&format!(
             "{COLUMNS} WHERE (space_id=?1 OR {REPOSITORY_OWNED})
-                AND CASE WHEN json_valid(record) THEN json_extract(record, '$.status') END=?2
+                AND status=?2
             ORDER BY rowid"
         ))?
-        .query_map(params![id, DecisionStatus::Pending], record_row)?
-        .map(|row| decode_record(row?))
+        .query_map(params![id, DecisionStatus::Pending], row::read)?
+        .map(|row| row::decode(row?))
         .collect::<Result<Vec<_>>>()?;
     Ok(pending.into_iter().find(|request| {
         request.waits_for_user() && !request.operation.as_deref().is_some_and(pushing)
@@ -202,8 +155,8 @@ pub fn list_of_space(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<App
         "{COLUMNS} WHERE ?1 IS NULL OR space_id=?1 OR {REPOSITORY_OWNED} OR {DECIDED_BY}
         ORDER BY rowid"
     ))?
-    .query_map([space], record_row)?
-    .map(|row| decode_record(row?))
+    .query_map([space], row::read)?
+    .map(|row| row::decode(row?))
     .collect()
 }
 
@@ -247,19 +200,17 @@ pub fn check(
     )?);
     request.key = uuid::Uuid::new_v4().to_string();
     request.number = item_numbers::next(tx, &request.space_id)?;
-    tx.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-        params![request.key,request.space_id,request.target,request.name,serde_json::to_string(&request)?,request.number.space,request.number.item])?;
+    row::insert(tx, &request)?;
     events::record_approval(tx, EventKind::ApprovalRequested, &request)?;
     Ok(Some(request))
 }
 
 fn reusable_grant(db: &Connection, request: &ApprovalRequest) -> Result<bool> {
-    // Decode every candidate before matching: even a later malformed record must
-    // fail the check. Released workspace grants remain candidates.
+    // Released workspace grants remain candidates.
     let candidates = db
         .prepare(CANDIDATES)?
-        .query_map(params![request.space_id, request.target], record_row)?
-        .map(|row| decode_record(row?))
+        .query_map(params![request.space_id, request.target], row::read)?
+        .map(|row| row::decode(row?))
         .collect::<Result<Vec<_>>>()?;
     Ok(candidates.iter().any(|r| {
         r.status == DecisionStatus::Approved
@@ -287,10 +238,7 @@ pub(super) fn close(
 ) -> Result<ApprovalRequest> {
     request.status = status;
     request.active = false;
-    tx.execute(
-        "UPDATE access_requests SET record=?2,active=0 WHERE id=?1",
-        params![request.key, serde_json::to_string(&request)?],
-    )?;
+    row::write(tx, &request)?;
     Ok(request)
 }
 
@@ -337,14 +285,12 @@ pub fn withdraw(tx: &Transaction<'_>, selected: &ApprovalRequest) -> Result<Appr
 
 /// Cancel requests or end lease grants; retain approved workspace grants.
 pub fn release(tx: &Transaction<'_>, owner: &SpaceId, target: &Target, name: &str) -> Result<bool> {
-    let Some(request) = current(tx, owner, target, name)? else {
+    let Some(mut request) = current(tx, owner, target, name)? else {
         return Ok(false);
     };
     if request.status == DecisionStatus::Approved && request.lifetime == Lifetime::Workspace {
-        tx.execute(
-            "UPDATE access_requests SET active=0 WHERE id=?1",
-            [&request.key],
-        )?;
+        request.active = false;
+        row::write(tx, &request)?;
     } else {
         tx.execute("DELETE FROM access_requests WHERE id=?1", [&request.key])?;
     }

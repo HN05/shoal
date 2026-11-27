@@ -33,11 +33,15 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
             tx.execute_batch(
                 "INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener,
                          opener_id)
-                     VALUES (1,1,'w','question','Which?',1,'space','w');
-                 INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
-                     VALUES ('action','w','action/merge','merge','{}',1,2),
-                         ('port','w','port/web','web','{}',1,3);",
+                     VALUES (1,1,'w','question','Which?',1,'space','w');",
             )?;
+            let number = |item| shoal_protocol::item_numbers::ItemNumber {
+                space: 1.into(),
+                item,
+            };
+            let space = "w".into();
+            seeds::access_request(tx, "action", &space, ("action/merge", "merge"), number(2))?;
+            seeds::access_request(tx, "port", &space, ("port/web", "web"), number(3))?;
             crate::conversions::record::replace_workspace(tx, &*records, &"w".into(), &chat)?;
             let mut kept: Vec<(String, String)> = tx
                 .prepare(

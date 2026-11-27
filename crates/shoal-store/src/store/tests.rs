@@ -18,10 +18,10 @@ async fn approval_records_survive_reopen_and_follow_workspace_ownership() {
         }).await.unwrap();
     let reopened = Store::open(path.clone()).await.unwrap();
     reopened.run(|db| {
-            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('request','workspace','pool','default','{}',1,1)", [])?;
-            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('duplicate','workspace','pool','default','{}',1,2)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('orphan','missing','pool','default','{}',1,3)", []).is_err());
-            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,record,active,number) VALUES ('renumbered','workspace','pool','other','{}',1,1)", []).is_err());
+            db.execute("INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number) VALUES ('request','workspace','pool','default','pending','{}',1,1)", [])?;
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number) VALUES ('duplicate','workspace','pool','default','pending','{}',1,2)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number) VALUES ('orphan','missing','pool','default','pending','{}',1,3)", []).is_err());
+            assert!(db.execute("INSERT INTO access_requests(id,space_id,target_key,name,status,record,active,number) VALUES ('renumbered','workspace','pool','other','pending','{}',1,1)", []).is_err());
             Ok(())
         }).await.unwrap();
     Store::open(path)
