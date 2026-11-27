@@ -119,7 +119,7 @@ impl Link {
                 report = self.reports.recv() => match report {
                     Some(Ok(RunReport::Using { memory })) => admission.using(memory),
                     Some(Ok(RunReport::Registered { execution })) => {
-                        admission.runs_as(RunProcesses::Execution(execution));
+                        admission.runs_as(Some(RunProcesses::Execution(execution)));
                     }
                     Some(Ok(ran @ RunReport::Ran { .. })) => return Ok(Some(ran)),
                     Some(Err(_)) | None => return Ok(None),
@@ -257,7 +257,7 @@ impl Agents {
             move |reason: &str| drop(stops.send(reason.to_owned())),
         );
         if let AdmitAs::Running { execution } = &request.admit_as {
-            admission.runs_as(RunProcesses::Execution(execution.clone()));
+            admission.runs_as(Some(RunProcesses::Execution(execution.clone())));
         }
         if request.now || matches!(request.admit_as, AdmitAs::Running { .. }) {
             admission.admit_now();

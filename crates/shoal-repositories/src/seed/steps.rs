@@ -246,7 +246,7 @@ impl<'a> Steps<'a> {
         let group = child.id().context("seed build process ID unavailable")? as i32;
         // Dropping the build, as daemon shutdown does, kills its whole group.
         let mut guard = GroupGuard(Some(group));
-        self.memory.admission.runs_in(group as u32);
+        self.memory.admission.runs_in(Some(group as u32));
         // Read before the step is reaped, whose PID then names no group.
         let control_group = shoal_core::process::oom::group_of(group as u32)
             .ok()
@@ -272,6 +272,9 @@ impl<'a> Steps<'a> {
         // alone: nothing else can have taken it.
         // SAFETY: killpg takes no pointers; a group without members is ESRCH.
         unsafe { libc::killpg(group, libc::SIGKILL) };
+        // Before the leader is reaped, after which another group may take
+        // its ID and the build's OOM score with it.
+        self.memory.admission.runs_in(None);
         let status = child.wait().await?;
         let kills = (kills_before, oom_kills(control_group.as_deref()));
         self.memory.step_ended(status, stopped.is_err(), kills);

@@ -463,3 +463,14 @@ async fn a_build_whose_step_a_signal_ended_is_kept_as_cut_short() {
     );
     assert!(!runs[0].oom_killed);
 }
+
+#[tokio::test]
+async fn a_build_runs_in_no_process_group_once_its_step_ended() {
+    let fixture = Fixture::new().await;
+    let (_checkout, _repo) = seeded(&fixture, "#!/bin/sh\nexit 0\n").await;
+    refresh(&fixture).await;
+    let groups = fixture.daemon.seed_builds.groups.lock().unwrap().clone();
+    let [Some(_), .., None] = groups.as_slice() else {
+        panic!("the build's groups were {groups:?}");
+    };
+}

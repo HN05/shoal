@@ -88,8 +88,8 @@ impl SeedAdmission for QueuedSeedBuild<'_> {
         self.admission.using(memory);
     }
 
-    fn runs_in(&self, group: u32) {
-        self.admission.runs_as(RunProcesses::Group(group));
+    fn runs_in(&self, group: Option<u32>) {
+        self.admission.runs_as(group.map(RunProcesses::Group));
     }
 
     fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()> {

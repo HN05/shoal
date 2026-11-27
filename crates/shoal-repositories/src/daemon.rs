@@ -187,8 +187,9 @@ pub trait SeedAdmission: Send + Sync {
     fn using(&self, memory: u64);
 
     /// The build's step runs as the process group `group`, whose processes
-    /// take the build's place in the kernel's OOM scores.
-    fn runs_in(&self, group: u32);
+    /// take the build's place in the kernel's OOM scores; none once the
+    /// step ended, whose group ID another group may then take.
+    fn runs_in(&self, group: Option<u32>);
 
     /// Keep the build's `run` for the next build's estimate, which a
     /// failure only logs.

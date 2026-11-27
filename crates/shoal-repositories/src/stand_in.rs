@@ -234,10 +234,12 @@ pub(crate) struct StandIn {
 }
 
 /// The seed builds the stand-in admitted: whether protection stops the
-/// running one, and the runs they reported.
+/// running one, the process groups they said they ran in, and the runs they
+/// reported.
 #[derive(Clone)]
 pub(crate) struct SeedBuilds {
     pub(crate) stop: Arc<tokio::sync::watch::Sender<bool>>,
+    pub(crate) groups: Arc<Mutex<Vec<Option<u32>>>>,
     pub(crate) runs: Arc<Mutex<Vec<RunUsage>>>,
 }
 
@@ -245,6 +247,7 @@ impl Default for SeedBuilds {
     fn default() -> Self {
         Self {
             stop: Arc::new(tokio::sync::watch::channel(false).0),
+            groups: Default::default(),
             runs: Default::default(),
         }
     }
@@ -261,7 +264,9 @@ impl SeedAdmission for SeedBuilds {
 
     fn using(&self, _: u64) {}
 
-    fn runs_in(&self, _: u32) {}
+    fn runs_in(&self, group: Option<u32>) {
+        self.groups.lock().unwrap().push(group);
+    }
 
     fn ran(&self, run: RunUsage) -> BoxFuture<'_, ()> {
         self.runs.lock().unwrap().push(run);

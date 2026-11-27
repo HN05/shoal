@@ -671,11 +671,12 @@ impl OneShotAdmission<'_> {
         self.queue.admit_oneshot(&self.id());
     }
 
-    /// Record that the run's processes are `processes`.
-    pub fn runs_as(&self, processes: RunProcesses) {
+    /// Record that the run's processes are `processes`, none while it has
+    /// none.
+    pub fn runs_as(&self, processes: Option<RunProcesses>) {
         let mut oneshots = self.queue.oneshots.lock().unwrap();
         if let Some(run) = oneshots.runs.get_mut(&self.number) {
-            run.processes = Some(processes);
+            run.processes = processes;
         }
     }
 
