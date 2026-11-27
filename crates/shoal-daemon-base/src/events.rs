@@ -597,6 +597,7 @@ pub async fn record_retained(
         .await
 }
 
+pub mod agent_time;
 pub mod retention;
 pub mod shoal_log;
 pub mod space_log;

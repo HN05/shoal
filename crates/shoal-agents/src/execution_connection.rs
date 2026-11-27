@@ -968,6 +968,7 @@ fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -
     AgentEvent {
         name: agent.name.clone(),
         execution_id: Some(id.to_owned()),
+        mode: Some(agent.mode.clone()),
         exit_code,
         oom_kills: 0,
         source: None,

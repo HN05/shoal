@@ -321,6 +321,7 @@ impl Agents {
                 source: None,
                 name,
                 execution_id: Some(id.clone()),
+                mode: execution.mode.clone(),
                 exit_code: Some(0),
                 oom_kills: 0,
             };

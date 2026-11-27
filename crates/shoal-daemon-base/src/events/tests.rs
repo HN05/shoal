@@ -24,6 +24,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         source: None,
         name: "claude".into(),
         execution_id: Some(execution.into()),
+        mode: None,
         exit_code,
         oom_kills: 0,
     };
@@ -284,6 +285,7 @@ fn each_writer_s_events_decode_and_round_trip() -> Result<()> {
         source: None,
         name: "claude".into(),
         execution_id: Some("e".into()),
+        mode: None,
         exit_code: Some(1),
         oom_kills: 2,
     };

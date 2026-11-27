@@ -1283,6 +1283,9 @@ CREATE INDEX space_events_child ON space_events(child_id) WHERE child_id IS NOT 
 
 CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
+CREATE INDEX space_events_agents ON space_events(created_at)
+    WHERE kind IN ('agent_started','agent_stopped','agent_exited');
+
 CREATE INDEX alert_attachments_path ON alert_attachments(path);
 
 CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
