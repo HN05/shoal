@@ -5,8 +5,13 @@ use std::cmp::Reverse;
 
 use super::{
     Placed, Placement, Placer, Reason, Skipped,
-    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
+    snapshot::{Capacity, DEMAND_WINDOW, Lifetime, Machine, Request, Snapshot},
 };
+
+/// The share of the [`DEMAND_WINDOW`], in percent, of each step by which a
+/// machine's exclusive demand ranks it later for work of other
+/// repositories, so a demand below one step costs nothing.
+const DEMAND_STEP_PERCENT: u64 = 10;
 
 /// The factor of the steps by which the speed stage ranks machines, counted
 /// from an average one toward zero, so a machine less than a step faster
@@ -46,8 +51,10 @@ impl Placer for Balanced {
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct Rank<'a> {
     fit: Fit,
+    exclusive_waiting: bool,
     lifetime: bool,
     caller: bool,
+    exclusive_demand: u64,
     speed: i32,
     room: RoomKey,
     name: &'a str,
@@ -62,19 +69,31 @@ type Stage<K> = (K, Option<Reason>);
 fn rank<'a>(request: &Request, machine: &'a Machine) -> Option<(Rank<'a>, Placed)> {
     let room = room(request, machine);
     let fit = fit(request, machine, room.is_some())?;
+    let exclusive_waiting = exclusive_waiting(request, machine);
     let lifetime = lifetime(request, machine);
     let caller = caller(request, machine);
+    let exclusive_demand = exclusive_demand(request, machine);
     let speed = speed(request, machine);
     let (room, room_reason) = room.unzip();
     let rank = Rank {
         fit: fit.0,
+        exclusive_waiting: exclusive_waiting.0,
         lifetime: lifetime.0,
         caller: caller.0,
+        exclusive_demand: exclusive_demand.0,
         speed: speed.0,
         room: room.unwrap_or_default(),
         name: &machine.name,
     };
-    let reason = [fit.1, lifetime.1, caller.1, speed.1, room_reason];
+    let reason = [
+        fit.1,
+        exclusive_waiting.1,
+        lifetime.1,
+        caller.1,
+        exclusive_demand.1,
+        speed.1,
+        room_reason,
+    ];
     let placed = Placed {
         machine: machine.id.clone(),
         reason: reason.into_iter().flatten().next()?,
@@ -104,6 +123,16 @@ fn fit(request: &Request, machine: &Machine, room: bool) -> Option<Stage<Fit>> {
     }
 }
 
+/// Work of another repository avoids a machine where heavy work of a
+/// repository it alone serves waits now, since no other machine can take
+/// that work.
+fn exclusive_waiting(request: &Request, machine: &Machine) -> Stage<bool> {
+    let exclusive = &machine.exclusive;
+    let avoided =
+        exclusive.demand.heavy_waiting > 0 && exclusive.leaves_out(request.origin.as_deref());
+    (avoided, None)
+}
+
 /// Disposable work prefers an `intermittent` machine, so the `always_on`
 /// machines keep their room for lasting work, which only they take.
 fn lifetime(request: &Request, machine: &Machine) -> Stage<bool> {
@@ -116,6 +145,18 @@ fn lifetime(request: &Request, machine: &Machine) -> Stage<bool> {
 fn caller(request: &Request, machine: &Machine) -> Stage<bool> {
     let caller = machine.id == request.caller;
     (!caller, caller.then_some(Reason::CallerHasRoom))
+}
+
+/// Work of another repository ranks a machine later the more the
+/// repositories it alone serves kept it busy over the [`DEMAND_WINDOW`],
+/// by steps of [`DEMAND_STEP_PERCENT`], so it keeps room for them.
+fn exclusive_demand(request: &Request, machine: &Machine) -> Stage<u64> {
+    let exclusive = &machine.exclusive;
+    if !exclusive.leaves_out(request.origin.as_deref()) {
+        return (0, None);
+    }
+    let percent = exclusive.demand.busy_seconds.saturating_mul(100) / DEMAND_WINDOW.as_secs();
+    (percent / DEMAND_STEP_PERCENT, None)
 }
 
 /// Heavy work prefers the machines fastest at its repository, and light

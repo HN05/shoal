@@ -1,7 +1,10 @@
 use super::Balanced;
 use crate::placement::{
     Placer, Reason, Skipped, SkippedBy,
-    snapshot::{Capacity, Lifetime, Machine, Registered, Request, Snapshot},
+    snapshot::{
+        Capacity, DEMAND_WINDOW, Demand, Exclusive, Lifetime, Machine, Registered, Request,
+        Snapshot,
+    },
 };
 
 const ORIGIN: &str = "example.com/owner/repo";
@@ -32,6 +35,7 @@ fn machine(id: &str, always_on: bool, capacity: Capacity) -> Machine {
             ..capacity
         }),
         speed: None,
+        exclusive: Exclusive::default(),
     }
 }
 
@@ -374,4 +378,77 @@ fn a_start_skips_a_paused_machine_even_while_its_user_is_away() {
         .collect();
     assert_eq!(skipped, [("desktop".to_owned(), SkippedBy::Paused)]);
     assert_eq!(placement.chosen().unwrap().machine.to_string(), "laptop");
+}
+
+/// `machine`, which alone serves another repository, of `demand`.
+fn serving_alone(machine: Machine, demand: Demand) -> Machine {
+    Machine {
+        exclusive: Exclusive {
+            repositories: vec!["example.com/owner/app".into()],
+            demand,
+        },
+        ..machine
+    }
+}
+
+/// The demand of a repository that kept a machine busy for `percent` of
+/// the demand window, with `heavy_waiting` heavy agents waiting.
+fn demand(percent: u64, heavy_waiting: u32) -> Demand {
+    Demand {
+        busy_seconds: DEMAND_WINDOW.as_secs() * percent / 100,
+        heavy_waiting,
+    }
+}
+
+fn order(request: Request, machines: Vec<Machine>) -> Vec<String> {
+    (ranked(request, machines).into_iter())
+        .map(|(machine, _)| machine)
+        .collect()
+}
+
+#[test]
+fn work_of_another_repository_avoids_a_machine_whose_exclusive_work_waits() {
+    let mac = serving_alone(machine("mac", true, capacity(1, 64, 1)), demand(0, 1));
+    let linux = machine("linux", true, capacity(1, 8, 0));
+    assert_eq!(
+        order(request(true), vec![laptop(), mac.clone(), linux]),
+        ["linux", "mac", "laptop"]
+    );
+    // While no other machine fits, the start still goes there.
+    assert_eq!(
+        order(
+            request(true),
+            vec![laptop(), mac.clone(), held("linux", true)]
+        ),
+        ["mac", "laptop"]
+    );
+    // Its own repository's work is no other repository's.
+    let own = Request {
+        origin: Some("example.com/owner/app".into()),
+        ..request(true)
+    };
+    let mac = Machine {
+        capacity: (mac.capacity).map(|capacity| Capacity {
+            repositories: vec![Registered {
+                origin: "example.com/owner/app".into(),
+                ..registered(&["claude"])
+            }],
+            ..capacity
+        }),
+        ..mac
+    };
+    assert_eq!(order(own, vec![laptop(), mac]), ["mac", "laptop"]);
+}
+
+#[test]
+fn a_machine_whose_exclusive_repositories_kept_it_busy_ranks_later() {
+    let busy = serving_alone(machine("mac", true, capacity(1, 64, 0)), demand(30, 0));
+    let linux = machine("linux", true, capacity(1, 8, 0));
+    assert_eq!(
+        order(request(true), vec![busy, linux.clone()]),
+        ["linux", "mac"]
+    );
+    // A rarely used exclusive repository costs nothing.
+    let rarely = serving_alone(machine("mac", true, capacity(1, 64, 0)), demand(5, 0));
+    assert_eq!(order(request(true), vec![rarely, linux]), ["mac", "linux"]);
 }

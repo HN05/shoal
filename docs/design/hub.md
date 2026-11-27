@@ -650,25 +650,34 @@ places a space by its own profile.
 and a reason. A later stage only orders the machines an earlier one ranks
 equal, so adding a preference adds a stage in its place. Each machine's reason
 names the first stage that prefers it, so a start can say why it went there.
-The stages, in order:
+A stage that only ranks a machine later gives no reason; `hub ls --json`
+shows what it read. The stages, in order:
 
 1. The hard rules. The machine must fit the start: not paused or away, with
    its repository and agent tool. Lasting work goes only to an `always_on`
    machine with room, since its user comes back to it. Disposable work goes to
    any connected machine with room, since nothing keeps it. Otherwise the
    start stays on the caller's machine.
-2. Disposable work prefers an `intermittent` machine. Only `always_on`
+2. Work of another repository avoids a machine where heavy work of a
+   repository it alone serves waits now, while another machine fits. No other
+   machine can take the waiting work, so the start would only delay it.
+3. Disposable work prefers an `intermittent` machine. Only `always_on`
    machines take lasting work, so they keep their room for it.
-3. The caller's machine comes first, beside the start's parent and unpushed
+4. The caller's machine comes first, beside the start's parent and unpushed
    work. It follows the lifetime stage, so disposable work leaves an
    `always_on` caller for an `intermittent` machine.
-4. A heavy start prefers the machine fastest at its repository, and a light
+5. Work of another repository ranks a machine later the more the
+   repositories it alone serves kept it busy over the last week, by steps of
+   10% of the week. A share below the first step costs nothing, so a rarely
+   used repository leaves its machine ranked as usual. The window and the
+   step are fixed values, not settings.
+6. A heavy start prefers the machine fastest at its repository, and a light
    start the slowest, since a light agent mostly waits on its model and
    keeps the fast machines free. A machine without a speed there ranks as
    an average one, not a slow one. Speeds rank in steps of a factor of 1.25
    from the average, so a machine less than 1.25 times faster or slower
    ranks as average, and the noise of medians leaves the choice to room.
-5. A heavy start goes where a heavy agent is admitted now, with the most
+7. A heavy start goes where a heavy agent is admitted now, with the most
    spare memory. A light start goes where it takes the least from heavy
    agents, since dynamic admission gives them the same memory: first to a
    machine that runs no heavy agents, then to one where no heavy work waits,
@@ -676,10 +685,6 @@ The stages, in order:
 
 `balanced` never clones a repository onto a machine; that stays with
 `--machine`.
-
-Two more stages are proposed. Before the lifetime stage, a machine whose
-exclusive work waits now ranks after those where none waits. Before speed, a
-machine scarce in recent exclusive demand ranks later.
 
 `external` lets an app on the hub's machine take the decision over, registered
 as the placer. A start waits for it only briefly, and otherwise places by

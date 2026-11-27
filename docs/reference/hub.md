@@ -554,14 +554,19 @@ it rank equal:
    nor paused it. Lasting work goes only to an
    `always_on` machine with room, and disposable work to any machine with
    room. Without one, the start stays on your machine.
-2. Disposable work goes to an `intermittent` machine first, leaving the room
+2. A start of another repository avoids a machine where heavy work of a
+   repository it alone serves waits, while another machine fits.
+3. Disposable work goes to an `intermittent` machine first, leaving the room
    of `always_on` machines to lasting work.
-3. Your own machine comes first.
-4. A heavy start goes to the machine fastest at its repository, and a light
+4. Your own machine comes first.
+5. A start of another repository ranks a machine later the more the
+   repositories it alone serves kept it busy over the last week, by steps of
+   10%. Below 10%, it ranks as usual.
+6. A heavy start goes to the machine fastest at its repository, and a light
    start to the slowest, in steps of a factor of 1.25 from the average. A
    machine without a speed, or less than 1.25 times faster or slower than
    average, ranks as an average one.
-5. A heavy start goes to the machine whose admission would start a heavy
+7. A heavy start goes to the machine whose admission would start a heavy
    agent now, with the most spare memory. A light start goes first to a
    machine with `max_heavy_agents = 0`, then to one where no heavy work waits,
    with the most spare memory, then to the one where the least heavy work
