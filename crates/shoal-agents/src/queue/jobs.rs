@@ -92,24 +92,40 @@ pub fn forget_unlisted(
     repository: &RepositoryId,
     listed: &HashSet<String>,
 ) -> Result<HashSet<String>> {
-    let entries = db
+    let mut kept = HashSet::new();
+    for entry in handled_entries(db, repository)? {
+        if entry.state == QueueState::Queued && !listed.contains(&entry.handle) {
+            remove(db, &entry.id)?;
+        } else {
+            kept.insert(entry.handle);
+        }
+    }
+    Ok(kept)
+}
+
+/// A job entry with the forge's handle of its job.
+struct HandledEntry {
+    id: QueueEntryId,
+    handle: String,
+    state: QueueState,
+}
+
+/// Each job entry of `repository`, waiting or admitted, with its job's
+/// handle.
+fn handled_entries(db: &Connection, repository: &RepositoryId) -> Result<Vec<HandledEntry>> {
+    Ok(db
         .prepare(
             "SELECT id,json_extract(job,'$.job.handle'),state FROM agent_queue
              WHERE repository_id=?1 AND kind=?2",
         )?
         .query_map(params![repository, QueueKind::Job], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok(HandledEntry {
+                id: row.get(0)?,
+                handle: row.get(1)?,
+                state: row.get(2)?,
+            })
         })?
-        .collect::<rusqlite::Result<Vec<(QueueEntryId, String, QueueState)>>>()?;
-    let mut kept = HashSet::new();
-    for (id, handle, state) in entries {
-        if state == QueueState::Queued && !listed.contains(&handle) {
-            remove(db, &id)?;
-        } else {
-            kept.insert(handle);
-        }
-    }
-    Ok(kept)
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 #[cfg(test)]
