@@ -285,10 +285,9 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     ]);
     let owner = workspaces[0]["id"].as_str().unwrap();
     let simulator = serde_json::json!({
-        "id": "simulator", "udid": null, "device": "type.Phone", "runtime": "runtime.iOS",
-        "workspace_id": owner, "last_workspace_id": owner, "lease_name": "default",
-        "reason": null, "state": "creating", "last_used": 1, "error": null,
-        "acquirer": {"kind": "user"}
+        "udid": null, "device": "type.Phone", "runtime": "runtime.iOS",
+        "lease_name": "default", "reason": null, "last_used": 1, "error": null,
+        "installed_apps": null, "acquirer": {"kind": "user"}
     });
     let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
         .unwrap();
@@ -301,13 +300,14 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
     }
     db.execute("INSERT INTO executions(id,space_id,state) VALUES ('execution',?1,'running'),('legacy',?1,'unknown')", [owner]).unwrap();
     db.execute(
-        "INSERT INTO simulators(id,record) VALUES ('simulator',?1)",
-        [simulator.to_string()],
+        "INSERT INTO simulators(id,state,workspace_id,last_workspace_id,record)
+            VALUES ('simulator','creating',?1,?1,?2)",
+        rusqlite::params![owner, simulator.to_string()],
     )
     .unwrap();
     for status in ["requested", "acquired", "busy", "failed", "interrupted"] {
-        db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES (?1,?2,?3)",
-            rusqlite::params![status, owner, serde_json::json!({"status": status, "reason": "preserve audit", "evicted": ["recorded-device"]}).to_string()]).unwrap();
+        db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,status,record) VALUES (?1,?2,?1,?3)",
+            rusqlite::params![status, owner, serde_json::json!({"reason": "preserve audit", "evicted": ["recorded-device"]}).to_string()]).unwrap();
     }
     for _ in 0..2 {
         fixture.restart();
@@ -355,31 +355,39 @@ fn daemon_startup_quarantines_operations_and_retains_claims_across_restarts() {
             fixture.ok(&["leases", "resource", "--space", &fixture.id("preparing")])["leases"][0],
             resource
         );
-        let saved: String = db
-            .query_row("SELECT record FROM simulators", [], |r| r.get(0))
+        let (state, current, last, saved): (String, String, String, String) = db
+            .query_row(
+                "SELECT state,workspace_id,last_workspace_id,record FROM simulators",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
             .unwrap();
+        assert_eq!((&*state, &*current, &*last), ("creating", owner, owner));
         assert_eq!(serde_json::from_str::<Value>(&saved).unwrap(), simulator);
         let audits = db
-            .prepare("SELECT request_id,record FROM simulator_clean_requests")
+            .prepare("SELECT request_id,status,record FROM simulator_clean_requests")
             .unwrap()
             .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
             })
             .unwrap()
             .collect::<rusqlite::Result<Vec<_>>>()
             .unwrap();
         assert_eq!(audits.len(), 5);
-        for (status, record) in audits {
-            let expected = if status == "requested" {
+        for (request_id, status, record) in audits {
+            let expected = if request_id == "requested" {
                 "interrupted"
             } else {
-                &status
+                &request_id
             };
+            assert_eq!(status, expected);
             assert_eq!(
                 serde_json::from_str::<Value>(&record).unwrap(),
-                serde_json::json!({
-                    "status": expected, "reason": "preserve audit", "evicted": ["recorded-device"]
-                })
+                serde_json::json!({"reason": "preserve audit", "evicted": ["recorded-device"]})
             );
         }
     }
