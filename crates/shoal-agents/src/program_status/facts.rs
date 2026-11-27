@@ -58,7 +58,8 @@ pub fn read(
         turn_failure: turn_retry::unretried::failure(db, execution)?,
         done,
         ready,
-        asleep: queue::asleep::current(db, id)?.map(|asleep| asleep.reason),
+        // Its reason is the same whether readings are on or off.
+        asleep: queue::asleep::current(db, id, true)?.map(|asleep| asleep.reason),
         turn: turn_state::current(db, id)?.map(|status| status.state),
         progress,
     }))

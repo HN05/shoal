@@ -5,7 +5,7 @@
 use crate::control::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::agent_ends::StopCause;
+use shoal_protocol::agent_ends::{SessionEnd, StopCause};
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::launches::LaunchSource;
 use std::sync::Arc;
@@ -497,6 +497,10 @@ async fn relay(
                 agents
                     .record_execution_child(execution_id.clone(), child, group_id)
                     .await?;
+                // Before the wrapper consumes the records once acknowledged.
+                agents
+                    .count_restored_oom_kills(&space.id, &restored_from)
+                    .await;
                 let left = match agent {
                     Some(_) => (agents.left_places(&space.id, execution_id, &restored_from)).await,
                     None => Vec::new(),
@@ -597,22 +601,13 @@ async fn relay(
                 // without a restore; a restored run reports its own.
                 memory.paused(reported);
                 if let Some(tracked) = agent {
-                    // The wrapper reports the signal that ended its session,
-                    // which stopped the agent whatever the daemon sent.
-                    let oom_kills = reported.map_or(0, |memory| memory.oom_kills);
-                    let ended = ended.map(|end| StopCause::ended(end, oom_kills));
-                    let stopped = AgentEvent {
-                        oom_kills,
-                        cause: ended.or_else(|| stop_cause.clone()),
-                        ..agent_event(tracked, execution_id, None)
+                    let sent = stop_cause.clone();
+                    let pause = Pause {
+                        reported,
+                        ended,
+                        sent,
                     };
-                    (shoal_daemon_base::events::record_agent(
-                        &agents.store,
-                        &space.id,
-                        EventKind::AgentStopped,
-                        stopped,
-                    ))
-                    .await;
+                    record_pause(agents, &space.id, execution_id, tracked, pause).await;
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
@@ -1002,6 +997,38 @@ fn refusal_cause(control: &Control) -> Option<StopCause> {
 }
 
 /// What a space's log records of the agent that execution `id` runs.
+/// What a wrapper's pause reported, with the cause of the stop the daemon
+/// sent it, if any.
+struct Pause {
+    reported: Option<ScopeMemory>,
+    ended: Option<SessionEnd>,
+    sent: Option<StopCause>,
+}
+
+/// Record that `agent`, which `execution` ran in `space`, stopped as its
+/// wrapper's `pause` reports. The signal that ended its session stopped it
+/// whatever the daemon sent, and an OOM kill counts toward its backoff.
+async fn record_pause(
+    agents: &Agents,
+    space: &SpaceId,
+    execution: &ExecutionId,
+    agent: &TrackedAgent,
+    pause: Pause,
+) {
+    let oom_kills = pause.reported.map_or(0, |memory| memory.oom_kills);
+    let ended = pause.ended.map(|end| StopCause::ended(end, oom_kills));
+    if ended == Some(StopCause::OomKill) {
+        agents.count_oom_kill(space, execution).await;
+    }
+    let stopped = AgentEvent {
+        oom_kills,
+        cause: ended.or(pause.sent),
+        ..agent_event(agent, execution, None)
+    };
+    let kind = EventKind::AgentStopped;
+    shoal_daemon_base::events::record_agent(&agents.store, space, kind, stopped).await;
+}
+
 fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -> AgentEvent {
     AgentEvent {
         name: agent.name.clone(),

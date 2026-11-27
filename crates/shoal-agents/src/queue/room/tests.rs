@@ -33,7 +33,7 @@ fn a_job_starts_no_heavy_agent() {
 #[test]
 fn a_restore_waits_for_room_unless_its_update_has_not_come() {
     assert!(waits_for_room(Wake::Slot));
-    assert!(waits_for_room(Wake::Recovery));
+    assert!(waits_for_room(Wake::Recovery { keeps_slot: true }));
     assert!(waits_for_room(Wake::Update { due: true }));
     assert!(!waits_for_room(Wake::Update { due: false }));
 }

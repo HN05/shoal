@@ -620,15 +620,25 @@ impl Agents {
         Ok(())
     }
 
-    /// Return the starting restores the daemon starts of agents load or disk
-    /// space stopped mid-turn to their place in the queue as the daemon
-    /// starts: the healthy readings that admitted them were the previous
-    /// daemon's, so they wait for this one's, as a reattaching wrapper's
-    /// restore does.
+    /// Return the starting restores the daemon starts of agents stopped
+    /// mid-turn for load, free disk space or an OOM kill to their place in the
+    /// queue as the daemon starts: the healthy readings that admitted them
+    /// were the previous daemon's, so they wait for this one's, as a
+    /// reattaching wrapper's restore does.
     pub async fn return_recovery_starts(&self) -> Result<()> {
-        let ids: Vec<_> = (self.load_restores(QueueState::Starting).await?.into_iter())
-            .map(|restore| restore.id)
-            .collect();
+        let starts = self
+            .store
+            .run(move |db| automatic_restores(db, QueueState::Starting))
+            .await?;
+        let mut ids = Vec::new();
+        for restore in starts {
+            if self
+                .restores_on_recovery(&restore.space, &restore.execution)
+                .await?
+            {
+                ids.push(restore.id);
+            }
+        }
         self.store.run(move |db| requeue_starts(db, &ids)).await
     }
 

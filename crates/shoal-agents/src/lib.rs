@@ -33,6 +33,7 @@ pub mod keep_awake;
 pub mod lease_holders;
 pub mod lost_reports;
 pub mod messages;
+pub mod oom_kills;
 #[cfg(target_os = "linux")]
 pub mod oom_scores;
 pub mod overload;

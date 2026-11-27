@@ -28,8 +28,8 @@ pub use last_session::{LastSessionExt, StagedLastSession};
 pub use permissions::{ClaimedChange, change_permission};
 use record::write_record;
 pub use record::{
-    RecordExt, Recovery, Restorer, discard_undelivered, keep_as_last_session, record_path,
-    save_load_record, save_record, save_stopped, save_turn, saved_path,
+    RecordExt, Recovery, Restorer, discard_undelivered, keep_as_last_session, record_execution,
+    record_path, save_load_record, save_record, save_stopped, save_turn, saved_path,
 };
 pub use restore_requests::{forget_restore_request, request_restore, restore_requests};
 pub use saved::{

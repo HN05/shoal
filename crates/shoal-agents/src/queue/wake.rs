@@ -15,8 +15,10 @@ use crate::Agents;
 use crate::daemon::Daemon;
 use crate::execution::recovery;
 use crate::model::HeldBy;
+use crate::oom_kills::OomKills;
 use crate::state::QueueKind;
 use crate::state::QueueState;
+use crate::time::UnixTime;
 use shoal_protocol::space_names::SpaceSelector;
 
 /// What admitted a restore.
@@ -202,13 +204,63 @@ impl Agents {
         if !automatic {
             return Ok(Wake::Slot);
         }
-        match self.stopped_as(id, execution) {
-            Stopped::ForLoad => Ok(Wake::Recovery),
+        let stopped = self.stopped_as(id, execution);
+        if let Some(kills) = self.oom_kills(id, execution).await? {
+            return self
+                .oom_restore_wake(daemon, id, execution, stopped, kills)
+                .await;
+        }
+        match stopped {
+            Stopped::ForLoad => Ok(Wake::Recovery { keeps_slot: true }),
             Stopped::MidTurn => Ok(Wake::Slot),
             Stopped::Blocked | Stopped::BetweenTurns => Ok(Wake::Update {
                 due: self.restore_due(daemon, id, execution).await?,
             }),
         }
+    }
+
+    /// Whether healthy readings admit the restore of `execution` in the
+    /// space `id`: its agent stopped mid-turn for load or free disk space, or
+    /// the OOM killer ended it while recovery is enabled.
+    pub async fn restores_on_recovery(
+        &self,
+        id: &SpaceId,
+        execution: &ExecutionId,
+    ) -> Result<bool> {
+        if self.stopped_as(id, execution) == Stopped::ForLoad {
+            return Ok(true);
+        }
+        let readings = self.config.current().machine.overload.recovery.enabled;
+        Ok(readings && self.oom_kills(id, execution).await?.is_some())
+    }
+
+    /// What the restore of an agent the OOM killer ended, `stopped` as its
+    /// record says, waits for: the end of its backoff and what its stop calls
+    /// for, then healthy readings, which bind its admission as a load stop's
+    /// do. Without recovery's healthy readings, only the rest.
+    async fn oom_restore_wake(
+        &self,
+        daemon: &dyn Daemon,
+        id: &SpaceId,
+        execution: &ExecutionId,
+        stopped: Stopped,
+        kills: OomKills,
+    ) -> Result<Wake> {
+        if UnixTime::now() < kills.restores_after() {
+            return Ok(Wake::Update { due: false });
+        }
+        let readings = self.config.current().machine.overload.recovery.enabled;
+        Ok(match stopped {
+            Stopped::Blocked | Stopped::BetweenTurns => {
+                let due = self.restore_due(daemon, id, execution).await?;
+                match readings && due {
+                    true => Wake::Recovery { keeps_slot: false },
+                    false => Wake::Update { due },
+                }
+            }
+            Stopped::ForLoad | Stopped::MidTurn if readings => Wake::Recovery { keeps_slot: true },
+            Stopped::ForLoad | Stopped::MidTurn => Wake::Slot,
+        })
     }
 
     /// Whether the restore of `execution`, stopped between turns in

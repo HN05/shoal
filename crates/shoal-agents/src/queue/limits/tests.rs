@@ -95,7 +95,7 @@ fn waiting(entries: &[(&str, &str)]) -> Vec<Waiting> {
             work: if id.starts_with('r') {
                 Work::Restore {
                     holds_slot: true,
-                    wake: Wake::Recovery,
+                    wake: Wake::Recovery { keeps_slot: true },
                 }
             } else {
                 Work::Launch
@@ -313,7 +313,7 @@ fn restores_wait_for_healthy_readings_without_holding_back_later_entries() {
     assert_eq!(admit(&occupied, &queue, &full, true), ["a1", "ra"]);
     queue[1].work = Work::Restore {
         holds_slot: false,
-        wake: Wake::Recovery,
+        wake: Wake::Recovery { keeps_slot: true },
     };
     assert_eq!(admit(&occupied, &queue, &full, true), ["a1", "rb"]);
     // Dynamic admission measures room for a restored agent's memory too.

@@ -743,6 +743,16 @@ struct RunningAgent {
 }
 
 async fn running_agent(manager: &Arc<Manager>, root: &std::path::Path) -> RunningAgent {
+    running_agent_from(manager, root, None).await
+}
+
+/// A running agent that restored from the stop `record` of the execution
+/// `stopped`, when given.
+async fn running_agent_from(
+    manager: &Arc<Manager>,
+    root: &std::path::Path,
+    record: Option<&str>,
+) -> RunningAgent {
     let path = repository(root, "repo");
     let repo = manager
         .repositories
@@ -780,11 +790,23 @@ async fn running_agent(manager: &Arc<Manager>, root: &std::path::Path) -> Runnin
     let mut wrapper_side = BufReader::new(client);
     let response: Response = read(&mut wrapper_side).await;
     assert!(matches!(response.body, Body::Execution(_)));
+    let restored_from: Vec<_> = (record.into_iter())
+        .map(|record| {
+            let path = crate::execution::recovery::record_path(
+                &manager.paths,
+                &workspace.id,
+                &"stopped".into(),
+            );
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, record).unwrap();
+            path
+        })
+        .collect();
     let started = ExecutionEvent::Started {
         child: None,
         group_id: wrapper.pid,
-        restored: false,
-        restored_from: Vec::new(),
+        restored: !restored_from.is_empty(),
+        restored_from,
         reports_status: false,
     };
     protocol::write(wrapper_side.get_mut(), &started)
@@ -906,4 +928,51 @@ async fn an_agents_pause_records_the_signal_that_ended_its_session() {
     let ends = run.finish(&manager).await;
     let cause = r#"{"kind":"signal","signal":"SIGTERM","reached":"agent"}"#.to_owned();
     assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
+}
+
+/// A SIGKILL while the agent's scope counted an OOM kill is the OOM
+/// killer's: its stop names it, the kill counts toward its backoff, and
+/// healthy readings taken before it no longer admit a restore.
+#[tokio::test]
+async fn an_agents_pause_after_an_oom_kill_counts_the_kill() {
+    let (root, manager) = manager().await;
+    let mut run = running_agent(&manager, root.path()).await;
+    let recovery = manager.agents.overload_recovery();
+    recovery.publish(Some(recovery.epoch()));
+    let paused = ExecutionEvent::Paused {
+        memory: Some(ScopeMemory {
+            oom_kills: 1,
+            peak: 1 << 30,
+        }),
+        ended: Some(SessionEnd {
+            signal: EndingSignal::Kill,
+            reached: SignalTarget::Agent,
+        }),
+    };
+    run.send(&paused).await;
+    let id = run.workspace.id.clone();
+    let ends = run.finish(&manager).await;
+    let cause = r#"{"kind":"oom_kill"}"#.to_owned();
+    assert_eq!(ends, [("agent_stopped".to_owned(), Some(1), Some(cause))]);
+    let kills = manager.agents.counted_oom_kills(&id).await.unwrap();
+    assert_eq!(kills.map(|kills| kills.kills), Some(1));
+    assert_eq!(recovery.published(), None);
+}
+
+/// An agent that restores from the record of a stop the OOM killer ended
+/// unheard, as with `shoal resume --focus`, counts that kill as it starts,
+/// before its wrapper consumes the record.
+#[tokio::test]
+async fn a_restore_from_an_uncounted_oom_kill_counts_it_as_it_starts() {
+    let (root, manager) = manager().await;
+    let record = r#"{"agent":"claude","mode":"worker","stage":"stopped",
+        "stop_reason":"the OOM killer ended it"}"#;
+    let run = running_agent_from(&manager, root.path(), Some(record)).await;
+
+    let kills = manager
+        .agents
+        .counted_oom_kills(&run.workspace.id)
+        .await
+        .unwrap();
+    assert_eq!(kills.map(|kills| kills.kills), Some(1));
 }

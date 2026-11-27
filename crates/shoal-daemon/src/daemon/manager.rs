@@ -82,6 +82,7 @@ impl Manager {
                 coordination: super::coordination_service::CoordinationRecords(
                     space_removals.clone(),
                 ),
+                config: config_state.clone(),
             });
         let links = Arc::new(shoal_links::Links::new(
             store.clone(),

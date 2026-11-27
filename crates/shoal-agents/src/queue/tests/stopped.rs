@@ -231,6 +231,160 @@ async fn a_daemon_started_restore_after_a_load_stop_waits_for_healthy_readings()
     assert!(started(&entry(&fixture, "second-agent").await.id));
 }
 
+/// The record of an agent the OOM killer ended mid-turn.
+const OOM_KILLED: &str = r#"{"agent":"claude","mode":"worker","stage":"stopped",
+    "stop_reason":"the OOM killer ended it"}"#;
+
+/// The record of an agent the OOM killer ended between turns.
+const OOM_KILLED_IDLE: &str = r#"{"agent":"claude","mode":"worker","stage":"stopped",
+    "turn":"idle","stop_reason":"the OOM killer ended it"}"#;
+
+/// Leave the restore of an agent the OOM killer ended mid-turn in
+/// `workspace`, killed `kills` times since its last finished turn, the last
+/// time `ago`, to the daemon, which counted each kill as its wrapper reported
+/// it.
+async fn oom_killed(fixture: &Fixture, workspace: &Workspace, kills: u32, ago: Duration) {
+    oom_killed_as(fixture, workspace, OOM_KILLED, kills, ago).await;
+}
+
+/// [`oom_killed`] with the stop's `record`.
+async fn oom_killed_as(
+    fixture: &Fixture,
+    workspace: &Workspace,
+    record: &str,
+    kills: u32,
+    ago: Duration,
+) {
+    let execution = format!("{}-agent", workspace.name);
+    signal_stop(fixture, &workspace.id, &execution);
+    stop(fixture, &workspace.id, &execution, record);
+    let (id, at) = (workspace.id.clone(), crate::time::UnixTime::now() - ago);
+    (fixture.agents.store)
+        .write(move |tx| {
+            for kill in 1..=kills {
+                let ended = match kill == kills {
+                    true => execution.clone(),
+                    false => format!("{execution}-{kill}"),
+                };
+                crate::oom_kills::record(tx, &id, &ended.into(), at)?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+/// An agent the OOM killer ended mid-turn needs no update, but its restore
+/// waits for memory to recover, as one memory protection stopped does.
+#[tokio::test]
+async fn a_restore_after_an_oom_kill_waits_for_healthy_readings() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    oom_killed(&fixture, &killed, 1, Duration::ZERO).await;
+
+    dispatch(&fixture).await;
+    assert!(!started(&entry(&fixture, "killed-agent").await.id));
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert!(started(&entry(&fixture, "killed-agent").await.id));
+}
+
+/// An agent the OOM killer ended while its wrapper could not reach the
+/// daemon, which counted no kill, still waits for healthy readings taken
+/// after the kill, and the kill counts toward the backoff of the next.
+#[tokio::test]
+async fn a_restore_after_an_uncounted_oom_kill_waits_for_healthy_readings() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    publish_recovery(&fixture);
+    oom_killed(&fixture, &killed, 0, Duration::ZERO).await;
+
+    dispatch(&fixture).await;
+    assert!(!started(&entry(&fixture, "killed-agent").await.id));
+    let counted = fixture.agents.counted_oom_kills(&killed.id).await.unwrap();
+    assert_eq!(counted.map(|counted| counted.kills), Some(1));
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert!(started(&entry(&fixture, "killed-agent").await.id));
+}
+
+/// A kill the daemon did not hear of after one it counted is the second,
+/// whose backoff holds the restore back despite healthy readings.
+#[tokio::test]
+async fn an_uncounted_oom_kill_after_a_counted_one_backs_off() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    oom_killed(&fixture, &killed, 0, Duration::ZERO).await;
+    let id = killed.id.clone();
+    (fixture.agents.store)
+        .write(move |tx| {
+            let earlier = "killed-agent-earlier".into();
+            crate::oom_kills::record(tx, &id, &earlier, crate::time::UnixTime::now())
+        })
+        .await
+        .unwrap();
+
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    let counted = fixture.agents.counted_oom_kills(&killed.id).await.unwrap();
+    assert_eq!(counted.map(|counted| counted.kills), Some(2));
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert!(!started(&entry(&fixture, "killed-agent").await.id));
+}
+
+/// An agent the OOM killer ended between turns waits for an update, then
+/// for healthy readings, whose withdrawal before it starts returns it to its
+/// place.
+#[tokio::test]
+async fn an_idle_restore_after_an_oom_kill_binds_the_readings_after_its_update() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    oom_killed_as(&fixture, &killed, OOM_KILLED_IDLE, 1, Duration::ZERO).await;
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert_eq!(entry(&fixture, "killed-agent").await.state, Queued);
+
+    fixture
+        .daemon
+        .updated
+        .lock()
+        .unwrap()
+        .push(killed.id.clone());
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    let admitted = entry(&fixture, "killed-agent").await;
+    assert_eq!(admitted.state, Starting);
+
+    fixture.agents.overload_recovery().reset();
+    let refused = fixture.agents.reserve_queue_entry(&admitted.id).await;
+    assert!(refused.is_err());
+    assert_eq!(entry(&fixture, "killed-agent").await.state, Queued);
+}
+
+/// An agent the OOM killer ended again before it finished a turn waits out
+/// its backoff before healthy readings restore it.
+#[tokio::test]
+async fn a_repeated_oom_kill_holds_the_restore_back_for_its_backoff() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let recent = fixture.workspace("recent").await;
+    oom_killed(&fixture, &recent, 2, Duration::ZERO).await;
+    let earlier = fixture.workspace("earlier").await;
+    oom_killed(&fixture, &earlier, 2, Duration::from_secs(6 * 60)).await;
+
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert!(started(&entry(&fixture, "earlier-agent").await.id));
+    publish_recovery(&fixture);
+    dispatch(&fixture).await;
+    assert!(!started(&entry(&fixture, "recent-agent").await.id));
+}
+
 /// A stop, reload or unsafe reading after healthy readings admitted a
 /// restore the daemon starts returns it to its place as its agent takes
 /// over, and the next healthy interval admits it again.
@@ -263,25 +417,21 @@ async fn readings_withdrawn_before_a_daemon_started_load_restore_runs_return_it(
     );
 }
 
-/// A daemon restart returns a restore the daemon starts after a load stop,
-/// which the previous daemon's healthy readings admitted, to its place,
-/// where it waits for the new daemon's.
-#[tokio::test]
-async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
-    let fixture = Fixture::new().await;
-    limit_globally(&fixture, 4);
-    let loaded = fixture.workspace("loaded").await;
-    load_stops(&fixture, &[&loaded]);
+/// A daemon restart returns the restore of the agent of `workspace`, which
+/// the daemon starts and the previous daemon's healthy readings admitted, to
+/// its place, where it waits for the new daemon's.
+async fn restart_returns_admitted_restore(fixture: Fixture, workspace: &Workspace) {
+    let name = format!("{}-agent", workspace.name);
     publish_recovery(&fixture);
     dispatch(&fixture).await;
-    let admitted = entry(&fixture, "loaded-agent").await;
+    let admitted = entry(&fixture, &name).await;
     assert_eq!(admitted.state, Starting);
 
     let restarted = fixture.restart().await;
     limit_globally(&restarted, 4);
     restarted.agents.return_recovery_starts().await.unwrap();
 
-    assert_eq!(entry(&restarted, "loaded-agent").await.state, Queued);
+    assert_eq!(entry(&restarted, &name).await.state, Queued);
     assert!(
         restarted
             .agents
@@ -290,10 +440,43 @@ async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
             .is_err()
     );
     dispatch(&restarted).await;
-    assert_eq!(entry(&restarted, "loaded-agent").await.state, Queued);
+    assert_eq!(entry(&restarted, &name).await.state, Queued);
     publish_recovery(&restarted);
     dispatch(&restarted).await;
-    assert_eq!(entry(&restarted, "loaded-agent").await.state, Starting);
+    assert_eq!(entry(&restarted, &name).await.state, Starting);
+}
+
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let loaded = fixture.workspace("loaded").await;
+    load_stops(&fixture, &[&loaded]);
+    restart_returns_admitted_restore(fixture, &loaded).await;
+}
+
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_oom_restore_to_its_place() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    oom_killed(&fixture, &killed, 1, Duration::ZERO).await;
+    restart_returns_admitted_restore(fixture, &killed).await;
+}
+
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_idle_oom_restore_to_its_place() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 4);
+    let killed = fixture.workspace("killed").await;
+    oom_killed_as(&fixture, &killed, OOM_KILLED_IDLE, 1, Duration::ZERO).await;
+    fixture
+        .daemon
+        .updated
+        .lock()
+        .unwrap()
+        .push(killed.id.clone());
+    restart_returns_admitted_restore(fixture, &killed).await;
 }
 
 /// Disabling recovery leaves a restore the daemon would start after a load

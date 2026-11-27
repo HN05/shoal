@@ -12,8 +12,9 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::space_ids::SpaceId;
 
 /// Why the agent of the space `id` is asleep and what wakes it, while a
-/// restore Shoal queued on its own waits for it.
-pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
+/// restore Shoal queued on its own waits for it, with recovery's healthy
+/// `readings` on or off.
+pub fn current(db: &Connection, id: &SpaceId, readings: bool) -> Result<Option<Asleep>> {
     let found: Option<(Option<String>, Option<String>)> = db
         .prepare_cached(
             "SELECT COALESCE(q.stop_reason,s.reason),COALESCE(q.wakes_when,s.resumes_when)
@@ -24,11 +25,21 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
             Ok((row.get(0)?, row.get(1)?))
         })
         .optional()?;
-    Ok(found.map(|(reason, wakes_when)| Asleep {
+    let Some((reason, wakes_when)) = found else {
+        return Ok(None);
+    };
+    let asleep = Asleep {
         reason: reason.unwrap_or_else(|| UNKNOWN_STOP.to_owned()),
         wakes_when: wakes_when.unwrap_or_else(|| WAKES_IN_QUEUE.to_owned()),
         keeps: Vec::new(),
         held_by: None,
+    };
+    // A kill the store did not count still names the OOM killer as the reason.
+    let uncounted = (asleep.reason == crate::execution::recovery::OOM_REASON)
+        .then(crate::oom_kills::OomKills::uncounted);
+    Ok(Some(match crate::oom_kills::get(db, id)?.or(uncounted) {
+        Some(kills) => kills.asleep(asleep, crate::time::UnixTime::now(), readings),
+        None => asleep,
     }))
 }
 

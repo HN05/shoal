@@ -75,6 +75,8 @@ pub(crate) struct StandIn {
     pub(crate) told: Mutex<Vec<(SpaceId, AlertKind, String)>>,
     /// The failed state reports, each with the space it named.
     pub(crate) state_failures: Mutex<Vec<(SpaceSelector, String)>>,
+    /// The spaces an update waits for.
+    pub(crate) updated: Mutex<Vec<SpaceId>>,
     /// The service's store, which the workspaces' lifecycles live in.
     store: Mutex<Option<shoal_store::Store>>,
     /// The service, whose global config the settings resolve under and
@@ -703,8 +705,9 @@ impl Links for StandIn {
         Box::pin(async { Ok(Default::default()) })
     }
 
-    fn updates_waiting<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, Result<bool>> {
-        Box::pin(async { Ok(Default::default()) })
+    fn updates_waiting<'a>(&'a self, space: &'a SpaceSelector) -> BoxFuture<'a, Result<bool>> {
+        let updated = (self.updated.lock().unwrap().iter()).any(|id| space.given_id() == Some(id));
+        Box::pin(async move { Ok(updated) })
     }
 
     fn restart_watches<'a>(

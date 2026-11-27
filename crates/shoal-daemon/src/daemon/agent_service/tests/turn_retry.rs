@@ -302,7 +302,7 @@ async fn an_agent_asleep_while_its_usage_limit_stands_is_restored_once_it_resets
         .unwrap();
     let id = workspace.id.clone();
     let asleep = (manager.store)
-        .read(move |tx| crate::daemon::agent_queue::asleep::current(tx, &id))
+        .read(move |tx| crate::daemon::agent_queue::asleep::current(tx, &id, true))
         .await
         .unwrap()
         .unwrap();

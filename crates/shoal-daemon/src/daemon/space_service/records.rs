@@ -24,11 +24,20 @@ use crate::daemon::{
 /// write them in their own transactions.
 pub(crate) struct SpaceRecords {
     pub(crate) coordination: CoordinationRecords,
+    /// The config, whose recovery setting says what wakes an asleep agent.
+    pub(crate) config: std::sync::Arc<crate::daemon::config_state::ConfigState>,
+}
+
+impl SpaceRecords {
+    /// Whether recovery's healthy readings admit restores.
+    fn readings(&self) -> bool {
+        self.config.current().machine.overload.recovery.enabled
+    }
 }
 
 impl shoal_spaces::daemon::Records for SpaceRecords {
     fn load_workspace(&self, db: &Connection, workspace: &mut Workspace) -> Result<()> {
-        load_space(db, workspace)?;
+        load_space(db, workspace, self.readings())?;
         workspace.latest_review = shoal_reviews::store::latest_status(
             db,
             &crate::daemon::review_service::ReviewRecords,
@@ -38,7 +47,7 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     }
 
     fn load_chat(&self, db: &Connection, chat: &mut Chat) -> Result<()> {
-        load_space(db, chat)
+        load_space(db, chat, self.readings())
     }
 
     fn space_links(&self, db: &Connection, id: &SpaceId) -> Result<SpaceLinks> {
@@ -165,13 +174,14 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
 }
 
 /// Fills in what the other subsystems keep of every space: its agent's
-/// state, sleep, wake, restart and place in the queue, and its links.
-fn load_space<P>(db: &Connection, space: &mut Space<P>) -> Result<()> {
+/// state, sleep, wake, restart and place in the queue, and its links. With
+/// recovery's healthy `readings` on, an OOM-killed agent also waits for them.
+fn load_space<P>(db: &Connection, space: &mut Space<P>, readings: bool) -> Result<()> {
     let id = &space.id;
     space.agent_state = turn_state::current(db, id)?;
     space.sleep = idle_wakes::sleep::current(db, id)?;
     space.wake_at = wake_timers::due_at(db, id)?;
-    space.asleep = crate::daemon::agent_queue::asleep::current(db, id)?;
+    space.asleep = crate::daemon::agent_queue::asleep::current(db, id, readings)?;
     space.restart = restarts::record::current(db, id)?;
     space.links = shoal_links::linked::space_links(db, id)?;
     Ok(())

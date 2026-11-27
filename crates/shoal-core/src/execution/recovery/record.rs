@@ -372,6 +372,14 @@ pub fn saved_path(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> PathBu
     LastSession::path(paths, space_id, id)
 }
 
+/// The execution whose recovery record is at `path`, if it names one.
+pub fn record_execution(path: &Path) -> Option<ExecutionId> {
+    let name = path.file_name()?.to_str()?;
+    Some(ExecutionId::from(
+        name.strip_suffix(AGENT_SUFFIX)?.to_owned(),
+    ))
+}
+
 pub fn record_path(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> PathBuf {
     paths
         .space_state(space_id)

@@ -1175,6 +1175,13 @@ CREATE TABLE "simulator_clean_requests" (
     workspace_id TEXT NOT NULL, status TEXT NOT NULL, record TEXT NOT NULL
 );
 
+CREATE TABLE agent_oom_kills (
+    space_id TEXT PRIMARY KEY,
+    kills INTEGER NOT NULL CHECK(kills > 0),
+    killed_at INTEGER NOT NULL,
+    execution_id TEXT NOT NULL
+) WITHOUT ROWID;
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);
@@ -1700,4 +1707,8 @@ CREATE TRIGGER simulator_deleted AFTER DELETE ON simulators
 WHEN OLD.state='leased' BEGIN
     SELECT journal_append('simulator_released', OLD.workspace_id,
         json_object('record', json(OLD.record)));
+END;
+
+CREATE TRIGGER space_oom_kills_removed AFTER DELETE ON spaces BEGIN
+    DELETE FROM agent_oom_kills WHERE space_id=OLD.id;
 END;

@@ -20,6 +20,9 @@ fn records() -> Arc<dyn shoal_spaces::daemon::Records> {
         coordination: crate::daemon::coordination_service::CoordinationRecords(
             crate::daemon::spaces::Removing::default(),
         ),
+        config: Arc::new(crate::daemon::config_state::ConfigState::new(
+            Default::default(),
+        )),
     })
 }
 

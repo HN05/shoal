@@ -101,7 +101,7 @@ impl Work {
         matches!(
             self,
             Work::Restore {
-                wake: Wake::Recovery,
+                wake: Wake::Recovery { .. },
                 ..
             } | Work::OneShot { after_stop: true }
                 | Work::Measured {
@@ -116,8 +116,10 @@ impl Work {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Wake {
     /// Sustained healthy readings, for an agent load or disk space stopped
-    /// mid-turn.
-    Recovery,
+    /// mid-turn, or one the OOM killer ended once any update it waits for
+    /// came. `keeps_slot` says its waiting wrapper keeps the agent's slot, as
+    /// after a stop mid-turn.
+    Recovery { keeps_slot: bool },
     /// An update for an agent stopped between turns, which holds no slot
     /// meanwhile; `due` once one waits.
     Update { due: bool },
@@ -131,7 +133,7 @@ impl Wake {
     /// healthy readings used up, when it needs them.
     pub fn grant(self, epoch: Option<u64>) -> Option<Grant> {
         match self {
-            Wake::Recovery => epoch.map(Grant::Recovery),
+            Wake::Recovery { .. } => epoch.map(Grant::Recovery),
             Wake::Update { .. } => Some(Grant::Update),
             Wake::Slot => Some(Grant::Queue),
         }
@@ -142,7 +144,7 @@ impl Wake {
     /// readings were `recovered`.
     pub fn has_come(self, recovered: bool) -> bool {
         match self {
-            Wake::Recovery => recovered,
+            Wake::Recovery { .. } => recovered,
             Wake::Update { due } => due,
             Wake::Slot => true,
         }

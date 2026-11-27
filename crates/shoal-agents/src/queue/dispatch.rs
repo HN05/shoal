@@ -53,7 +53,7 @@ impl QueuedRestore {
     /// has stopped, and it does not wait for healthy readings in its
     /// wrapper, which keeps the slot it takes back.
     fn dormant(&self) -> bool {
-        self.carrier == Carrier::Daemon || self.wake != Wake::Recovery
+        self.carrier == Carrier::Daemon || self.wake != Wake::Recovery { keeps_slot: true }
     }
 }
 
@@ -122,7 +122,7 @@ impl WaitingWork {
     /// run protection stopped.
     fn needs_recovery(&self, admitted: &[QueueEntryId]) -> bool {
         self.admitted_restores(admitted)
-            .any(|(_, restore)| restore.wake == Wake::Recovery)
+            .any(|(_, restore)| matches!(restore.wake, Wake::Recovery { .. }))
             || self.admits(admitted, |work| {
                 matches!(
                     work,

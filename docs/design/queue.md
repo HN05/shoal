@@ -288,15 +288,17 @@ recovered. Later stops do not take back an update's admission.
 
 ### Restores that wait for healthy readings
 
-A restore that waits in its wrapper for healthy readings keeps the agent's
-slot. A fixed limit thus lets it take that slot back rather than counting it
-twice, which would deadlock a full machine of stopped agents. Dynamic admission
+A restore of an agent stopped mid-turn that waits in its wrapper for healthy
+readings keeps the agent's slot. A fixed limit thus lets it take that slot back
+rather than counting it twice, which would deadlock a full machine of stopped
+agents. Dynamic admission
 measures its memory as it does a new start's. Disabling recovery leaves the
 agent for `shoal resume`.
 
-Admission binds the recovery epoch. A stop, a reload or a reading that turns
-unsafe advances the epoch. Any of them before the agent restarts returns the
-restore to its place.
+Admission binds the recovery epoch. A stop, an OOM kill, a reload or a reading
+that turns unsafe advances the epoch. Any of them before the agent restarts
+returns the restore to its place. So does a daemon restart, for every restore
+admitted on healthy readings, an OOM-killed agent's among them.
 
 ### Waits that hold back nothing
 
