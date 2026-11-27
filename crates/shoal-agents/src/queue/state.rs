@@ -503,6 +503,15 @@ impl AgentQueue {
         stop.map(|stop| stop(reason)).is_some()
     }
 
+    /// The spaces where a command waits to run.
+    pub fn waiting_command_spaces(&self) -> HashSet<SpaceId> {
+        let oneshots = self.oneshots.lock().unwrap();
+        (oneshots.runs.values())
+            .filter(|run| matches!(run.work, OneShotWork::Measured(_)) && run.waits())
+            .filter_map(|run| Some(run.serving.as_ref()?.space.clone()))
+            .collect()
+    }
+
     /// Cancel every command waiting to run in `space` for `reason`,
     /// returning how many waited.
     pub fn cancel_waiting_in(&self, space: &SpaceId, reason: &str) -> usize {

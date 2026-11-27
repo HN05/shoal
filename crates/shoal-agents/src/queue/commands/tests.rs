@@ -185,6 +185,22 @@ async fn a_stop_of_its_space_cancels_a_waiting_command() {
     assert_eq!(waiting.frame().await, AdmissionFrame::Admitted);
 }
 
+#[tokio::test]
+async fn a_stop_of_every_space_reaches_one_where_only_a_command_waits() {
+    let fixture = fixture().await;
+    let workspace = fixture.workspace("api").await;
+    let _waiting = admit(&fixture, &workspace, false).await;
+    let queue = fixture.agents.agent_queue();
+    while queue.waiting_oneshots().is_empty() {
+        tokio::task::yield_now().await;
+    }
+    let cancel = crate::protocol::QueuedLaunches::Cancel;
+    let targets = (fixture.agents.stop_targets(&*fixture.daemon, cancel))
+        .await
+        .unwrap();
+    assert!(targets.iter().any(|target| target.id == workspace.id));
+}
+
 /// Record the running command `id` in `workspace`, whose wrapper is the
 /// process `pid`.
 async fn command_execution(fixture: &Fixture, workspace: &Workspace, id: &str, pid: u32) {

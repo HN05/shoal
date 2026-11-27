@@ -460,8 +460,8 @@ queued agent has none.
 ### Stop several spaces
 
 Several spaces stop in parallel. `-A`/`--all` selects every running chat, and
-every ready or failed workspace with a running execution, a pending restore or
-a queued agent waiting to start in it. A failure is reported without keeping
+every ready or failed workspace with a running execution, a pending restore, a
+queued agent waiting to start in it or a command waiting for memory there. A failure is reported without keeping
 the others running.
 
 A stop whose wrappers do not finish in time fails. It names each execution it

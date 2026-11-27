@@ -130,7 +130,8 @@ impl Agents {
     /// The spaces `shoal stop --all` stops: the settled spaces with a running
     /// execution or a stopped agent whose restore is requested or queued. When
     /// the stop cancels `launches`, also the workspaces a waiting launch opens,
-    /// and those whose preparation waits unstopped. The queue gate keeps
+    /// the spaces where a command waits to run, and the workspaces whose
+    /// preparation waits unstopped. The queue gate keeps
     /// restores and launches from moving between the queue and their agents
     /// meanwhile. Executions are read before requests, since an agent a signal
     /// stops saves its request before its execution ends.
@@ -161,6 +162,7 @@ impl Agents {
         targets.extend(self.pending_restore_workspaces().await?);
         if launches == QueuedLaunches::Cancel {
             targets.extend(self.waiting_launch_workspaces().await?);
+            targets.extend(self.agent_queue.waiting_command_spaces());
         }
         let cancels = launches == QueuedLaunches::Cancel;
         let spaces = daemon.present_spaces().await?;
