@@ -38,7 +38,7 @@ pub fn saw(tx: &Transaction<'_>, number: i64) -> Result<()> {
 /// Give the alert `from` the number `to`, unless an alert here holds `to`
 /// already; whether it did.
 pub fn renumber(tx: &Transaction<'_>, from: i64, to: i64) -> Result<bool> {
-    if held(tx, to)? {
+    if super::exists(tx, to)? {
         return Ok(false);
     }
     Ok(tx.execute("UPDATE alerts SET id=?2 WHERE id=?1", params![from, to])? > 0)
@@ -75,7 +75,7 @@ fn free_spare(tx: &Transaction<'_>, numbering: &Numbering) -> Result<Option<i64>
     let mut spares = numbering.spares.clone();
     spares.sort_unstable();
     for spare in spares.into_iter().filter(|spare| *spare > numbering.taken) {
-        if !held(tx, spare)? {
+        if !super::exists(tx, spare)? {
             return Ok(Some(spare));
         }
     }
@@ -94,14 +94,6 @@ fn above_known(tx: &Transaction<'_>, numbering: &Numbering) -> Result<i64> {
         .max()
         .unwrap_or(0)
         + 1)
-}
-
-fn held(tx: &Transaction<'_>, number: i64) -> Result<bool> {
-    Ok(tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",
-        [number],
-        |row| row.get(0),
-    )?)
 }
 
 #[cfg(test)]

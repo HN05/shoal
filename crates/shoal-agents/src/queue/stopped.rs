@@ -372,10 +372,7 @@ fn delete_stopped_restores(db: &Connection, workspace_id: &SpaceId) -> Result<()
 /// Return the entries `ids` that still start to their place in the queue.
 fn requeue_starts(db: &Connection, ids: &[QueueEntryId]) -> Result<()> {
     for id in ids {
-        db.execute(
-            "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
-            params![id, QueueState::Queued, QueueState::Starting],
-        )?;
+        super::store::return_start(db, id)?;
     }
     Ok(())
 }

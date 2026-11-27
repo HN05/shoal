@@ -343,7 +343,11 @@ impl Coordination {
         caller: Option<&Caller>,
         id: i64,
     ) -> Result<Option<Alert>> {
-        if self.store.read(move |db| kept_here(db, id)).await? {
+        if self
+            .store
+            .read(move |db| shoal_daemon_base::alerts::exists(db, id))
+            .await?
+        {
             return Ok(None);
         }
         let Some(alert) = self.notifications.copy(id) else {
@@ -361,15 +365,6 @@ impl Coordination {
             .await
             .map(Some)
     }
-}
-
-/// Whether this machine keeps the alert `id`.
-fn kept_here(db: &rusqlite::Connection, id: i64) -> Result<bool> {
-    Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",
-        [id],
-        |row| row.get(0),
-    )?)
 }
 
 /// The alert `id` that the space `sender` sent, or the user without one,

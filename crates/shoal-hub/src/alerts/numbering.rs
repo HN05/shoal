@@ -139,7 +139,7 @@ fn renumber(
         )
         .optional()?;
     let renumbered = records.renumber_alert(tx, from, to)?;
-    if !held(tx, from)? {
+    if !shoal_daemon_base::alerts::exists(tx, from)? {
         confirmed(tx, from)?;
     }
     if !renumbered {
@@ -157,14 +157,6 @@ fn renumber(
         sender,
         message,
     }))
-}
-
-fn held(db: &Connection, number: i64) -> Result<bool> {
-    Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM alerts WHERE id=?1)",
-        [number],
-        |row| row.get(0),
-    )?)
 }
 
 fn numbers(db: &Connection, query: &str) -> Result<Vec<i64>> {

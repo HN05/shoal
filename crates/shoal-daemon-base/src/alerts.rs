@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use rusqlite::{Transaction, params};
+use rusqlite::{Connection, Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 pub use shoal_protocol::alerts::{Alert, AlertKind, Recipient, Sender, Sent};
 use shoal_protocol::files::SentFile;
@@ -199,6 +199,11 @@ pub fn insert(
         [RETAINED as i64],
     )?;
     Ok(id)
+}
+
+/// Whether this machine keeps the alert `id`.
+pub fn exists(db: &Connection, id: i64) -> Result<bool> {
+    shoal_store::exists(db, "SELECT 1 FROM alerts WHERE id=?1", [id])
 }
 
 /// Point the attached paths of every alert from `source` to

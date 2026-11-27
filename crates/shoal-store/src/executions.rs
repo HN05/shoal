@@ -8,6 +8,7 @@ use shoal_core::process::identity::Identity;
 use shoal_ids::{execution_ids::ExecutionId, space_ids::SpaceId};
 use shoal_protocol::agent::{Agent, ModelChoice};
 use shoal_protocol::model::Execution;
+use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::state::ExecutionState;
 
 use crate::sql::json_column;
@@ -47,6 +48,19 @@ pub fn find_execution(db: &Connection, id: &ExecutionId) -> Result<Option<Execut
             execution,
         )
         .optional()?)
+}
+
+/// The scope token the commands of the execution `id` act under, while it
+/// exists and keeps one.
+pub fn scope_token(db: &Connection, id: &ExecutionId) -> Result<Option<ScopeToken>> {
+    let token = db
+        .query_row(
+            "SELECT scope_token FROM executions WHERE id=?1",
+            [id],
+            |row| row.get::<_, Option<ScopeToken>>(0),
+        )
+        .optional()?;
+    Ok(token.flatten())
 }
 
 /// The executions of the space `space_id`.

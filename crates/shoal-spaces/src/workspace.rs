@@ -199,6 +199,19 @@ pub fn workspaces_within(
     Ok(workspaces)
 }
 
+/// Whether the workspace `id` is recorded in `state`.
+pub fn is_in_state(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    state: crate::state::WorkspaceState,
+) -> Result<bool> {
+    store::exists(
+        db,
+        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
+        rusqlite::params![id, state],
+    )
+}
+
 fn recorded_workspace(
     db: &rusqlite::Connection,
     records: &dyn Records,

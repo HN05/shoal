@@ -404,6 +404,16 @@ pub fn record_waiting_restore(
     )?)
 }
 
+/// Return the entry `id` to the queue while it still starts, to be admitted
+/// again.
+pub fn return_start(db: &rusqlite::Connection, id: &QueueEntryId) -> Result<()> {
+    db.execute(
+        "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
+        params![id, QueueState::Queued, QueueState::Starting],
+    )?;
+    Ok(())
+}
+
 /// The sequence number of the newest queue entry, even one that has left:
 /// every entry queued later has a higher one, and it never falls.
 pub fn last_seq(db: &rusqlite::Connection) -> Result<i64> {

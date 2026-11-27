@@ -158,11 +158,7 @@ impl Executions for StandIn {
     fn scope_token<'a>(&'a self, id: &'a ExecutionId) -> BoxFuture<'a, Result<ScopeToken>> {
         let id = id.to_owned();
         Box::pin((self.store).read(move |db| {
-            Ok(db.query_row(
-                "SELECT scope_token FROM executions WHERE id=?1",
-                [&id],
-                |row| row.get(0),
-            )?)
+            shoal_store::scope_token(db, &id)?.context("the execution has no scope token")
         }))
     }
 

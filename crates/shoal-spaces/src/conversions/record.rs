@@ -243,11 +243,7 @@ pub fn record_chat_conversion(
     chat: ConvertedChat,
     carrying: Carrying,
 ) -> Result<()> {
-    let ready = crate::store::exists(
-        tx,
-        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
-        params![id, crate::state::WorkspaceState::Ready],
-    )?;
+    let ready = crate::workspace::is_in_state(tx, id, crate::state::WorkspaceState::Ready)?;
     let running = crate::executions::execution_state(tx, &chat.execution)?
         == Some((id.to_owned(), crate::state::ExecutionState::Running));
     anyhow::ensure!(

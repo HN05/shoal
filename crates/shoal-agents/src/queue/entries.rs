@@ -332,14 +332,8 @@ impl Agents {
     /// Return the starting entry `id` to the queue, to be admitted again.
     async fn return_start(&self, id: &QueueEntryId) -> Result<()> {
         let id = id.to_owned();
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
-                    params![id, QueueState::Queued, QueueState::Starting],
-                )?;
-                Ok(())
-            })
+        (self.store)
+            .run(move |db| super::store::return_start(db, &id))
             .await
     }
 

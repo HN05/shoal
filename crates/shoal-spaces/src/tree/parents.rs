@@ -3,7 +3,6 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
-use rusqlite::params;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -13,7 +12,6 @@ use crate::{
     {
         scope::Caller,
         spaces::{self, Removing},
-        store,
     },
 };
 use shoal_core::launches::SpaceRepository;
@@ -210,11 +208,7 @@ fn assign(
 ) -> Result<()> {
     // A removal decided by the space the workspace is below keeps it there.
     ensure!(
-        !store::exists(
-            tx,
-            "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
-            params![workspace, crate::state::WorkspaceState::Removing]
-        )?,
+        !crate::workspace::is_in_state(tx, workspace, crate::state::WorkspaceState::Removing)?,
         "the workspace is being removed"
     );
     let current = super::parent_id(tx, workspace)?;

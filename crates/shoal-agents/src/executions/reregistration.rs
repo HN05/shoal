@@ -2,7 +2,6 @@
 //! installed binary: it gets a new plan and records what its registration
 //! records.
 use anyhow::{Context, Result};
-use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::scope_tokens::ScopeToken;
@@ -69,15 +68,8 @@ fn register_again(
     caches: &std::collections::BTreeMap<String, crate::config::repo::Cache>,
 ) -> Result<(ScopeToken, Provisions)> {
     // Only commands, which may reattach, keep their token.
-    let scope_token = tx
-        .query_row(
-            "SELECT scope_token FROM executions WHERE id=?1",
-            [id],
-            |row| row.get::<_, Option<ScopeToken>>(0),
-        )
-        .optional()?
-        .flatten()
-        .context("the execution cannot register again")?;
+    let scope_token =
+        shoal_store::scope_token(tx, id)?.context("the execution cannot register again")?;
     if let Some(place) = &place {
         crate::places::record_execution_place(tx, id, home.id(), place)?;
     }

@@ -117,11 +117,7 @@ impl shoal_runner::daemon::Records for RunnerRecords {
     }
 
     fn return_job_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<()> {
-        db.execute(
-            "UPDATE agent_queue SET state=?2 WHERE id=?1 AND state=?3",
-            params![id, QueueState::Queued, QueueState::Starting],
-        )?;
-        Ok(())
+        crate::daemon::agent_queue::store::return_start(db, id)
     }
 
     fn delete_waiting_entry(&self, db: &Connection, id: &QueueEntryId) -> Result<bool> {

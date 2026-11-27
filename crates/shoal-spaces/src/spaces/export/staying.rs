@@ -11,7 +11,9 @@ use shoal_ids::repository_ids::RepositoryId;
 
 use crate::{
     model::{Space, SpaceRef},
-    {spaces::Removing, store},
+    spaces::Removing,
+    state::WorkspaceState,
+    workspace,
 };
 use shoal_ids::space_ids::SpaceId;
 
@@ -164,17 +166,9 @@ fn staying(
         .chain(staying.iter().map(|(space, _)| &space.id));
     for id in involved {
         ensure!(
-            !reserved(id) && !being_removed(tx, id)?,
+            !reserved(id) && !workspace::is_in_state(tx, id, WorkspaceState::Removing)?,
             "a removal holds the spaces it would leave here; export it once that ends"
         );
     }
     Ok(staying)
-}
-
-fn being_removed(tx: &Transaction<'_>, id: &SpaceId) -> Result<bool> {
-    store::exists(
-        tx,
-        "SELECT 1 FROM workspaces WHERE id=?1 AND state=?2",
-        params![id, crate::state::WorkspaceState::Removing],
-    )
 }

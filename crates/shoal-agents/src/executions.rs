@@ -1108,18 +1108,8 @@ impl Agents {
     /// The scope token the commands of the execution `id` act under.
     pub async fn execution_scope_token(&self, id: &ExecutionId) -> Result<ScopeToken> {
         let id = id.to_owned();
-        let token = (self.store).read(move |db| {
-            let token = db
-                .query_row(
-                    "SELECT scope_token FROM executions WHERE id=?1",
-                    [&id],
-                    |row| row.get::<_, Option<ScopeToken>>(0),
-                )
-                .optional()?;
-            anyhow::Ok(token.flatten())
-        });
-        let token: Option<ScopeToken> = token.await?;
-        token.context("the execution has no scope token")
+        let token = (self.store).read(move |db| shoal_store::scope_token(db, &id));
+        token.await?.context("the execution has no scope token")
     }
 
     /// Combine the process evidence of `execution` from `scan`.
