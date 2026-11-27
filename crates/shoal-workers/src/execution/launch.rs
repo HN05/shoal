@@ -200,6 +200,15 @@ impl TrackedLaunch {
         restarts: &mut demo::Restarts,
         ran: Duration,
     ) -> Result<Option<i32>> {
+        // Only an agent is saved when a kill ends it; a kill interrupts any
+        // other command, which a demo runs again after.
+        let outcome = match outcome {
+            Outcome::Paused {
+                code,
+                stop: Halt::Killed { .. },
+            } if self.recovery.is_none() => Outcome::Interrupted(code),
+            outcome => outcome,
+        };
         match outcome {
             Outcome::Exited(code) | Outcome::Interrupted(code)
                 if matches!(mode, Mode::Demo { .. }) =>

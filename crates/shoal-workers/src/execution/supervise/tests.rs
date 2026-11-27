@@ -474,6 +474,37 @@ async fn ended_session_child() {
         "{outcome:?}"
     );
 
+    // A kill the wrapper did not send ends the command unasked too.
+    let (mut link, mut daemon) = connected(&paths, &plan);
+    let started = async {
+        acknowledge_start(&mut daemon).await;
+    };
+    let wrapper = async {
+        supervise(
+            &mut link,
+            &paths,
+            &plan,
+            &run("kill -KILL $$; sleep 60"),
+            &mode,
+            None,
+            unsaved(),
+        )
+        .await
+        .map(|(outcome, _)| outcome)
+        .unwrap()
+    };
+    let ((), outcome) = tokio::join!(started, wrapper);
+    assert!(
+        matches!(
+            outcome,
+            Outcome::Paused {
+                code: 137,
+                stop: Halt::Killed { oom: false },
+            }
+        ),
+        "{outcome:?}"
+    );
+
     // A stop before a system shutdown saves the session before the command
     // sees it, since the shutdown may end the wrapper first.
     let (mut link, mut daemon) = connected(&paths, &plan);
@@ -762,4 +793,32 @@ async fn a_command_inside_an_admitted_one_stays_in_its_scope() {
     // test runs on this thread alone.
     unsafe { std::env::set_var(crate::env::ADMITTED_RUN, "1") };
     assert!(launcher(&Mode::Command { record: true }).await.is_empty());
+}
+
+#[test]
+fn a_kill_counts_as_the_oom_killers_only_when_its_scope_counted_one() {
+    let killed = || Outcome::Paused {
+        code: 137,
+        stop: Halt::Killed { oom: false },
+    };
+    let memory = |oom_kills| Some(ScopeMemory { oom_kills, peak: 0 });
+    assert!(matches!(
+        killed().counting_kills(memory(1)),
+        Outcome::Paused {
+            stop: Halt::Killed { oom: true },
+            ..
+        }
+    ));
+    assert!(matches!(
+        killed().counting_kills(memory(0)),
+        Outcome::Paused {
+            stop: Halt::Killed { oom: false },
+            ..
+        }
+    ));
+    // A child's kill leaves an agent that exited on its own its exit.
+    assert!(matches!(
+        Outcome::Exited(1).counting_kills(memory(1)),
+        Outcome::Exited(1)
+    ));
 }

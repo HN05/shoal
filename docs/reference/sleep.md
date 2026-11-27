@@ -13,7 +13,8 @@ for arrives. These stops put an agent to sleep:
 - [overload and disk protection](load.md),
 - an [idle stop](#idle-sleep),
 - a blocked space,
-- a signal that ended the agent's session,
+- a [signal Shoal did not send](load.md#signals-to-an-agent), such as one
+  that closed its terminal or SIGKILL from the OOM killer,
 - [making room](#making-room) for queued work.
 
 An agent that `shoal stop` stopped, or that quit on its own, is stopped

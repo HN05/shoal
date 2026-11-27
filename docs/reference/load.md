@@ -484,10 +484,19 @@ reports such a workspace as failed.
 
 ### Signals to an agent
 
-A hangup or terminate signal to an agent's wrapper or agent process saves the
-agent as stopped work, with the signal as its stop reason. Closing its
-terminal, logging out and shutting down send such signals. The wrapper saves
-the agent before it stops it.
+A signal Shoal did not send puts the agent to sleep, with the signal as its
+stop reason:
+
+- A hangup or terminate signal to the agent's wrapper or agent process.
+  Closing its terminal, logging out and shutting down send such signals. The
+  wrapper saves the agent before it stops it.
+- SIGKILL to the agent process, such as from the kernel's OOM killer. An agent
+  whose scope counted an OOM kill is saved as killed by the OOM killer. A kill
+  of one of the agent's own processes, such as a compiler, leaves the agent
+  running.
+
+An interrupt or quit signal, such as Ctrl-C in its terminal, ends the agent as
+quitting it does.
 
 Once its execution has ended, the agent's restore waits in the
 [agent queue](queue.md#restores-without-a-wrapper). The agent thus comes back after a reboot without a

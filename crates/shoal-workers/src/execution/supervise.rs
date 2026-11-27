@@ -63,14 +63,31 @@ impl Outcome {
     }
 
     /// A command that ended by itself or by a signal, paused when `halt`
-    /// names the end of the session it ran in, and interrupted by any other
-    /// signal, such as one its terminal sent its process group.
+    /// names the end of the session it ran in or a kill, and interrupted by
+    /// any other signal, such as one its terminal sent its process group.
     fn ended(status: ExitStatus, halt: Option<Halt>) -> Self {
         let code = exit_code(status);
         match (halt, status.signal()) {
             (Some(stop), _) => Self::Paused { code, stop },
             (None, Some(_)) => Self::Interrupted(code),
             (None, None) => Self::Exited(code),
+        }
+    }
+
+    /// This outcome, with a kill counted as the OOM killer's when its run's
+    /// scope recorded `memory` with a kill.
+    fn counting_kills(self, memory: Option<ScopeMemory>) -> Self {
+        match self {
+            Self::Paused {
+                code,
+                stop: Halt::Killed { .. },
+            } => Self::Paused {
+                code,
+                stop: Halt::Killed {
+                    oom: memory.is_some_and(|memory| memory.oom_kills > 0),
+                },
+            },
+            outcome => outcome,
         }
     }
 
@@ -166,7 +183,7 @@ pub(super) async fn supervise(
     // A command owns its process group; descendants do not outlive its lease.
     drop(group);
     let memory = watch.and_then(|watch| watch.finish(outcome.code()));
-    Ok((outcome, memory))
+    Ok((outcome.counting_kills(memory), memory))
 }
 
 /// What reads a running command's memory: the scope it runs in, or for an
@@ -357,8 +374,7 @@ async fn wait_for_child(
             () = memory_stop(&mut signals.stopped) => return interrupted(child, group, libc::SIGTERM).await,
             status = child.wait() => {
                 let status = status?;
-                let halt = status.signal().and_then(|signal| Halt::ended_by(signal, SignalTarget::Agent));
-                return Ok(Outcome::ended(status, halt));
+                return Ok(Outcome::ended(status, status.signal().and_then(Halt::of_command)));
             }
             received = link.recv() => {
                 let control = match received {

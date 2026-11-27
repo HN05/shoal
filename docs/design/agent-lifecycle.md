@@ -11,10 +11,16 @@ An agent Shoal stopped on its own, and will bring back on its own, is asleep.
 An agent that waits for `shoal resume` is stopped. The two states let the user
 tell an agent that comes back from one that needs them.
 
-Every stop that queues a restore Shoal starts on its own puts the agent to
-sleep: protection, idle and blocked stops, signal stops and making room.
-`shoal stop` stops an agent, and so does the agent quitting on its own. The
-agent of a removed or converted space is stopped too.
+Only the user's choice leaves an agent stopped: `shoal stop`, or the agent
+exiting with a status of its own, as quitting it does. The agent of a removed
+or converted space is stopped too. Every other end puts the agent to sleep,
+with a restore Shoal starts on its own: protection, idle and blocked stops,
+making room, and a signal Shoal did not send. A SIGKILL counts, since the
+kernel's OOM killer sends it to an agent that did nothing wrong, while the
+user ends an agent through `shoal stop` or the agent itself.
+
+Every stop records its cause in the space's log, so a missed wake can be
+traced.
 
 A stop that lasts until `shoal resume` stops the spaces below first. A parent
 may sleep before its children, since their reports wake it.

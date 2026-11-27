@@ -32,7 +32,8 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
 }
 
 #[test]
-fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues_its_restore() {
+fn only_an_ended_session_kill_or_shutdown_of_an_agent_that_restores_unattended_queues_its_restore()
+{
     let recovery = |automatic| recovery::Recovery {
         narrowing: Default::default(),
         mode: "worker".into(),
@@ -55,6 +56,11 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
     assert!(matches!(
         restorer(&recovery(false), &closed, false),
         Restorer::User
+    ));
+    let killed = Halt::Killed { oom: true };
+    assert!(matches!(
+        restorer(&recovery(true), &killed, false),
+        Restorer::Queue(_)
     ));
     let shutdown = Halt::Shutdown {
         reason: Some("the system is shutting down".into()),

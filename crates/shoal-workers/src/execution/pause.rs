@@ -180,14 +180,14 @@ fn leave_to_queue(paths: &CommandPaths, plan: &ExecutionPlan, ended: Halt, saved
 
 /// What restores the paused agent besides `shoal resume`. This wrapper does
 /// when protection stopped the agent to restore it `automatic`ally. The
-/// agent queue does when a signal ended its session or the system shut
-/// down, and its restore needs no user. Otherwise nothing does.
+/// agent queue does when a signal ended its session or killed it, or the
+/// system shut down, and its restore needs no user. Otherwise nothing does.
 fn restorer(recovery: &recovery::Recovery, stop: &Halt, automatic: bool) -> Restorer {
     if automatic {
         return this_wrapper().map_or(Restorer::User, Restorer::Wrapper);
     }
     match stop {
-        Halt::Ended { .. } | Halt::Shutdown { .. } if recovery.automatic => {
+        Halt::Ended { .. } | Halt::Killed { .. } | Halt::Shutdown { .. } if recovery.automatic => {
             Restorer::Queue(crate::terminal::start_environment())
         }
         _ => Restorer::User,
@@ -318,6 +318,9 @@ pub(super) enum Halt {
         signal: EndSignal,
         reached: SignalTarget,
     },
+    /// SIGKILL ended the agent, from the kernel's OOM killer when `oom`;
+    /// the reason is saved for `shoal resume`.
+    Killed { oom: bool },
     /// The daemon stopped it before the system shut down; the reason is
     /// saved for `shoal resume`.
     Shutdown { reason: Option<String> },
@@ -339,7 +342,10 @@ impl Halt {
                 reason: reason.clone(),
                 resumes_when: resumes_when.clone(),
             }),
-            Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => None,
+            Self::Pause { .. }
+            | Self::Ended { .. }
+            | Self::Killed { .. }
+            | Self::Shutdown { .. } => None,
         }
     }
 
@@ -347,6 +353,7 @@ impl Halt {
         match self {
             Self::Protection { reason, .. } => Some(reason),
             Self::Ended { signal, .. } => Some(ended_reason(*signal)),
+            Self::Killed { oom } => Some(killed_reason(*oom)),
             Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
         }
     }
@@ -359,7 +366,21 @@ impl Halt {
                 signal: *signal,
                 reached: *reached,
             }),
+            Self::Killed { oom: true } => Some(StopCause::OomKill),
+            Self::Killed { oom: false } => Some(StopCause::Signal {
+                signal: EndSignal::Kill,
+                reached: SignalTarget::Agent,
+            }),
             Self::Protection { .. } | Self::Pause { .. } | Self::Shutdown { .. } => None,
+        }
+    }
+
+    /// The halt for a command `signal` ended before the wrapper received one,
+    /// which counts as the OOM killer's once its scope's reads show a kill.
+    pub(super) fn of_command(signal: i32) -> Option<Self> {
+        match signal {
+            libc::SIGKILL => Some(Self::Killed { oom: false }),
+            signal => Self::ended_by(signal, SignalTarget::Agent),
         }
     }
 
@@ -386,6 +407,7 @@ impl Halt {
                 reason: Some(reason),
             } => format!(": {reason}"),
             Self::Ended { signal, .. } => format!(": {}", ended_reason(*signal)),
+            Self::Killed { oom } => format!(": {}", killed_reason(*oom)),
             Self::Pause { reason: None, .. } | Self::Shutdown { reason: None } => String::new(),
         }
     }
@@ -394,7 +416,10 @@ impl Halt {
     fn manual_restore(&self, workspace: &SpaceId, execution: &ExecutionId) -> String {
         let condition = match self {
             Self::Protection { resumes_when, .. } => format!("once {resumes_when}, "),
-            Self::Pause { .. } | Self::Ended { .. } | Self::Shutdown { .. } => String::new(),
+            Self::Pause { .. }
+            | Self::Ended { .. }
+            | Self::Killed { .. }
+            | Self::Shutdown { .. } => String::new(),
         };
         format!(
             "shoal: agent stopped{}; {condition}{}",
@@ -413,7 +438,15 @@ fn ended_reason(signal: EndSignal) -> &'static str {
     match signal {
         EndSignal::Hangup => "its terminal closed",
         EndSignal::Terminate => "its session was terminated",
-        EndSignal::Kill => "it was killed",
+        EndSignal::Kill => killed_reason(false),
+    }
+}
+
+/// Why SIGKILL ended the agent, the OOM killer's when `oom`.
+fn killed_reason(oom: bool) -> &'static str {
+    match oom {
+        true => "the OOM killer ended it",
+        false => "it was killed",
     }
 }
 
