@@ -26,8 +26,15 @@ use crate::{
 fn parse(worker: Worker<'_>, json: bool) -> InternalCommand {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path().join("home with spaces"));
+    // An agent's environment keeps these for its whole run.
+    let program = match worker {
+        Worker::SecretTool { .. } | Worker::PushGate | Worker::GitCredential => {
+            shoal_core::executable_link::path(&paths.state)
+        }
+        _ => std::env::current_exe().unwrap(),
+    };
     let args = internal_command(&paths, json, worker).unwrap();
-    assert_eq!(args[0], std::env::current_exe().unwrap());
+    assert_eq!(args[0], program);
     let cli = Cli::try_parse_from(args).unwrap();
     assert_eq!(cli.state_dir, Some(paths.state));
     assert_eq!((cli.json, cli.text), (json, !json));

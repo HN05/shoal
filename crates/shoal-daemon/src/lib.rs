@@ -13,9 +13,9 @@ use shoal_core::test_support;
 #[cfg(test)]
 use shoal_core::{agents, launches, presets, tmp_dirs};
 use shoal_core::{
-    caches, config, config_file, daemon_handoff, execution, fsutil, git, hooks, installed, paths,
-    process, profile, refusal, releases, removal, repository, service, sessions, shoal_dirs,
-    terminal, tools, transfer, workers,
+    caches, config, config_file, daemon_handoff, executable_link, execution, fsutil, git, hooks,
+    installed, paths, process, profile, refusal, releases, removal, repository, service, sessions,
+    shoal_dirs, terminal, tools, transfer, workers,
 };
 use shoal_forge_types as forge;
 use shoal_protocol::time;

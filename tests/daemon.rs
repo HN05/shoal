@@ -80,6 +80,16 @@ fn daemon_guard_reaps_child_when_a_test_panics() {
 }
 
 #[test]
+fn the_daemon_points_the_state_directory_s_link_at_the_binary_it_started_through() {
+    let daemon = Daemon::start();
+    let link = daemon.root.path().join("state/bin/shoal");
+    assert_eq!(
+        fs::read_link(&link).unwrap(),
+        Path::new(&support::shoal_binary())
+    );
+}
+
+#[test]
 fn cli_connects_to_daemon_and_stops_it() {
     let mut daemon = Daemon::start();
     let output = daemon.run(&["--json", "status"]);

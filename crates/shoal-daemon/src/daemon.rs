@@ -95,7 +95,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use futures_util::FutureExt;
 use tokio::{
     net::UnixStream,
@@ -152,6 +152,8 @@ pub async fn run(
         handoff.reap_inherited_children();
     }
     let mut ownership = Ownership::acquire(&paths, managed, handoff)?;
+    crate::executable_link::point(&paths.state)
+        .context("point the state directory's shoal link")?;
     let startup = startup::Startup::begin(ownership.listen()?);
     log!("shoal daemon listening on {}", paths.socket.display());
     // Before it starts any place or worker, which keep its score.

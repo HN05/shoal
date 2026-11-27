@@ -14,6 +14,7 @@ pub mod config_file;
 pub mod daemon_handoff;
 pub mod daemon_owner;
 pub mod env;
+pub mod executable_link;
 pub mod execution;
 pub mod fetched_copies;
 pub mod fsutil;

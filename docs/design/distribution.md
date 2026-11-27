@@ -1,8 +1,9 @@
 # Distribution
 
-This file covers how Shoal is released, signed and installed, and how agents
-keep macOS privacy grants. [Installation](../reference/install.md) says how to
-install and update Shoal, and [releases](../releases.md) how to make a release.
+This file covers how Shoal is released, signed and installed, how running
+agents reach a moved installation, and how agents keep macOS privacy grants.
+[Installation](../reference/install.md) says how to install and update Shoal,
+and [releases](../releases.md) how to make a release.
 
 ## Packages
 
@@ -26,6 +27,16 @@ the binary directly, without a shell.
 `shoal update` replaces a downloaded binary or bundle with a GitHub release. It
 leaves a Homebrew installation to Homebrew, so one package manager owns each
 installation.
+
+## Moving an installation
+
+An installation can move, such as from Homebrew to `~/.local/bin`, while
+agents run. Each start of the daemon points the link `<state>/bin/shoal` at
+the path it started through. The commands an agent's environment keeps for
+its whole run, such as its Git credential helper, its push helper and its
+secret tool launchers, run Shoal through that link. They thus reach the
+moved installation once the daemon runs from it, without restarting the
+agent.
 
 ## Development builds
 

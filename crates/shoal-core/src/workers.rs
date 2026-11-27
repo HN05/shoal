@@ -266,6 +266,19 @@ pub fn detached_command(argv: &[OsString]) -> tokio::process::Command {
     command
 }
 
+/// The program that runs `worker`. The workers an agent's environment names
+/// for its whole run start through the [`crate::executable_link`] of
+/// `state`, which outlives a move of Shoal's install; the rest start this
+/// executable.
+fn program(state: &Path, worker: &Worker<'_>) -> Result<PathBuf> {
+    Ok(match worker {
+        Worker::GitCredential | Worker::PushGate | Worker::SecretTool { .. } => {
+            crate::executable_link::path(state)
+        }
+        _ => crate::process::executable::invoked_executable()?,
+    })
+}
+
 /// Build an argv for this executable, preserving the caller's resolved globals.
 /// The output format is explicit, so an inherited `SHOAL_OUTPUT` cannot change it.
 pub fn internal_command(paths: &Paths, json: bool, worker: Worker<'_>) -> Result<Vec<OsString>> {
@@ -279,7 +292,7 @@ pub(crate) fn internal_command_for(
     worker: Worker<'_>,
 ) -> Result<Vec<OsString>> {
     let mut args = vec![
-        crate::process::executable::invoked_executable()?.into_os_string(),
+        program(state, &worker)?.into_os_string(),
         "--state-dir".into(),
         state.as_os_str().to_owned(),
         if json { "--json" } else { "--text" }.into(),
