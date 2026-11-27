@@ -8,8 +8,7 @@ use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
 use shoal_protocol::{
     hub::{
         link::{Call, Reply},
-        packages::{Handed, Handing, Leaving},
-        placement::Decision,
+        packages::{Destination, Handed, Handing, Leaving},
     },
     model::Space,
 };
@@ -149,10 +148,10 @@ impl Hub {
         deadline: Instant,
     ) -> Handed {
         let handing = self.send_final_package(daemon, route, (space, within));
-        let decision = match tokio::time::timeout_at(deadline, handing).await {
-            Ok(Ok(Some(decision))) => decision,
+        let destination = match tokio::time::timeout_at(deadline, handing).await {
+            Ok(Ok(Some(destination))) => destination,
             Ok(Ok(None)) => {
-                return Handed::Stayed("no other machine of the hub can take it".into());
+                return Handed::Stayed("the hub has no start to place it by".into());
             }
             Ok(Err(error)) => {
                 log!("hub: could not hand space {} over: {error:#}", space.name);
@@ -170,7 +169,7 @@ impl Hub {
                 space.name
             );
         }
-        released_as(released, decision)
+        released_as(released, destination)
     }
 
     /// Send the hub on `route` the final package of `space`, and return where
@@ -181,7 +180,7 @@ impl Hub {
         daemon: &dyn Daemon,
         route: &Route,
         (space, within): (&Space, Option<&SpaceId>),
-    ) -> Result<Option<Decision>> {
+    ) -> Result<Option<Destination>> {
         match route {
             Route::Link(calls) => self.hand_over_space(daemon, calls, (space, within)).await,
             Route::Own(own) => self.hand_over_own(daemon, own, (space, within)).await,
@@ -231,7 +230,7 @@ impl Hub {
         daemon: &dyn Daemon,
         calls: &Calls,
         (space, within): (&Space, Option<&SpaceId>),
-    ) -> Result<Option<Decision>> {
+    ) -> Result<Option<Destination>> {
         let directory = tempfile::tempdir()?;
         let file = directory.path().join("package.shoal");
         let built_at = UnixTime::now();
@@ -263,15 +262,15 @@ impl Hub {
 }
 
 /// Where a space this machine released to the hub went, as the hub's
-/// answer says, with `decision` as the hub sent it. Returns none when the
+/// answer says, with `destination` as the hub sent it. Returns none when the
 /// answer did not come in time. The hub continues the space once it took
 /// the release, and may have when its answer never came. It surely did not
 /// when it refused the release or the release never left this machine.
-fn released_as(released: Option<Result<Reply>>, decision: Decision) -> Handed {
+fn released_as(released: Option<Result<Reply>>, destination: Destination) -> Handed {
     match released {
-        Some(Ok(Reply::Delivered)) => Handed::Went(decision),
-        None => Handed::Unconfirmed(decision),
-        Some(Err(error)) if error.is::<Unanswered>() => Handed::Unconfirmed(decision),
+        Some(Ok(Reply::Delivered)) => Handed::Went(destination),
+        None => Handed::Unconfirmed(destination),
+        Some(Err(error)) if error.is::<Unanswered>() => Handed::Unconfirmed(destination),
         Some(Err(error)) => Handed::Stayed(format!("the hub refused it: {error:#}")),
         Some(Ok(reply)) => Handed::Stayed(format!("the hub answered with {reply:?}")),
     }

@@ -680,6 +680,12 @@ policy. The hub's own machine stands in for the caller's. The hub chooses from
 the space's repository, its agent's tool, its mode and whether the workspace
 is disposable.
 
+When no connected machine can launch the space's agent, the hub keeps the
+package and the space goes to the hub. The hub places it again as each machine
+reports its capacity, and continues it on the first machine it chooses. When
+this machine's link opens first, the space stays here instead, and a
+`handover_failed` alert names `shoal resume <id>`.
+
 The shutting-down machine reads that choice and tells the hub it leaves the
 space there. The chosen machine then imports the package under the space's
 ID, as `shoal restore` of a kept package does. It queues the agents' restores,
@@ -688,8 +694,8 @@ that workspace went, once the workspace has continued there. It stays when the
 workspace stays.
 
 A `system_shutdown`, `daemon_stopped` or `handed_over` alert names the machine
-each space went to. For a space that stays, it says why: its package did not
-reach the hub in time, no machine can take it, or the hub cannot be reached. A
+each space went to, or the hub. For a space that stays, it says why: its
+package did not reach the hub in time, or the hub cannot be reached. A
 space whose leaving the hub did not acknowledge in time may have gone, and the
 alert says so. It keeps no restore here either.
 

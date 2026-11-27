@@ -89,7 +89,10 @@ fn only_requested_or_queued_restores_continue_without_the_user() {
 #[test]
 fn the_notification_names_where_each_space_went_and_continues_only_those_left() {
     use super::{handovers, staying};
-    use shoal_protocol::hub::{packages::Handed, placement::Decision};
+    use shoal_protocol::hub::{
+        packages::{Destination, Handed},
+        placement::Decision,
+    };
     use shoal_schedule::placement::{Policy, Reason};
 
     let root = tempfile::tempdir_in("/tmp").unwrap();
@@ -105,17 +108,31 @@ fn the_notification_names_where_each_space_went_and_continues_only_those_left() 
         unanswered: None,
         skipped: Vec::new(),
     };
-    let unsure = workspace(root.path(), "unsure", false);
+    let (unsure, kept) = (
+        workspace(root.path(), "unsure", false),
+        workspace(root.path(), "kept", false),
+    );
     let handed = [
-        (gone.clone(), Handed::Went(decision.clone())),
-        (unsure.clone(), Handed::Unconfirmed(decision)),
+        (
+            gone.clone(),
+            Handed::Went(Destination::Machine(decision.clone())),
+        ),
+        (
+            unsure.clone(),
+            Handed::Unconfirmed(Destination::Machine(decision)),
+        ),
+        (kept.clone(), Handed::Went(Destination::Hub)),
         (left.clone(), Handed::Stayed("the hub is offline".into())),
     ];
     let told = handovers(&handed);
-    let [went, maybe, stayed] = told.split("; ").collect::<Vec<_>>()[..] else {
+    let [went, maybe, on_hub, stayed] = told.split("; ").collect::<Vec<_>>()[..] else {
         panic!("{told}");
     };
     assert!(went.starts_with("gone") && went.contains("desk"), "{told}");
+    assert!(
+        on_hub.starts_with("kept") && on_hub.contains("the hub"),
+        "{told}"
+    );
     assert!(
         maybe.starts_with("unsure") && maybe.contains("desk"),
         "{told}"
@@ -126,7 +143,7 @@ fn the_notification_names_where_each_space_went_and_continues_only_those_left() 
     );
     // A space this machine left to the hub keeps no restore here, confirmed
     // or not, so only the one that stays continues here.
-    let here = staying(&[gone, unsure, left.clone()], &handed);
+    let here = staying(&[gone, unsure, kept, left.clone()], &handed);
     let here: Vec<_> = here.iter().map(|space| &space.id).collect();
     assert_eq!(here, [&left.id]);
 }

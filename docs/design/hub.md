@@ -449,7 +449,16 @@ daemon's drain short.
 The hub keeps each package that arrives whole, as it keeps any. It places the
 space by its own profile, as it places a start, among the other connected
 machines, its own standing in for the caller's. So under `balanced` the hub
-takes what no other machine has room for. It writes the placement back.
+takes what no other machine has room for, when it can launch the space's
+agent. It writes the placement back.
+
+When no machine can launch the space's agent, the hub writes back that it
+keeps the space. A space never runs another agent tool than its own, and Shoal
+installs none. The hub places the space again as each machine reports its
+capacity, and continues it on the first machine it chooses. When the machine
+the space came from connects again first, the space stays there, without a
+restore, and the user hears of it. The hub keeps such a space in memory alone,
+so after the hub's restart `shoal restore` takes it over.
 
 The shutting-down machine reads the placement and says it leaves the space
 there. Only then does the chosen machine import the package and queue its
@@ -466,8 +475,8 @@ still be connected. That machine forgets the space's restores, so the space
 does not come back at boot. It retires its copy once its link opens, as after
 any takeover. Work a reboot moved stays where it went.
 
-A space whose package did not arrive, or that no machine took, keeps its place
-and restores at boot as before.
+A space whose package did not arrive keeps its place and restores at boot as
+before.
 
 ### Which stops hand over
 

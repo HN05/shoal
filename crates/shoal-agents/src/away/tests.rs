@@ -43,7 +43,8 @@ fn went(workspace: &Workspace) -> (Space, Handed) {
         unanswered: None,
         skipped: Vec::new(),
     };
-    (Space::from(workspace.clone()), Handed::Went(decision))
+    let destination = shoal_protocol::hub::packages::Destination::Machine(decision);
+    (Space::from(workspace.clone()), Handed::Went(destination))
 }
 
 fn handings(fixture: &Fixture) -> Vec<Handing> {

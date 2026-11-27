@@ -1,17 +1,18 @@
 use anyhow::anyhow;
+use shoal_protocol::hub::placement::Decision;
 use shoal_schedule::placement::{Policy, Reason};
 
 use super::*;
 
-fn desk() -> Decision {
-    Decision {
+fn desk() -> Destination {
+    Destination::Machine(Decision {
         machine: "desk".into(),
         name: "desk".into(),
         reason: Reason::NoHeavyAgents,
         policy: Policy::Balanced,
         unanswered: None,
         skipped: Vec::new(),
-    }
+    })
 }
 
 #[test]

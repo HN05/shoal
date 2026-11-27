@@ -6,14 +6,18 @@ use std::{
 
 use anyhow::{Result, anyhow, bail};
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
-use shoal_protocol::hub::placement::Decision;
+use shoal_protocol::hub::{packages::Destination, placement::Decision};
+use shoal_schedule::placement::snapshot::Request;
 use tokio::sync::watch;
 
 /// Where the hub placed a space handed over.
 struct Placed {
     /// The machine that handed it over.
     from: MemberId,
-    decision: Decision,
+    destination: Destination,
+    /// The start that places it, once a machine can take a space the hub
+    /// keeps.
+    start: Option<Request>,
     /// The workspace whose worktree a chat runs in, which it follows.
     within: Option<SpaceId>,
     /// Whether its machine released it to the hub.
@@ -34,12 +38,18 @@ pub(crate) struct Handovers {
     /// The machines that handed spaces over for a shutdown that has not
     /// ended their link, nor been cancelled.
     leaving: Mutex<HashSet<MemberId>>,
+    /// Counts the machines that stayed after all, which keep the spaces the
+    /// hub kept for them.
+    stayed: watch::Sender<u64>,
 }
 
-/// A space its machine released, which goes where `decision` says once
-/// `after` holds, when it follows a workspace.
+/// A space its machine released, which goes where `destination` says once
+/// `after` holds, when it follows the workspace `within`. A space the hub
+/// keeps goes where `start` is placed.
 pub(crate) struct Released {
-    pub decision: Decision,
+    pub destination: Destination,
+    pub start: Option<Request>,
+    pub within: Option<SpaceId>,
     pub after: Option<watch::Receiver<bool>>,
 }
 
@@ -52,11 +62,37 @@ impl Handovers {
 
     /// Record that `member`, whose link opened again or whose shutdown was
     /// cancelled, is no longer shutting down, and keeps the spaces it did
-    /// not release; those it released go on, and the chats in their
-    /// worktrees still follow them.
+    /// not release and those the hub kept for want of a machine; those it
+    /// released elsewhere go on, and the chats in their worktrees still
+    /// follow them.
     pub(crate) fn stays(&self, member: &MemberId) {
         self.leaving.lock().unwrap().remove(member);
-        (self.placed.lock().unwrap()).retain(|_, placed| &placed.from != member || placed.released);
+        (self.placed.lock().unwrap()).retain(|_, placed| {
+            &placed.from != member || (placed.released && placed.destination != Destination::Hub)
+        });
+        self.stayed.send_modify(|stayed| *stayed += 1);
+    }
+
+    /// Changes as each machine stays after all.
+    pub(crate) fn watch_stays(&self) -> watch::Receiver<u64> {
+        self.stayed.subscribe()
+    }
+
+    /// Whether the hub still keeps the space `id`, which `from` released
+    /// to it, for want of a machine.
+    pub(in crate::packages) fn keeps(&self, id: &SpaceId, from: &MemberId) -> bool {
+        let placed = self.placed.lock().unwrap();
+        placed.get(id).is_some_and(|placed| {
+            &placed.from == from && placed.released && placed.destination == Destination::Hub
+        })
+    }
+
+    /// Record that the space `id`, which the hub kept, goes where
+    /// `decision` says, as the chats in its worktree do.
+    pub(in crate::packages) fn placed_later(&self, id: &SpaceId, decision: Decision) {
+        if let Some(placed) = self.placed.lock().unwrap().get_mut(id) {
+            placed.destination = Destination::Machine(decision);
+        }
     }
 
     /// Record that `member` hands spaces over for its shutdown.
@@ -69,16 +105,18 @@ impl Handovers {
     }
 
     /// Record that the hub sends the space `id`, which `from` handed over
-    /// following the workspace `within`, where `decision` says.
+    /// for `start` following the workspace `within`, where `destination`
+    /// says.
     pub(in crate::packages) fn place(
         &self,
         id: &SpaceId,
-        (from, within): (&MemberId, Option<&SpaceId>),
-        decision: Decision,
+        (from, within, start): (&MemberId, Option<&SpaceId>, Option<Request>),
+        destination: Destination,
     ) {
         let placed = Placed {
             from: from.clone(),
-            decision,
+            destination,
+            start,
             within: within.cloned(),
             released: false,
         };
@@ -97,10 +135,10 @@ impl Handovers {
         &self,
         id: &SpaceId,
         from: &MemberId,
-    ) -> Result<Decision> {
+    ) -> Result<Destination> {
         let placed = self.placed.lock().unwrap();
         match placed.get(id) {
-            Some(placed) if &placed.from == from => Ok(placed.decision.clone()),
+            Some(placed) if &placed.from == from => Ok(placed.destination.clone()),
             _ => bail!("the hub placed no workspace {id} of this machine for the chat to follow"),
         }
     }
@@ -125,7 +163,9 @@ impl Handovers {
         space.released = true;
         continuing.insert(id.clone(), watch::channel(false).0);
         Ok(Released {
-            decision: space.decision.clone(),
+            destination: space.destination.clone(),
+            start: space.start.clone(),
+            within: space.within.clone(),
             after,
         })
     }

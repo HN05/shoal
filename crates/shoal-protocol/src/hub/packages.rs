@@ -68,16 +68,34 @@ impl Handing {
     }
 }
 
+/// Where the hub sends a space a machine hands over.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "to", content = "decision", rename_all = "snake_case")]
+pub enum Destination {
+    /// The machine the decision names continues it.
+    Machine(super::placement::Decision),
+    /// No machine can take it now, so the hub keeps its package until one
+    /// that can launch its agent connects or has room.
+    Hub,
+}
+
+impl Destination {
+    /// The machine `decision` names, else the hub.
+    pub fn of(decision: Option<super::placement::Decision>) -> Self {
+        decision.map_or(Self::Hub, Self::Machine)
+    }
+}
+
 /// Where a space a machine hands over goes.
 #[derive(Debug)]
 pub enum Handed {
-    /// The hub keeps its package and continues it on the machine the
-    /// decision names.
-    Went(super::placement::Decision),
-    /// It may go to the machine the decision names: its machine left it
-    /// to the hub, whose acknowledgement did not come in time, so it keeps
-    /// no restore there either.
-    Unconfirmed(super::placement::Decision),
+    /// The hub keeps its package and continues it where the destination
+    /// says.
+    Went(Destination),
+    /// It may go where the destination says: its machine left it to the
+    /// hub, whose acknowledgement did not come in time, so it keeps no
+    /// restore there either.
+    Unconfirmed(Destination),
     /// It stays on its machine, for this reason.
     Stayed(String),
 }

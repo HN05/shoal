@@ -8,7 +8,7 @@ use shoal_protocol::{
     alerts::AlertKind,
     hub::{
         link::{Call, Reply},
-        packages::Departure,
+        packages::{Departure, Destination},
         placement::Decision,
     },
 };
@@ -32,10 +32,9 @@ const CONTINUE_WITHIN: Duration = Duration::from_secs(30 * 60);
 impl Hub {
     /// Take the final package `sent` that a machine shutting down writes up the
     /// duplex stream `stream`, and keep it as [`Self::keep_package`] does. Then
-    /// place its space among the other connected machines; a chat in a
-    /// workspace's worktree goes where that workspace went. Writes the
-    /// placement on this side of the stream and ends it, for the machine to
-    /// leave the space there. Refused at once as `keep_package` refuses.
+    /// send its space where [`Self::destination`] says. Writes the destination
+    /// on this side of the stream and ends it, for the machine to leave the
+    /// space there. Refused at once as `keep_package` refuses.
     pub(crate) async fn take_handover(
         self: &Arc<Self>,
         daemon: &Arc<dyn Daemon>,
@@ -49,25 +48,45 @@ impl Hub {
             let (space, from) = (sent.space.clone(), sent.member.clone());
             let Continuation { start, within } = sent.continuation.clone();
             let (kept, operation) = hub.take_package(sent, up).await;
-            let placed = match (kept, &within, start) {
-                (Ok(()), Some(workspace), _) => {
-                    (hub.handovers.placed_workspace(workspace, &from)).map(Some)
+            let placed = match kept {
+                Ok(()) => {
+                    let leaving = (within.as_ref(), start.clone());
+                    hub.destination(&*daemon, &from, leaving).await
                 }
-                (Ok(()), None, Some(start)) => hub.place_elsewhere(&*daemon, &from, start).await,
-                (Ok(()), None, None) => Ok(None),
-                (Err(error), _, _) => Err(error),
+                Err(error) => Err(error),
             };
             // Placed before the machine reads it, which may release it at once.
-            let decision = placed.as_ref().ok().cloned().flatten();
-            if let Some(decision) = decision.clone() {
-                (hub.handovers).place(&space, (&from, within.as_ref()), decision);
+            let destination = placed.as_ref().ok().cloned().flatten();
+            if let Some(destination) = destination.clone() {
+                let placed = (&from, within.as_ref(), start);
+                hub.handovers.place(&space, placed, destination);
             }
-            if answer(out, placed).await.is_none() && decision.is_some() {
+            if answer(out, placed).await.is_none() && destination.is_some() {
                 hub.handovers.unplace(&space);
             }
             drop(operation);
         });
         Ok(())
+    }
+
+    /// Where a space that leaves the machine `from` for `start` goes: where
+    /// the workspace `within` went, for a chat in its worktree, else where
+    /// [`Self::place_elsewhere`] sends it, else the hub, which keeps it until
+    /// a machine can take it. None for a space without a start, which stays.
+    pub(super) async fn destination(
+        &self,
+        daemon: &dyn Daemon,
+        from: &MemberId,
+        (within, start): (Option<&SpaceId>, Option<Request>),
+    ) -> Result<Option<Destination>> {
+        match (within, start) {
+            (Some(workspace), _) => Ok(Some(self.handovers.placed_workspace(workspace, from)?)),
+            (None, Some(start)) => {
+                let decision = self.place_elsewhere(daemon, from, start).await?;
+                Ok(Some(Destination::of(decision)))
+            }
+            (None, None) => Ok(None),
+        }
     }
 
     /// Where a space that leaves the machine `from` goes for `start`, among
@@ -133,13 +152,83 @@ impl Hub {
         daemon: Arc<dyn Daemon>,
         from: MemberId,
         id: SpaceId,
-        released: Released,
+        mut released: Released,
     ) {
-        if let Some(mut after) = released.after {
+        if let Some(mut after) = released.after.take() {
             let _ = after.wait_for(|ended| *ended).await;
         }
-        (self.continue_handover(&*daemon, &id, &from, &released.decision)).await;
+        if let Some(decision) = self.released_to(&*daemon, &from, &id, released).await {
+            (self.continue_handover(&*daemon, &id, &from, &decision)).await;
+        }
         self.handovers.continued(&id);
+    }
+
+    /// The machine that continues the space `id`, which `from` `released`
+    /// to the hub: the one its destination names, the one the workspace a
+    /// chat follows went to, or for a space the hub keeps, the first that
+    /// placement chooses. None once the space stays on `from`.
+    async fn released_to(
+        &self,
+        daemon: &dyn Daemon,
+        from: &MemberId,
+        id: &SpaceId,
+        released: Released,
+    ) -> Option<Decision> {
+        let destination = match &released.within {
+            Some(workspace) => self.handovers.placed_workspace(workspace, from).ok()?,
+            None => released.destination,
+        };
+        match (destination, released.within, released.start) {
+            (Destination::Machine(decision), _, _) => Some(decision),
+            (Destination::Hub, None, Some(start)) => {
+                self.place_when_room(daemon, from, id, start).await
+            }
+            (Destination::Hub, _, _) => None,
+        }
+    }
+
+    /// The machine placement chooses for the space `id`, which `from` handed
+    /// over for `start` and the hub keeps since no machine could take it,
+    /// placing it again as each machine reports its capacity. None once
+    /// `from` stays after all, which keeps the space, as the user hears.
+    async fn place_when_room(
+        &self,
+        daemon: &dyn Daemon,
+        from: &MemberId,
+        id: &SpaceId,
+        start: Request,
+    ) -> Option<Decision> {
+        let (mut reported, mut stayed) = (self.capacities.watch(), self.handovers.watch_stays());
+        loop {
+            if !self.handovers.keeps(id, from) {
+                self.tell_kept_space_stays(daemon, id, from).await;
+                return None;
+            }
+            match self.place_elsewhere(daemon, from, start.clone()).await {
+                Ok(Some(decision)) => {
+                    self.handovers.placed_later(id, decision.clone());
+                    return Some(decision);
+                }
+                Ok(None) => {}
+                Err(error) => log!("hub: could not place space {id}, which it keeps: {error:#}"),
+            }
+            let changed = tokio::select! {
+                changed = reported.changed() => changed,
+                changed = stayed.changed() => changed,
+            };
+            changed.ok()?;
+        }
+    }
+
+    /// Tell the user that the space `id`, which the hub kept for want of a
+    /// machine, stays on `from`, which is back.
+    async fn tell_kept_space_stays(&self, daemon: &dyn Daemon, id: &SpaceId, from: &MemberId) {
+        let from = self.member_name(daemon, from).await;
+        let message = format!(
+            "Space {id}, which machine {from} handed over, waited on the hub for a machine that can launch its agent; {from} is back, where shoal resume {id} continues it"
+        );
+        let about = About::named(None);
+        (self.notify(daemon, about, AlertKind::HandoverFailed, message)).await;
     }
 
     /// Have `from`, which a space it handed over left, retire the spaces
@@ -242,23 +331,23 @@ impl Hub {
 }
 
 /// Write on `out` where a space handed over goes, as `placed` says, and
-/// end it, with why not when `placed` failed; the placement, once written.
-async fn answer(mut out: Outgoing, placed: Result<Option<Decision>>) -> Option<Decision> {
-    let decision = match placed {
-        Ok(decision) => decision,
+/// end it, with why not when `placed` failed; the destination, once written.
+async fn answer(mut out: Outgoing, placed: Result<Option<Destination>>) -> Option<Destination> {
+    let destination = match placed {
+        Ok(destination) => destination,
         Err(error) => {
             out.end(Some(format!("{error:#}"))).await;
             return None;
         }
     };
     let written = async {
-        let json = serde_json::to_vec(&decision)?;
+        let json = serde_json::to_vec(&destination)?;
         out.write(&json).await
     };
     match written.await {
         Ok(()) => {
             out.end(None).await;
-            decision
+            destination
         }
         Err(error) => {
             log!("hub: could not answer a hand-over: {error:#}");

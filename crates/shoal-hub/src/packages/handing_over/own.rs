@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use anyhow::{Context as _, Result, anyhow};
 use shoal_core::fsutil::off_runtime;
 use shoal_ids::{member_ids::MemberId, space_ids::SpaceId};
-use shoal_protocol::{hub::placement::Decision, model::Space};
+use shoal_protocol::{hub::packages::Destination, model::Space};
 use tokio::sync::mpsc;
 
 use super::super::{Continuation, Sent, handovers::Released, sending};
@@ -33,26 +33,23 @@ impl Default for OwnReleases {
 
 impl Hub {
     /// As the paused hub's own machine `own`: keep the final package of
-    /// `space`, and place the space among the other connected machines. A chat
+    /// `space`, and return where [`Self::destination`] sends the space. A chat
     /// in the workspace `within`'s worktree goes where that workspace went.
-    /// Returns where it goes, none when no machine can take it.
     pub(super) async fn hand_over_own(
         &self,
         daemon: &dyn Daemon,
         own: &MemberId,
         (space, within): (&Space, Option<&SpaceId>),
-    ) -> Result<Option<Decision>> {
+    ) -> Result<Option<Destination>> {
         self.ensure_package_room(daemon).await?;
         self.handovers.leaves(own);
         let start = self.keep_own_package(daemon, own, (space, within)).await?;
-        let decision = match within {
-            Some(workspace) => Some(self.handovers.placed_workspace(workspace, own)?),
-            None => self.place_elsewhere(daemon, own, start).await?,
-        };
-        if let Some(decision) = &decision {
-            (self.handovers).place(&space.id, (own, within), decision.clone());
+        let destination = (self.destination(daemon, own, (within, Some(start.clone())))).await?;
+        if let Some(destination) = &destination {
+            let placed = (own, within, Some(start));
+            (self.handovers).place(&space.id, placed, destination.clone());
         }
-        Ok(decision)
+        Ok(destination)
     }
 
     /// Keep the package of `space`, which the hub's own machine `own` hands

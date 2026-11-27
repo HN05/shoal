@@ -8,7 +8,7 @@ use std::{collections::HashSet, time::Duration};
 
 use anyhow::Result;
 use futures_util::future::join_all;
-use shoal_protocol::hub::packages::{Handed, Handing, Leaving};
+use shoal_protocol::hub::packages::{Destination, Handed, Handing, Leaving};
 use tokio::time::Instant;
 
 use crate::Agents;
@@ -476,17 +476,25 @@ fn handovers(handed: &[(Space, Handed)]) -> String {
     let each = handed.iter().map(|(space, handed)| {
         let (name, number) = (&space.name, space.number);
         match handed {
-            Handed::Went(decision) => {
-                format!("{name} ({number}) went to machine {}", decision.name)
-            }
-            Handed::Unconfirmed(decision) => format!(
-                "{name} ({number}) may have gone to machine {}, which the hub did not confirm in time, as shoal list shows once this machine is back",
-                decision.name
+            Handed::Went(destination) => format!("{name} ({number}) went to {}", went_to(destination)),
+            Handed::Unconfirmed(destination) => format!(
+                "{name} ({number}) may have gone to {}, which the hub did not confirm in time, as shoal list shows once this machine is back",
+                went_to(destination)
             ),
             Handed::Stayed(why) => format!("{name} ({number}) stays here: {why}"),
         }
     });
     each.collect::<Vec<_>>().join("; ")
+}
+
+/// Where `destination` sends a space handed over.
+fn went_to(destination: &Destination) -> String {
+    match destination {
+        Destination::Machine(decision) => format!("machine {}", decision.name),
+        Destination::Hub => {
+            "the hub, which continues it once a machine that can launch its agent has room".into()
+        }
+    }
 }
 
 /// How the work of the `waiting` spaces continues. `shoal resume --all`
