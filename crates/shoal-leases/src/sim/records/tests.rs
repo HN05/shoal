@@ -1,26 +1,26 @@
 use super::*;
 use crate::store::Store;
-use rusqlite::params;
 use serde_json::{Value, json};
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::sim::SimulatorState;
 use shoal_store::test_support::open_database;
 
-fn record(id: &str, current: Option<&str>, last: Option<&str>) -> Value {
-    json!({
-        "id": id, "udid": null, "device": "phone", "runtime": "ios",
-        "workspace_id": current, "last_workspace_id": last,
-        "lease_name": "default", "reason": null, "state": "booting",
-        "last_used": 42, "error": null, "acquirer": {"kind": "user"}
-    })
-}
-
-fn save(db: &Connection, record: &Value) -> Result<()> {
-    db.execute(
-        "INSERT INTO simulators(id,record) VALUES (?1,?2)
-         ON CONFLICT(id) DO UPDATE SET record=excluded.record",
-        params![record["id"].as_str().unwrap(), record.to_string()],
-    )?;
-    Ok(())
+fn record(id: &str, current: Option<&str>, last: Option<&str>) -> Simulator {
+    Simulator {
+        id: id.into(),
+        udid: None,
+        device: "phone".into(),
+        runtime: "ios".into(),
+        workspace_id: current.map(SpaceId::from),
+        last_workspace_id: last.map(SpaceId::from),
+        lease_name: Some("default".into()),
+        reason: None,
+        state: SimulatorState::Booting,
+        last_used: UnixTime::from_seconds(42),
+        error: None,
+        installed_apps: None,
+        acquirer: Acquirer::User,
+    }
 }
 
 fn ids(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<String>> {
@@ -28,7 +28,7 @@ fn ids(db: &Connection, owner: Option<&SpaceId>) -> Result<Vec<String>> {
 }
 
 #[tokio::test]
-async fn transitions_and_reopens_preserve_json_ownership_and_audits() -> Result<()> {
+async fn transitions_and_reopens_keep_ownership() -> Result<()> {
     let root = tempfile::tempdir()?;
     let path = root.path().join("state.db");
     let store = Store::open(path.clone()).await?;
@@ -37,95 +37,105 @@ async fn transitions_and_reopens_preserve_json_ownership_and_audits() -> Result<
     save(&db, &sim)?;
     save(&db, &record("a", None, Some("A")))?;
     save(&db, &record("c", None, None))?;
-    db.execute("INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES ('audit','A','{}')", [])?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "b"]);
     assert_eq!(ids(&db, None)?, ["a", "b", "c"]);
-    for state in ["creating", "booting", "leased", "failed"] {
-        sim["state"] = json!(state);
+    for state in [
+        SimulatorState::Creating,
+        SimulatorState::Booting,
+        SimulatorState::Leased,
+        SimulatorState::Failed,
+    ] {
+        sim.state = state;
         save(&db, &sim)?;
         assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "b"]);
     }
-    sim["workspace_id"] = Value::Null;
-    sim["last_workspace_id"] = json!("A");
-    sim["state"] = json!("idle");
+    sim.workspace_id = None;
+    sim.last_workspace_id = Some("A".into());
+    sim.state = SimulatorState::Idle;
     save(&db, &sim)?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "b"]);
 
     // The persisted claim changes owner before boot updates the previous owner.
-    sim["workspace_id"] = json!("B");
-    sim["state"] = json!("booting");
+    sim.workspace_id = Some("B".into());
+    sim.state = SimulatorState::Booting;
     save(&db, &sim)?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a"]);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
     drop(store);
     drop(Store::open(path).await?);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
-    sim["last_workspace_id"] = json!("B");
-    sim["state"] = json!("failed");
+    sim.last_workspace_id = Some("B".into());
+    sim.state = SimulatorState::Failed;
     save(&db, &sim)?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a"]);
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
-    sim["workspace_id"] = Value::Null;
-    sim["state"] = json!("idle");
+    sim.workspace_id = None;
+    sim.state = SimulatorState::Idle;
     save(&db, &sim)?;
     assert_eq!(ids(&db, Some(&SpaceId::from("B")))?, ["b"]);
-    db.execute("DELETE FROM simulators WHERE id='b'", [])?;
+    delete(&db, "b")?;
     assert!(ids(&db, Some(&SpaceId::from("B")))?.is_empty());
-    assert_eq!(
-        db.query_row("SELECT record FROM simulator_clean_requests", [], |r| {
-            r.get::<_, String>(0)
-        })?,
-        "{}"
-    );
-
-    // Absent fields and empty strings retain Option<String> semantics.
-    let mut absent = record("d", None, Some("A"));
-    absent.as_object_mut().unwrap().remove("workspace_id");
-    save(&db, &absent)?;
-    save(&db, &record("e", Some(""), Some("A")))?;
-    assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["a", "d"]);
-    assert_eq!(ids(&db, Some(&SpaceId::from("")))?, ["e"]);
     Ok(())
 }
 
-#[tokio::test]
-async fn invalid_ownership_writes_fail_atomically_and_selected_records_report_errors() -> Result<()>
-{
-    let root = tempfile::tempdir()?;
-    let path = root.path().join("state.db");
-    Store::open(path.clone()).await?;
-    let db = open_database(path)?;
-    save(&db, &record("owned", Some("A"), None))?;
-    for invalid in [
-        "{",
-        "[]",
-        "null",
-        r#"{"workspace_id":7}"#,
-        r#"{"workspace_id":false}"#,
-        r#"{"last_workspace_id":[]}"#,
-        r#"{"workspace_id":"B","last_workspace_id":{}}"#,
-        r#"{"workspace_id":null,"workspace_id":"B"}"#,
-        r#"{"last_workspace_id":"A","last_workspace_id":"B"}"#,
-    ] {
-        for sql in [
-            "INSERT INTO simulators VALUES ('invalid',?1)",
-            "UPDATE simulators SET record=?1 WHERE id='owned'",
-        ] {
-            assert!(db.execute(sql, [invalid]).is_err(), "{sql} {invalid}");
-            assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["owned"]);
-            assert_eq!(ids(&db, None)?, ["owned"]);
-        }
+#[test]
+fn a_simulator_round_trips_through_its_columns_and_record() -> Result<()> {
+    let db = shoal_store::test_support::migrated()?;
+    let mut sim = record("sim", Some("A"), Some("B"));
+    (sim.udid, sim.reason, sim.error) = (Some("U".into()), Some("why".into()), Some("e".into()));
+    (sim.state, sim.installed_apps) = (SimulatorState::Leased, Some(3));
+    save(&db, &sim)?;
+
+    let [saved] = &list(&db, None)?[..] else {
+        anyhow::bail!("expected one simulator");
+    };
+    assert_eq!(serde_json::to_value(saved)?, serde_json::to_value(&sim)?);
+    let (state, current, last, record): (String, String, String, String) = db.query_row(
+        "SELECT state,workspace_id,last_workspace_id,record FROM simulators",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    assert_eq!((&*state, &*current, &*last), ("leased", "A", "B"));
+    let record: Value = serde_json::from_str(&record)?;
+    for moved in ["id", "state", "workspace_id", "last_workspace_id"] {
+        assert_eq!(record.get(moved), None, "{record}");
     }
-    let mut invalid = record("broken", Some("B"), None);
-    invalid["state"] = json!("unknown-state");
-    save(&db, &invalid)?;
+    Ok(())
+}
+
+#[test]
+fn a_row_that_does_not_decode_names_its_simulator() -> Result<()> {
+    let db = shoal_store::test_support::migrated()?;
+    save(&db, &record("owned", Some("A"), None))?;
+    save(&db, &record("broken", Some("B"), None))?;
+    db.execute(
+        "UPDATE simulators SET state='unknown-state' WHERE id='broken'",
+        [],
+    )?;
     assert_eq!(ids(&db, Some(&SpaceId::from("A")))?, ["owned"]);
     for owner in [None, Some(SpaceId::from("B"))] {
-        let error = list(&db, owner.as_ref()).unwrap_err();
-        let diagnostic = format!("{error:#}");
-        assert!(diagnostic.contains("decode simulator record broken"));
-        assert!(diagnostic.contains("unknown-state"));
+        let diagnostic = format!("{:#}", list(&db, owner.as_ref()).unwrap_err());
+        assert!(
+            diagnostic.contains("decode simulator broken"),
+            "{diagnostic}"
+        );
+        assert!(diagnostic.contains("unknown-state"), "{diagnostic}");
     }
+
+    // A record that still holds a field its columns hold is refused.
+    let stale = json!({"udid": null, "device": "phone", "runtime": "ios", "lease_name": null,
+        "reason": null, "last_used": 42, "error": null, "installed_apps": null,
+        "acquirer": {"kind": "user"}, "state": "idle"});
+    db.execute(
+        "UPDATE simulators SET state='idle', record=?1 WHERE id='broken'",
+        [stale.to_string()],
+    )?;
+    let diagnostic = format!("{:#}", list(&db, None).unwrap_err());
+    assert!(
+        diagnostic.contains("decode simulator broken"),
+        "{diagnostic}"
+    );
+    assert!(diagnostic.contains("unknown field `state`"), "{diagnostic}");
     Ok(())
 }
 

@@ -14,28 +14,21 @@ fn populate(db: &mut Connection, count: usize) -> Result<()> {
         // Two records per owner; unrelated claimed devices last belonged to 0.
         let mut sim = record(&id, Some(current.as_str()), Some(owner(0).as_str()));
         if index % 2 == 1 {
-            sim["workspace_id"] = Value::Null;
-            sim["last_workspace_id"] = json!(current);
+            sim.workspace_id = None;
+            sim.last_workspace_id = Some(current);
         }
-        sim["udid"] = json!(id);
-        sim["device"] = json!("com.apple.CoreSimulator.SimDeviceType.iPhone-17");
-        sim["runtime"] = json!("com.apple.CoreSimulator.SimRuntime.iOS-27-0");
+        sim.udid = Some(id.clone());
+        sim.device = "com.apple.CoreSimulator.SimDeviceType.iPhone-17".into();
+        sim.runtime = "com.apple.CoreSimulator.SimRuntime.iOS-27-0".into();
         save(&tx, &sim)?;
     }
     tx.commit()?;
     Ok(())
 }
 
-// Preserve the former collect/decode/retain path for a comparable baseline.
+/// The simulators of `owner` that filtering every decoded simulator finds.
 fn legacy_list(db: &Connection, owner: &str) -> Result<Vec<Simulator>> {
-    let records = db
-        .prepare("SELECT record FROM simulators ORDER BY id")?
-        .query_map([], |r| r.get::<_, String>(0))?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut records = records
-        .into_iter()
-        .map(|r| serde_json::from_str::<Simulator>(&r))
-        .collect::<serde_json::Result<Vec<_>>>()?;
+    let mut records = list(db, None)?;
     records.retain(|s| {
         s.workspace_id
             .as_ref()

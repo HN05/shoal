@@ -7,7 +7,6 @@ mod records;
 mod simctl;
 
 use anyhow::{Result, ensure};
-use rusqlite::params;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
@@ -206,16 +205,14 @@ impl Leases {
     }
 
     async fn save_sim(&self, sim: &Simulator) -> Result<()> {
-        let (id, record) = (sim.id.clone(), serde_json::to_string(sim)?);
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO simulators(id,record) VALUES (?1,?2) ON CONFLICT(id) DO UPDATE SET record=excluded.record",
-                    params![id, record],
-                )?;
-                Ok(())
-            })
-            .await
+        let sim = sim.clone();
+        self.store.run(move |db| records::save(db, &sim)).await
+    }
+
+    /// Record `sim` as it is, without simctl.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn record_simulator(&self, sim: &Simulator) -> Result<()> {
+        self.save_sim(sim).await
     }
 
     /// Resolve a creation interrupted between simctl returning and saving its UDID.
@@ -267,12 +264,7 @@ impl Leases {
             );
         }
         let id = sim.id.clone();
-        self.store
-            .run(move |db| {
-                db.execute("DELETE FROM simulators WHERE id=?1", [id])?;
-                Ok(())
-            })
-            .await
+        self.store.run(move |db| records::delete(db, &id)).await
     }
 
     pub async fn acquire_simulator(

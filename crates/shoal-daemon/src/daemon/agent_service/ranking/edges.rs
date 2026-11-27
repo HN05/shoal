@@ -13,6 +13,7 @@ use crate::{
     state::{BlockerKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::sim::SimulatorState;
 use shoal_schedule::{
     rank::Dependency,
     snapshot::{Carries, Edge, Node},
@@ -223,11 +224,10 @@ fn lease_holders(db: &Connection, leases: &[(Target, SpaceId)]) -> Result<Vec<Ed
                 .collect::<rusqlite::Result<_>>()?,
             Target::Simulator => db
                 .prepare(
-                    "SELECT DISTINCT json_extract(record,'$.workspace_id') FROM simulators
-                     WHERE json_extract(record,'$.state')='leased'
-                        AND json_extract(record,'$.workspace_id') IS NOT NULL",
+                    "SELECT DISTINCT workspace_id FROM simulators
+                     WHERE state=?1 AND workspace_id IS NOT NULL",
                 )?
-                .query_map([], |row| row.get(0))?
+                .query_map([SimulatorState::Leased], |row| row.get(0))?
                 .collect::<rusqlite::Result<_>>()?,
             _ => Vec::new(),
         };

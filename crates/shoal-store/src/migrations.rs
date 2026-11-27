@@ -15,10 +15,11 @@ mod journal_shapes;
 mod post_files;
 mod post_surfaces;
 mod review_targets;
+mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 325;
+pub const SCHEMA_VERSION: i64 = 326;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -178,6 +179,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         325,
         include_str!("migrations/0325_agent_events_by_time.sql"),
         Some(agent_modes::record_modes),
+    ),
+    (
+        326,
+        include_str!("migrations/0326_simulator_columns.sql"),
+        Some(simulator_columns::move_fields),
     ),
 ];
 

@@ -251,6 +251,7 @@ mod journal_shapes;
 mod post_files;
 mod review_targets;
 mod schema;
+mod simulator_columns;
 mod thread_outcomes;
 
 /// A thread at the floor where the holder offered choices twice, the user

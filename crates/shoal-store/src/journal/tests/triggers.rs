@@ -48,8 +48,9 @@ const FILE: &str = "INSERT INTO space_files(id,space_id,space,repository_id,sour
         created_at,attached_by)
     VALUES (7,'work','fix','repo','added','notes.md','/files/notes.md',3,1,'{\"kind\":\"user\"}');";
 
-const LEASED: &str = r#"INSERT INTO simulators(id,record) VALUES ('sim','{"udid":"U","device":"iPhone",
-    "runtime":"iOS 18","workspace_id":"work","lease_name":"default","state":"leased"}');"#;
+const LEASED: &str = r#"INSERT INTO simulators(id,state,workspace_id,record)
+    VALUES ('sim','leased','work','{"udid":"U","device":"iPhone","runtime":"iOS 18",
+        "lease_name":"default"}');"#;
 
 const DEMO: &str = r#"INSERT INTO executions(id,space_id,state) VALUES ('e','work','running');
     INSERT INTO demos(execution_id,workspace_id,name,started_at,record,has_run)
@@ -201,18 +202,18 @@ fn cases() -> Vec<Case> {
         ),
         case(
             "simulator_acquired",
-            r#"INSERT INTO simulators(id,record) VALUES ('sim','{"udid":"U","device":"iPhone",
-                "runtime":"iOS 18","workspace_id":null,"lease_name":null,"state":"idle"}')"#,
-            r#"UPDATE simulators SET record='{"udid":"U","device":"iPhone","runtime":"iOS 18",
-                "workspace_id":"work","lease_name":"default","state":"leased"}'"#,
+            r#"INSERT INTO simulators(id,state,record) VALUES ('sim','idle','{"udid":"U",
+                "device":"iPhone","runtime":"iOS 18","lease_name":null}')"#,
+            r#"UPDATE simulators SET state='leased', workspace_id='work', record='{"udid":"U",
+                "device":"iPhone","runtime":"iOS 18","lease_name":"default"}'"#,
             vec![json!({"space_id": "work", "kind": "simulator_acquired",
                 "simulator": simulator})],
         ),
         case(
             "simulator_released",
             LEASED,
-            r#"UPDATE simulators SET record='{"udid":"U","device":"iPhone","runtime":"iOS 18",
-                "workspace_id":null,"lease_name":null,"state":"idle"}'"#,
+            r#"UPDATE simulators SET state='idle', workspace_id=NULL, record='{"udid":"U",
+                "device":"iPhone","runtime":"iOS 18","lease_name":null}'"#,
             vec![json!({"space_id": "work", "kind": "simulator_released",
                 "simulator": simulator})],
         ),

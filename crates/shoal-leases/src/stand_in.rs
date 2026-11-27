@@ -119,17 +119,7 @@ impl Fixture {
             installed_apps: None,
             acquirer,
         };
-        let record = serde_json::to_string(&sim).unwrap();
-        (self.leases.store)
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO simulators(id,record) VALUES (?1,?2)",
-                    [&sim.id, &record],
-                )?;
-                Ok(())
-            })
-            .await
-            .unwrap();
+        self.leases.record_simulator(&sim).await.unwrap();
     }
 
     /// The names of the workspace's simulator leases.

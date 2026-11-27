@@ -16,8 +16,6 @@ CREATE TABLE ports (
             env_var TEXT NOT NULL, reason TEXT, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
         );
 
-CREATE TABLE simulators(id TEXT PRIMARY KEY, record TEXT NOT NULL);
-
 CREATE TABLE simulator_clean_requests (
             id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
             workspace_id TEXT NOT NULL, record TEXT NOT NULL
@@ -1172,16 +1170,16 @@ CREATE TABLE thread_post_files (
     PRIMARY KEY(post_id, position)
 );
 
+CREATE TABLE simulators(
+    id TEXT PRIMARY KEY, state TEXT NOT NULL, workspace_id TEXT, last_workspace_id TEXT,
+    record TEXT NOT NULL
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);
-
-CREATE INDEX simulators_effective_owner ON simulators (
-    coalesce(json_extract(record, '$.workspace_id'), json_extract(record, '$.last_workspace_id')),
-    id
-);
 
 CREATE INDEX repository_resource_owner ON repository_resource_leases(repository_id);
 
@@ -1306,6 +1304,8 @@ CREATE INDEX thread_post_files_file ON thread_post_files(file_id);
 CREATE INDEX space_events_agents ON space_events(created_at)
     WHERE kind IN ('agent_started','agent_stopped','agent_exited');
 
+CREATE INDEX simulators_effective_owner ON simulators(coalesce(workspace_id, last_workspace_id), id);
+
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL
     UNION ALL SELECT space_number FROM access_requests WHERE space_id IS NULL;
@@ -1333,36 +1333,6 @@ INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
 INSERT INTO "journal_pruned" VALUES (0);
 
 INSERT INTO "app_revisions" VALUES (1, 0);
-
-CREATE TRIGGER simulator_owner_insert
-BEFORE INSERT ON simulators
-WHEN CASE
-    WHEN NOT json_valid(NEW.record) THEN 1
-    WHEN json_type(NEW.record) <> 'object' THEN 1
-    ELSE EXISTS (
-        SELECT key FROM json_each(NEW.record)
-        WHERE key IN ('workspace_id', 'last_workspace_id')
-        GROUP BY key HAVING count(*) > 1 OR sum(type NOT IN ('text', 'null')) > 0
-    )
-END
-BEGIN
-    SELECT RAISE(ABORT, 'invalid simulator ownership record: ' || NEW.id);
-END;
-
-CREATE TRIGGER simulator_owner_update
-BEFORE UPDATE OF record ON simulators
-WHEN CASE
-    WHEN NOT json_valid(NEW.record) THEN 1
-    WHEN json_type(NEW.record) <> 'object' THEN 1
-    ELSE EXISTS (
-        SELECT key FROM json_each(NEW.record)
-        WHERE key IN ('workspace_id', 'last_workspace_id')
-        GROUP BY key HAVING count(*) > 1 OR sum(type NOT IN ('text', 'null')) > 0
-    )
-END
-BEGIN
-    SELECT RAISE(ABORT, 'invalid simulator ownership record: ' || NEW.id);
-END;
 
 CREATE TRIGGER space_agent_state_turn_kept AFTER DELETE ON space_agent_state
 WHEN OLD.space_id IN (SELECT id FROM spaces) BEGIN
@@ -1583,26 +1553,6 @@ CREATE TRIGGER demo_stopped AFTER DELETE ON demos WHEN OLD.has_run BEGIN
         json_object('name', OLD.name, 'record', json(OLD.record)));
 END;
 
-CREATE TRIGGER simulator_acquired AFTER UPDATE OF record ON simulators
-WHEN json_extract(NEW.record,'$.state')='leased'
-    AND json_extract(OLD.record,'$.state') IS NOT 'leased' BEGIN
-    SELECT journal_append('simulator_acquired', json_extract(NEW.record,'$.workspace_id'),
-        json_object('record', json(NEW.record)));
-END;
-
-CREATE TRIGGER simulator_released AFTER UPDATE OF record ON simulators
-WHEN json_extract(OLD.record,'$.state')='leased'
-    AND json_extract(NEW.record,'$.state') IS NOT 'leased' BEGIN
-    SELECT journal_append('simulator_released', json_extract(OLD.record,'$.workspace_id'),
-        json_object('record', json(OLD.record)));
-END;
-
-CREATE TRIGGER simulator_deleted AFTER DELETE ON simulators
-WHEN json_extract(OLD.record,'$.state')='leased' BEGIN
-    SELECT journal_append('simulator_released', json_extract(OLD.record,'$.workspace_id'),
-        json_object('record', json(OLD.record)));
-END;
-
 CREATE TRIGGER space_created AFTER INSERT ON spaces BEGIN
     UPDATE spaces SET number=(SELECT number FROM free_space_number)
         WHERE id=NEW.id AND number IS NULL;
@@ -1732,4 +1682,22 @@ WHEN (OLD.outcome IS NOT NEW.outcome OR OLD.cause IS NOT NEW.cause
     SELECT journal_append('thread_resolved', NEW.space_id,
         json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name,
             'outcome', NEW.outcome));
+END;
+
+CREATE TRIGGER simulator_acquired AFTER UPDATE OF state ON simulators
+WHEN NEW.state='leased' AND OLD.state IS NOT 'leased' BEGIN
+    SELECT journal_append('simulator_acquired', NEW.workspace_id,
+        json_object('record', json(NEW.record)));
+END;
+
+CREATE TRIGGER simulator_released AFTER UPDATE OF state ON simulators
+WHEN OLD.state='leased' AND NEW.state IS NOT 'leased' BEGIN
+    SELECT journal_append('simulator_released', OLD.workspace_id,
+        json_object('record', json(OLD.record)));
+END;
+
+CREATE TRIGGER simulator_deleted AFTER DELETE ON simulators
+WHEN OLD.state='leased' BEGIN
+    SELECT journal_append('simulator_released', OLD.workspace_id,
+        json_object('record', json(OLD.record)));
 END;
