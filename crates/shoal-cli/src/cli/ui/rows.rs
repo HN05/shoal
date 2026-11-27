@@ -413,10 +413,19 @@ fn inherited_label(inherited: Option<&InheritedRank>) -> String {
     format!(" (from {}, {why})", inherited.from)
 }
 
-/// Why an agent is asleep and what wakes it: `critical memory pressure;
-/// wakes once an update arrives for it`.
+/// Why an agent is asleep and what wakes it, `critical memory pressure;
+/// wakes once an update arrives for it`, or once that came, what holds back
+/// its restore: `idle while the user is away; due to wake, held by
+/// machine.max_heavy_agents`.
 pub fn asleep_label(asleep: &Asleep) -> String {
-    format!("{}; wakes once {}", asleep.reason, asleep.wakes_when)
+    match &asleep.held_by {
+        Some(held) => format!(
+            "{}; due to wake, held by {}",
+            asleep.reason,
+            held_by_label(held)
+        ),
+        None => format!("{}; wakes once {}", asleep.reason, asleep.wakes_when),
+    }
 }
 
 /// When the agent of a space restarts for the restart the daemon recorded:

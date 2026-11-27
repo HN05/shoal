@@ -693,3 +693,24 @@ fn durations_read_in_minutes_and_seconds() {
         "3m 12s"
     );
 }
+
+/// An asleep agent whose update came shows what holds back its restore,
+/// not the update it no longer waits for.
+#[test]
+fn an_asleep_agent_due_to_wake_shows_what_holds_its_restore() {
+    let mut asleep = crate::model::Asleep {
+        reason: "idle while the user is away".into(),
+        wakes_when: "an update arrives for it".into(),
+        keeps: Vec::new(),
+        held_by: None,
+    };
+    assert!(asleep_label(&asleep).ends_with("wakes once an update arrives for it"));
+
+    asleep.held_by = Some(HeldBy::MaxHeavyAgents);
+    let label = asleep_label(&asleep);
+    assert!(
+        label.ends_with("held by machine.max_heavy_agents"),
+        "{label}"
+    );
+    assert!(!label.contains("an update arrives"), "{label}");
+}

@@ -32,6 +32,9 @@ switched with Shift-Tab, approvals given for the session or a `/model` switch.
 
 - `Asleep` says why the agent sleeps and what wakes it. It names
   `shoal attach` and `shoal queue start`, which wake it now.
+  Once what wakes it has come, such as an update, the restore still waits for
+  a heavy slot or memory like any start. `Asleep` then names that hold
+  instead, such as `due to wake, held by machine.max_heavy_agents`.
 - `Keeps` lists the leases the agent keeps. Each simulator or containers lease
   shows when Shoal stops it, such as
   `simulator default (until 14:30), resource signing`.
