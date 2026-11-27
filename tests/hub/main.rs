@@ -433,12 +433,13 @@ fn a_machine_s_set_availability_shows_on_the_hub_and_the_machine() {
 }
 
 #[test]
-fn the_hub_lists_the_agent_tools_each_machine_has() {
+fn the_hub_lists_the_agents_each_machine_can_launch() {
     let hub = Machine::hub();
     let laptop = Machine::start("[agents.probe]\ncommand = ['sh']\n");
     laptop.join_through_command(&hub, "laptop");
     let has_probe = |member: &Value| {
-        (member["agents"].as_array()).is_some_and(|agents| agents.iter().any(|a| a == "probe"))
+        let agents = member["capacity"]["agents"].as_array();
+        agents.is_some_and(|agents| agents.iter().any(|a| a == "probe"))
     };
     let members = hub.members_once(|members| named(members, "laptop").is_some_and(has_probe));
     let own = members.iter().find(|member| member["hub"] == true).unwrap();
