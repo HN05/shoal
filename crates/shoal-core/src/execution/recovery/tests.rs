@@ -382,6 +382,35 @@ fn the_first_saved_turn_stays_through_later_saves() {
     assert_eq!(record.stage, Some(Stage::Stopped));
 }
 
+/// A save interrupted before it requests the agent queue's restore leaves
+/// no stopped record, which would otherwise read as a finished stop.
+#[test]
+fn a_stopped_record_follows_its_restore_request() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let recovery = Recovery {
+        narrowing: Default::default(),
+        mode: "worker".into(),
+        model: Default::default(),
+        agent: "claude".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: false,
+        proxy: None,
+    };
+    let (space, id) = (SpaceId::from("workspace"), ExecutionId::from("execution"));
+    // A directory where the request goes makes its write fail.
+    let record = record_path(&paths, &space, &id);
+    let request = record.with_file_name("execution.restore-request.json");
+    std::fs::create_dir_all(request.join("blocked")).unwrap();
+
+    let env = BTreeMap::from([("HERDR_ENV".to_owned(), "1".to_owned())]);
+    let saved = recovery.save(&paths, &space, &id, None, None, Restorer::Queue(env));
+
+    assert!(saved.is_err());
+    assert!(!record.exists());
+}
+
 #[test]
 fn a_restore_request_sits_beside_the_record_until_forgotten() {
     let root = tempfile::tempdir().unwrap();

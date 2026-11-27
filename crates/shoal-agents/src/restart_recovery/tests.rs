@@ -9,6 +9,7 @@ use crate::model::Workspace;
 use crate::process::identity::{Identity, IdentityExt};
 use crate::stand_in::Fixture;
 use crate::state::AgentState;
+use shoal_protocol::sessions::{HostName, Origin};
 use shoal_protocol::space_names::SpaceSelector;
 
 /// The service over the stand-in with a workspace, holding the lock the
@@ -63,7 +64,8 @@ async fn exited() -> Identity {
     identity
 }
 
-/// Record an execution as a restart leaves it, with the stop's handoff saved.
+/// Record an execution of the agent `fixture` as a restart leaves it, with the
+/// stop's handoff saved.
 async fn interrupted(
     locked: &Locked,
     id: &str,
@@ -81,6 +83,7 @@ async fn interrupted(
                 shoal_protocol::test_support::execution(id.as_str(), workspace_id.as_str());
             recorded.state = ExecutionState::Unknown;
             (recorded.wrapper, recorded.child, recorded.group_id) = (Some(wrapper), child, group);
+            recorded.agent = Some("fixture".into());
             seeds::execution(db, &recorded, None)
         })
         .await
@@ -148,11 +151,13 @@ async fn reconcile_once(fixture: &Fixture) -> Pending {
 }
 
 /// Restarting the machine ended every process of an earlier boot, though
-/// their recorded process group IDs may name processes of this one. An
-/// agent that saved no record leaves its session for `shoal resume`.
+/// their recorded process group IDs may name processes of this one. Its
+/// agents did not choose to stop: each is saved for the agent queue to
+/// restore, as a shutdown's stop saves it, the one a stop left half done
+/// too.
 #[tokio::test]
 async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_saved() {
-    use crate::execution::recovery::{LastSession, save_session};
+    use crate::execution::recovery::{LastSession, restore_requests, save_session};
     let locked = locked().await;
     let (paths, workspace) = (&locked.fixture.agents.paths, &locked.workspace);
     let (_alive, live) = sleeper();
@@ -160,6 +165,8 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     let stopping = Some(Stage::Stopping);
     interrupted(&locked, "rebooted", &earlier, Some(&earlier), stopping).await;
     interrupted(&locked, "unrecorded", &earlier, None, None).await;
+    // Without a session to resume, it needs `shoal resume` to pick one.
+    interrupted(&locked, "sessionless", &earlier, None, None).await;
     // A pass interrupted after keeping its session, which is gone.
     interrupted(&locked, "kept", &earlier, None, None).await;
     let kept_session = LastSession {
@@ -181,19 +188,9 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     // A recorded child keeps an execution of this boot that saved nothing.
     let wrapper = exited().await;
     interrupted(&locked, "this-boot", &wrapper, Some(&wrapper), None).await;
-    for id in ["unrecorded", "kept", "this-boot"] {
+    for id in ["unrecorded", "sessionless", "kept", "this-boot"] {
         fs::remove_file(record_path(paths, &workspace.id, &id.into())).unwrap();
     }
-    (locked.fixture.agents.store)
-        .run(|db| {
-            db.execute(
-                "UPDATE executions SET agent='fixture' WHERE id IN ('unrecorded','kept')",
-                [],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
     let unrecorded = ExecutionId::from("unrecorded");
     save_session(
         paths,
@@ -202,6 +199,8 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         &"rebooted-session".into(),
     )
     .unwrap();
+    let rebooted = ExecutionId::from("rebooted");
+    save_session(paths, &workspace.id, &rebooted, &"half-stopped".into()).unwrap();
     // The reboot ended its agent mid-turn, which its last session keeps.
     let selector = SpaceSelector::id(&workspace.id);
     let fixture = &locked.fixture;
@@ -227,29 +226,131 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         rebooted.stop_reason.as_deref(),
         Some("test memory pressure")
     );
-    let last = LastSession::all(&locked.fixture.agents.paths, &locked.workspace.id).unwrap();
-    assert_eq!(
-        last,
-        [
-            kept_session,
-            LastSession {
-                narrowing: Default::default(),
-                mode: "worker".into(),
-                model: Default::default(),
-                turn: Some(AgentState::Working),
-                execution: "unrecorded".into(),
-                agent: "fixture".into(),
-                session: Some("rebooted-session".into()),
-                moved: false,
-                copied: None,
-                converted: false,
-                handoff: None,
-                origin: None,
-                stop: None,
-            }
-        ]
-    );
+    // The one that saved nothing is saved as stopped mid-turn, with its session.
+    let unrecorded = record(&locked, "unrecorded").unwrap();
+    assert_eq!(unrecorded.stage, Some(Stage::Stopped));
+    assert_eq!(unrecorded.turn, Some(AgentState::Working));
+    assert_eq!(unrecorded.session, Some("rebooted-session".into()));
+    let requested: Vec<String> = (restore_requests(paths_of(&locked), &locked.workspace.id))
+        .unwrap()
+        .into_iter()
+        .map(|(id, _)| id.into())
+        .collect();
+    assert_eq!(requested, ["rebooted", "unrecorded"]);
+    assert!(record(&locked, "sessionless").is_some());
+    let last = LastSession::all(paths_of(&locked), &locked.workspace.id).unwrap();
+    assert_eq!(last, [kept_session]);
     assert!(blocked(&locked.fixture).is_empty());
+}
+
+/// A pass interrupted before it requested the restore of an earlier boot's
+/// agent leaves its record stopping, and the next pass requests it.
+#[tokio::test]
+async fn an_interrupted_save_of_an_earlier_boots_agent_is_finished_by_the_next_pass() {
+    use crate::execution::recovery::{restore_requests, save_session};
+    let locked = locked().await;
+    let (paths, workspace) = (paths_of(&locked), &locked.workspace);
+    let (_alive, live) = sleeper();
+    let earlier = live.recorded_in("an-earlier-boot");
+    interrupted(&locked, "rebooted", &earlier, None, None).await;
+    fs::remove_file(record_path(paths, &workspace.id, &"rebooted".into())).unwrap();
+    let rebooted = ExecutionId::from("rebooted");
+    save_session(paths, &workspace.id, &rebooted, &"session".into()).unwrap();
+    // A directory where the request goes makes its write fail.
+    let record_file = record_path(paths, &workspace.id, &rebooted);
+    let request = record_file.with_file_name("rebooted.restore-request.json");
+    fs::create_dir_all(request.join("blocked")).unwrap();
+
+    let agents = &locked.fixture.agents;
+    let failed = agents.reconcile_interrupted_agents(&*locked.fixture.daemon);
+    assert!(failed.await.is_err());
+    assert_eq!(
+        record(&locked, "rebooted").unwrap().stage,
+        Some(Stage::Stopping)
+    );
+
+    fs::remove_dir_all(&request).unwrap();
+    reconcile_once(&locked.fixture).await;
+    assert_eq!(
+        record(&locked, "rebooted").unwrap().stage,
+        Some(Stage::Stopped)
+    );
+    let requested = restore_requests(paths, &workspace.id).unwrap();
+    assert_eq!(requested.len(), 1);
+}
+
+/// Record an execution of an earlier boot, run by `wrapper`, whose agent ran
+/// in `origin`, without a recovery record.
+async fn ended_in_place(locked: &Locked, id: &str, wrapper: &Identity, origin: &Origin) {
+    let (id, space) = (id.to_owned(), locked.workspace.id.clone());
+    let (wrapper, origin) = (wrapper.clone(), origin.clone());
+    (locked.fixture.agents.store)
+        .run(move |db| {
+            let mut recorded = shoal_protocol::test_support::execution(&id, space.as_str());
+            recorded.state = ExecutionState::Unknown;
+            recorded.wrapper = Some(wrapper);
+            (recorded.origin, recorded.agent) = (Some(origin), Some("fixture".into()));
+            seeds::execution(db, &recorded, None)
+        })
+        .await
+        .unwrap();
+}
+
+/// An earlier boot's agent is saved in its terminal host's place, whether it
+/// saved no record or one without that place, and a record that cannot be
+/// read stays as it is.
+#[tokio::test]
+async fn an_earlier_boots_agent_keeps_its_place_and_an_unreadable_record() {
+    let locked = locked().await;
+    let (paths, workspace) = (paths_of(&locked), &locked.workspace);
+    let (_alive, live) = sleeper();
+    let earlier = live.recorded_in("an-earlier-boot");
+    let origin = Origin::created(HostName::Zmx, "shared".into());
+    ended_in_place(&locked, "placed", &earlier, &origin).await;
+    ended_in_place(&locked, "stopping", &earlier, &origin).await;
+    let stopping = serde_json::json!({"agent": "fixture", "stage": "stopping", "mode": "worker"});
+    let stopping_path = record_path(paths, &workspace.id, &"stopping".into());
+    fs::create_dir_all(stopping_path.parent().unwrap()).unwrap();
+    fs::write(stopping_path, stopping.to_string()).unwrap();
+    interrupted(&locked, "unreadable", &earlier, None, None).await;
+    let unreadable = record_path(paths, &workspace.id, &"unreadable".into());
+    fs::write(&unreadable, "{").unwrap();
+
+    reconcile_once(&locked.fixture).await;
+
+    assert_eq!(
+        record(&locked, "placed").unwrap().origin,
+        Some(origin.clone())
+    );
+    assert_eq!(record(&locked, "stopping").unwrap().origin, Some(origin));
+    assert_eq!(fs::read_to_string(&unreadable).unwrap(), "{");
+}
+
+/// A protection stop whose wrapper saved its record but ended with its boot
+/// before the restore was queued is saved for the agent queue.
+#[tokio::test]
+async fn an_earlier_boots_agent_its_wrapper_waited_to_restore_is_requested() {
+    use crate::execution::recovery::{restore_requests, save_session};
+    let locked = locked().await;
+    let (paths, workspace) = (paths_of(&locked), &locked.workspace);
+    let (_alive, live) = sleeper();
+    let earlier = live.recorded_in("an-earlier-boot");
+    interrupted(&locked, "waited", &earlier, None, Some(Stage::Stopped)).await;
+    let path = record_path(paths, &workspace.id, &"waited".into());
+    let mut saved: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    saved["waiting"] = serde_json::to_value(&earlier).unwrap();
+    fs::write(&path, saved.to_string()).unwrap();
+    save_session(paths, &workspace.id, &"waited".into(), &"session".into()).unwrap();
+
+    reconcile_once(&locked.fixture).await;
+
+    let requested = restore_requests(paths, &workspace.id).unwrap();
+    assert_eq!(requested.len(), 1);
+}
+
+fn paths_of(locked: &Locked) -> &crate::paths::Paths {
+    &locked.fixture.agents.paths
 }
 
 #[tokio::test]

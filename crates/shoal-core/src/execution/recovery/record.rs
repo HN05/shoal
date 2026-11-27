@@ -85,7 +85,10 @@ impl Recovery {
     }
 }
 
-/// Save `record` with what `restorer` needs to bring its agent back.
+/// Save `record` with what `restorer` needs to bring its agent back. A
+/// request for the agent queue comes before the record, so an interruption
+/// between the two leaves no stopped record without its restore; the daemon
+/// queues no request while its execution runs.
 fn save_restorable(
     paths: &Paths,
     space_id: &SpaceId,
@@ -93,19 +96,34 @@ fn save_restorable(
     mut record: Record,
     restorer: Restorer,
 ) -> Result<PathBuf> {
-    if let Restorer::Wrapper(wrapper) = &restorer {
-        record.waiting = Some(wrapper.clone());
+    match &restorer {
+        Restorer::Wrapper(wrapper) => record.waiting = Some(wrapper.clone()),
+        Restorer::Queue(env) => request_restore(paths, space_id, id, env)?,
+        Restorer::User => {}
     }
-    let path = write_record(paths, space_id, id, record)?;
-    if let Restorer::Queue(env) = &restorer {
-        request_restore(paths, space_id, id, env)?;
-    }
-    Ok(path)
+    write_record(paths, space_id, id, record)
+}
+
+/// Save `record` as a stop of the agent of `id` that has yet to finish,
+/// which [`save_stopped`] completes.
+pub fn save_stopping(
+    paths: &Paths,
+    space_id: &SpaceId,
+    id: &ExecutionId,
+    record: Record,
+) -> Result<PathBuf> {
+    let record = Record {
+        stage: Some(Stage::Stopping),
+        ..record
+    };
+    write_record(paths, space_id, id, record)
 }
 
 /// Save `record`, an agent stopped as `id` without a wrapper, such as a
-/// chat's an upgrade stopped, with a request to restore it with `env`,
-/// the variables of its terminal host, when it comes back on its own.
+/// chat's an upgrade stopped, with a request to restore it with `restore`,
+/// the variables of its terminal host, when it comes back on its own. As the
+/// request comes first, a record that does not yet say stopped tells a caller
+/// interrupted between the two to save it again.
 pub fn save_stopped(
     paths: &Paths,
     space_id: &SpaceId,
