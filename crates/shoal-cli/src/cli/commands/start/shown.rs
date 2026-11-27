@@ -1,5 +1,6 @@
-//! A start on another joined machine that `--here` or `--focus` shows in this
-//! terminal, which attaches to the agent through that machine.
+//! A start on another joined machine that this terminal shows, attaching to the
+//! agent through that machine: one `--machine` names with `--here` or
+//! `--focus`, or one whose agent would run here that the hub placed there.
 use anyhow::{Result, ensure};
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::{Launched, Started};
@@ -26,6 +27,12 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -
         return super::attach::send(ctx, launch, (false, None), None).await;
     }
     let launched = crate::client::launches::launch(&ctx.paths, launch).await?;
+    attach_launched(ctx, launched).await
+}
+
+/// Attach this terminal to the agent `launched` started on another machine,
+/// once a workspace's preparation there ends.
+pub(super) async fn attach_launched(ctx: &Context, launched: Launched) -> Result<i32> {
     let (space, machine) = (launched.space.id.clone(), launched.machine.clone());
     if let Some(code) = await_preparation(ctx, launched, machine.as_deref()).await? {
         return Ok(code);
