@@ -1,7 +1,7 @@
 //! The reads of a space's own row, its workspace's and its completion that
 //! the subsystems share.
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, Row};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
     model::{SpaceKind, Workspace},
@@ -78,15 +78,19 @@ pub fn find_workspace(db: &Connection, id: &SpaceId) -> Result<Option<Workspace>
 }
 
 pub fn is_workspace(db: &Connection, id: &SpaceId) -> Result<bool> {
-    exists(
-        db,
-        "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
-        [id],
-    )
+    is_kind(db, id, SpaceKind::Workspace)
 }
 
 pub fn is_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
-    exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
+    is_kind(db, id, SpaceKind::Chat)
+}
+
+fn is_kind(db: &Connection, id: &SpaceId, kind: SpaceKind) -> Result<bool> {
+    exists(
+        db,
+        "SELECT 1 FROM spaces WHERE id=?1 AND kind=?2",
+        params![id, kind],
+    )
 }
 
 /// Whether `shoal done` recorded the space `id`'s work as finished.

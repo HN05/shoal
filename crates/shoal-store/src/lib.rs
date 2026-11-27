@@ -21,7 +21,7 @@ pub use executions::{
 };
 pub use guards::{
     ensure_no_pending_move, ensure_no_pending_rename, ensure_path_unrecorded,
-    ensure_repository_not_moving, not_ready, repository_removing, require_ready,
+    ensure_repository_not_moving, not_ready, repository_moving, repository_removing, require_ready,
     require_ready_space,
 };
 pub use migrations::SCHEMA_VERSION;

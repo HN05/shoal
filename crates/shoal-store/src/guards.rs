@@ -61,14 +61,19 @@ pub fn ensure_no_pending_move(db: &Connection, workspace_id: &SpaceId) -> Result
 /// Refuse new users of a repository whose directory is moving.
 pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
     ensure!(
-        !exists(
-            db,
-            "SELECT 1 FROM repository_moves WHERE repository_id=?1",
-            [repository_id]
-        )?,
+        !repository_moving(db, repository_id)?,
         "repository move is incomplete; run shoal repo move again"
     );
     Ok(())
+}
+
+/// Whether the repository's directory move has begun and not finished.
+pub fn repository_moving(db: &Connection, repository_id: &RepositoryId) -> Result<bool> {
+    exists(
+        db,
+        "SELECT 1 FROM repository_moves WHERE repository_id=?1",
+        [repository_id],
+    )
 }
 
 /// Refuse a change to the records of the space `id`, such as its links or

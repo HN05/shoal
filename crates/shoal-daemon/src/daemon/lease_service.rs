@@ -251,12 +251,10 @@ impl Records for DaemonRecords {
         if !store::exists(db, registered, params![id, path])? {
             return Ok(Some(Unborrowable::Registration));
         }
-        let removing = "SELECT 1 FROM repository_removals WHERE repository_id=?1";
-        if store::exists(db, removing, [id])? {
+        if store::repository_removing(db, id)? {
             return Ok(Some(Unborrowable::Removal));
         }
-        let moving = "SELECT 1 FROM repository_moves WHERE repository_id=?1";
-        if store::exists(db, moving, [id])? {
+        if store::repository_moving(db, id)? {
             return Ok(Some(Unborrowable::Move));
         }
         let worktree = "SELECT 1 FROM workspaces WHERE path=?1";
