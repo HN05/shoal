@@ -2,12 +2,12 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, Transaction, params};
 
 use super::{Delivery, Queued, RecordCopies};
 use crate::daemon::Records;
 use shoal_daemon_base::{
-    alerts::{self, About, Alert, COLUMNS, FROM, MAX_UNREAD, MAX_UNREAD_BYTES, NewAlert, Unread},
+    alerts::{self, About, Alert, MAX_UNREAD, MAX_UNREAD_BYTES, NewAlert, Unread},
     notifications,
 };
 use shoal_ids::space_ids::SpaceId;
@@ -31,31 +31,9 @@ pub(crate) fn insert(
     for_user: bool,
     copied: Option<&RecordCopies>,
 ) -> Result<Queued> {
-    let attachments = alert.attachments_column()?;
     records.ensure_takes_alerts(tx, space_id)?;
     let wakes = delivery == Delivery::Wake;
-    // Names repeat: an alert names the space its ID names, and is the same
-    // as another only when both name that space.
-    let about = &alert.about;
-    let pending: Option<(i64, bool)> = tx
-        .query_row(
-            "SELECT id,wakes FROM alerts
-                WHERE recipient_id=?1 AND read=0 AND message=?2 AND attachments=?3
-                    AND space IS ?4 AND space_id IS ?5 AND kind=?6 AND sender=?7
-                    AND relayed_files=?8",
-            params![
-                space_id,
-                alert.message,
-                attachments,
-                about.name,
-                about.id,
-                alert.kind,
-                alert.sender,
-                alert.relayed_column()?
-            ],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()?;
+    let pending = identical_unread(tx, space_id, alert)?;
     if let Some(copied) = copied {
         // An identical alert's copies may take new titles.
         copied(tx, space_id)?;
@@ -65,9 +43,23 @@ pub(crate) fn insert(
         if woke || !wakes {
             return Ok(Queued { id, new: false });
         }
-        tx.execute("UPDATE alerts SET wakes=1 WHERE id=?1", [id])?;
+        wake_with(tx, id)?;
         return Ok(Queued { id, new: true });
     }
+    ensure_room(tx, space_id)?;
+    let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
+    ensure_fits(tx, space_id)?;
+    Ok(Queued { id, new: true })
+}
+
+/// Have the unread alert `id` wake its agent.
+fn wake_with(tx: &Transaction<'_>, id: i64) -> Result<()> {
+    tx.execute("UPDATE alerts SET wakes=1 WHERE id=?1", [id])?;
+    Ok(())
+}
+
+/// Fail when the space `space_id` holds as many unread alerts as one may.
+fn ensure_room(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<()> {
     let unread: i64 = tx.query_row(
         "SELECT COUNT(*) FROM alerts WHERE recipient_id=?1 AND read=0",
         [space_id],
@@ -77,9 +69,40 @@ pub(crate) fn insert(
         unread < MAX_UNREAD,
         "the space already has {MAX_UNREAD} unread alerts"
     );
-    let id = alerts::insert(tx, Some(space_id), alert, wakes, for_user)?;
-    ensure_fits(tx, space_id)?;
-    Ok(Queued { id, new: true })
+    Ok(())
+}
+
+/// The ID of an unread alert to the space `space_id` identical to `alert`,
+/// with whether it wakes the agent.
+fn identical_unread(
+    tx: &Transaction<'_>,
+    space_id: &SpaceId,
+    alert: &NewAlert,
+) -> Result<Option<(i64, bool)>> {
+    // Names repeat: an alert names the space its ID names, and is the same
+    // as another only when both name that space.
+    let about = &alert.about;
+    let candidates = tx
+        .prepare(
+            "SELECT id,wakes FROM alerts
+                WHERE recipient_id=?1 AND read=0 AND message=?2
+                    AND space IS ?3 AND space_id IS ?4 AND kind=?5 AND sender=?6
+                    AND relayed_files=?7 ORDER BY id",
+        )?
+        .query_map(
+            params![
+                space_id,
+                alert.message,
+                about.name,
+                about.id,
+                alert.kind,
+                alert.sender,
+                alert.relayed_column()?
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    alerts::attaching_same(tx, alert, candidates)
 }
 
 /// Fail when a space whose unread alerts hold any of the files at `paths`,
@@ -88,9 +111,10 @@ pub(crate) fn insert(
 pub fn ensure_holders_fit(db: &Connection, paths: &[PathBuf]) -> Result<()> {
     let holders = db
         .prepare(
-            "SELECT DISTINCT a.recipient_id FROM alerts a, json_each(a.attachments) j
+            "SELECT DISTINCT a.recipient_id FROM alerts a
+                JOIN alert_attachments t ON t.alert_id=a.id
                 WHERE a.recipient_id IS NOT NULL AND a.read=0
-                    AND j.value IN (SELECT value FROM json_each(?1))",
+                    AND t.path IN (SELECT value FROM json_each(?1))",
         )?
         .query_map([serde_json::to_string(paths)?], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<SpaceId>>>()?;
@@ -142,17 +166,17 @@ fn one_delivery(mut alerts: Vec<Alert>) -> Result<Vec<Alert>> {
 /// Every unread alert of the space `space_id`, oldest first, and whether
 /// one of them wakes its agent.
 fn all_unread(db: &Connection, space_id: &SpaceId) -> Result<Unread> {
-    let mut statement = db.prepare(&format!(
-        "SELECT {COLUMNS},a.wakes FROM {FROM}
-            WHERE a.recipient_id=?1 AND a.read=0 ORDER BY a.id"
-    ))?;
-    let mut rows = statement.query([space_id])?;
-    let mut unread = Unread::default();
-    while let Some(row) = rows.next()? {
-        unread.alerts.push(alerts::row(row)?);
-        unread.wakes |= row.get::<_, bool>("wakes")?;
-    }
-    Ok(unread)
+    let alerts = alerts::select(
+        db,
+        "WHERE a.recipient_id=?1 AND a.read=0 ORDER BY a.id",
+        [space_id],
+    )?;
+    let wakes = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM alerts WHERE recipient_id=?1 AND read=0 AND wakes)",
+        [space_id],
+        |row| row.get(0),
+    )?;
+    Ok(Unread { alerts, wakes })
 }
 
 /// Whether an unread alert from the user waits for the agent of the space
@@ -168,13 +192,11 @@ pub fn user_alert_unread(db: &Connection, space_id: &SpaceId) -> Result<bool> {
 
 /// Every space's unread alerts, oldest first, as its agent reads them.
 pub fn every_unread(db: &Connection) -> Result<Vec<Alert>> {
-    Ok(db
-        .prepare(&format!(
-            "SELECT {COLUMNS} FROM {FROM}
-                WHERE a.recipient_id IS NOT NULL AND a.read=0 ORDER BY a.id"
-        ))?
-        .query_map([], alerts::row)?
-        .collect::<rusqlite::Result<_>>()?)
+    alerts::select(
+        db,
+        "WHERE a.recipient_id IS NOT NULL AND a.read=0 ORDER BY a.id",
+        [],
+    )
 }
 
 /// Mark the alert `id` of the space `space_id` read, which its agent
@@ -192,13 +214,26 @@ pub(crate) fn mark_delivered(tx: &Transaction<'_>, space_id: &SpaceId, id: i64) 
 /// files they attach, in the transaction that deletes the space and with it
 /// the alerts. Returns the last alert recorded.
 pub fn hand_to_user(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Option<i64>> {
+    let mut last = None;
+    for alert in for_user_unread(tx, space_id)? {
+        let recorded = notifications::insert(tx, &alert)?;
+        if recorded.new {
+            last = Some(recorded.id);
+        }
+    }
+    Ok(last)
+}
+
+/// The unread alerts of the space `space_id` that the user would have
+/// received without its agent, oldest first, as the user's alerts.
+fn for_user_unread(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Vec<NewAlert>> {
     let unread = tx
         .prepare(
-            "SELECT kind,sender,space,space_id,message,attachments,relayed_files FROM alerts
+            "SELECT id,kind,sender,space,space_id,message,relayed_files FROM alerts
                 WHERE recipient_id=?1 AND read=0 AND for_user=1 ORDER BY id",
         )?
         .query_map([space_id], |row| {
-            Ok(NewAlert {
+            let alert = NewAlert {
                 kind: row.get("kind")?,
                 sender: row.get("sender")?,
                 about: About {
@@ -207,17 +242,19 @@ pub fn hand_to_user(tx: &Transaction<'_>, space_id: &SpaceId) -> Result<Option<i
                     subject: None,
                 },
                 message: row.get("message")?,
-                attachments: shoal_store::json_column(row, "attachments")?.unwrap_or_default(),
+                attachments: Vec::new(),
                 relayed: shoal_store::json_column(row, "relayed_files")?.unwrap_or_default(),
-            })
+            };
+            Ok((row.get::<_, i64>("id")?, alert))
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
-    let mut last = None;
-    for alert in unread {
-        let recorded = notifications::insert(tx, &alert)?;
-        if recorded.new {
-            last = Some(recorded.id);
-        }
-    }
-    Ok(last)
+    unread
+        .into_iter()
+        .map(|(id, alert)| {
+            Ok(NewAlert {
+                attachments: alerts::attachments(tx, id)?,
+                ..alert
+            })
+        })
+        .collect()
 }

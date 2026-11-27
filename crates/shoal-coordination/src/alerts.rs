@@ -5,7 +5,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
 pub use shoal_daemon_base::alerts::{
-    About, Alert, AlertKind, COLUMNS, FROM, NewAlert, Sender, Sent, rebase_attachments, row,
+    About, Alert, AlertKind, NewAlert, Sender, Sent, rebase_attachments, select,
 };
 
 use shoal_protocol::files::SentFile;

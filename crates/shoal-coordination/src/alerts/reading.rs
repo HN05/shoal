@@ -11,7 +11,7 @@ use shoal_protocol::{
     alerts::Cleared, hub::alerts::AlertMarks, protocol::AlertsFor, space_names::SpaceSelector,
 };
 
-use super::{Alert, COLUMNS, FROM};
+use super::Alert;
 use crate::{config::permissions::PermissionKey, scope::Caller};
 
 /// What reading the user's alerts takes from a scoped caller.
@@ -183,14 +183,11 @@ fn listed(db: &Connection, recipient: Option<&SpaceId>, unread_only: bool) -> Re
         true => String::new(),
         false => format!("WHERE {}", filters.join(" AND ")),
     };
-    let mut statement = db.prepare(&format!(
-        "SELECT {COLUMNS} FROM {FROM} {filter} ORDER BY a.id"
-    ))?;
-    let rows = match recipient {
-        Some(recipient) => statement.query_map([recipient], super::row)?,
-        None => statement.query_map([], super::row)?,
-    };
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
+    let clauses = format!("{filter} ORDER BY a.id");
+    match recipient {
+        Some(recipient) => super::select(db, &clauses, [recipient]),
+        None => super::select(db, &clauses, []),
+    }
 }
 
 /// The space each of the alerts `ids` is for, none for the user; an alert

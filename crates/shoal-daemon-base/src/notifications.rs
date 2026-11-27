@@ -3,13 +3,13 @@
 use shoal_ids::space_ids::SpaceId;
 
 use anyhow::Result;
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 
 use futures_util::future::BoxFuture;
 use tokio::sync::watch;
 
 pub use crate::alerts::About;
-use crate::alerts::{self, COLUMNS, FROM, NewAlert};
+use crate::alerts::{self, NewAlert};
 use crate::log;
 use crate::store::Store;
 use shoal_ids::member_ids::MemberId;
@@ -73,32 +73,39 @@ pub struct Recorded {
 /// Record `alert` for the user in the caller's transaction. Callers wake
 /// watchers with [`Notifications::recorded`] after committing a new one.
 pub fn insert(tx: &rusqlite::Transaction<'_>, alert: &NewAlert) -> Result<Recorded> {
-    if alert.kind.collapses() {
-        let about = &alert.about;
-        let pending: Option<i64> = tx
-            .query_row(
-                "SELECT id FROM alerts WHERE recipient_id IS NULL AND read=0 AND space IS ?1
-                    AND space_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
-                    AND attachments=?6 AND sender=?7 AND relayed_files=?8",
-                params![
-                    about.name,
-                    about.id,
-                    about.subject,
-                    alert.kind,
-                    alert.message,
-                    alert.attachments_column()?,
-                    alert.sender,
-                    alert.relayed_column()?
-                ],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(id) = pending {
-            return Ok(Recorded { id, new: false });
-        }
+    if alert.kind.collapses()
+        && let Some(id) = identical_unread(tx, alert)?
+    {
+        return Ok(Recorded { id, new: false });
     }
     let id = alerts::insert(tx, None, alert, false, false)?;
     Ok(Recorded { id, new: true })
+}
+
+/// The ID of an unread alert to the user identical to `alert`.
+fn identical_unread(tx: &rusqlite::Transaction<'_>, alert: &NewAlert) -> Result<Option<i64>> {
+    let about = &alert.about;
+    let candidates = tx
+        .prepare(
+            "SELECT id FROM alerts WHERE recipient_id IS NULL AND read=0 AND space IS ?1
+                AND space_id IS ?2 AND subject IS ?3 AND kind=?4 AND message=?5
+                AND sender=?6 AND relayed_files=?7 ORDER BY id",
+        )?
+        .query_map(
+            params![
+                about.name,
+                about.id,
+                about.subject,
+                alert.kind,
+                alert.message,
+                alert.sender,
+                alert.relayed_column()?
+            ],
+            |row| Ok((row.get(0)?, ())),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let identical = alerts::attaching_same(tx, alert, candidates)?;
+    Ok(identical.map(|(id, ())| id))
 }
 
 /// Delete the unread notification of `kind` recording `message` for the
@@ -310,23 +317,12 @@ impl Notifications {
     pub async fn list(&self, unread_only: bool, limit: u32) -> Result<Vec<Alert>> {
         let here = self
             .store
-            .run(move |db| {
-                if unread_only {
-                    return Ok(db
-                        .prepare(&format!(
-                            "SELECT {COLUMNS} FROM {FROM}
-                                WHERE a.recipient_id IS NULL AND a.read=0 ORDER BY a.id LIMIT ?1"
-                        ))?
-                        .query_map([limit], alerts::row)?
-                        .collect::<rusqlite::Result<Vec<_>>>()?);
-                }
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {COLUMNS} FROM {FROM}
-                            WHERE a.recipient_id IS NULL ORDER BY a.id DESC LIMIT ?1"
-                    ))?
-                    .query_map([limit], alerts::row)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
+            .read(move |tx| {
+                let clauses = match unread_only {
+                    true => "WHERE a.recipient_id IS NULL AND a.read=0 ORDER BY a.id LIMIT ?1",
+                    false => "WHERE a.recipient_id IS NULL ORDER BY a.id DESC LIMIT ?1",
+                };
+                alerts::select(tx, clauses, [limit])
             })
             .await?;
         let elsewhere = self.copies().into_iter();
@@ -340,15 +336,12 @@ impl Notifications {
         let here = after.here;
         let here = self
             .store
-            .run(move |db| {
-                Ok(db
-                    .prepare(&format!(
-                        "SELECT {COLUMNS} FROM {FROM}
-                            WHERE a.recipient_id IS NULL AND a.read=0 AND a.id>?1
-                            ORDER BY a.id LIMIT ?2"
-                    ))?
-                    .query_map(params![here, limit], alerts::row)?
-                    .collect::<rusqlite::Result<Vec<_>>>()?)
+            .read(move |tx| {
+                alerts::select(
+                    tx,
+                    "WHERE a.recipient_id IS NULL AND a.read=0 AND a.id>?1 ORDER BY a.id LIMIT ?2",
+                    params![here, limit],
+                )
             })
             .await?;
         let elsewhere = self.copies().into_iter();
@@ -422,11 +415,7 @@ impl Notifications {
 
 /// Every alert to the user this machine keeps, by number.
 pub fn kept(db: &rusqlite::Connection) -> Result<Vec<Alert>> {
-    let mut statement = db.prepare(&format!(
-        "SELECT {COLUMNS} FROM {FROM} WHERE a.recipient_id IS NULL ORDER BY a.id"
-    ))?;
-    let alerts = statement.query_map([], alerts::row)?;
-    Ok(alerts.collect::<rusqlite::Result<_>>()?)
+    alerts::select(db, "WHERE a.recipient_id IS NULL ORDER BY a.id", [])
 }
 
 /// `here` and `elsewhere` in the order they were recorded.

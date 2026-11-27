@@ -753,7 +753,6 @@ CREATE TABLE alerts (
     space_id TEXT,
     subject TEXT,
     message TEXT NOT NULL,
-    attachments TEXT NOT NULL DEFAULT '[]',
     wakes INTEGER NOT NULL DEFAULT 1 CHECK(wakes IN (0,1)),
     for_user INTEGER NOT NULL DEFAULT 0 CHECK(for_user IN (0,1)),
     read INTEGER NOT NULL DEFAULT 0 CHECK(read IN (0,1)), in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)), relayed_files TEXT NOT NULL DEFAULT '[]',
@@ -1150,6 +1149,13 @@ CREATE TABLE "space_conversions" (
     record TEXT NOT NULL
 );
 
+CREATE TABLE alert_attachments (
+    alert_id INTEGER NOT NULL REFERENCES alerts(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    position INTEGER NOT NULL,
+    path TEXT NOT NULL,
+    PRIMARY KEY(alert_id, position)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1271,6 +1277,8 @@ CREATE INDEX space_events_kind ON space_events(space_id, kind, id);
 CREATE INDEX space_events_child ON space_events(child_id) WHERE child_id IS NOT NULL;
 
 CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
+
+CREATE INDEX alert_attachments_path ON alert_attachments(path);
 
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL

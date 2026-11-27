@@ -1,9 +1,9 @@
 //! Sending alerts and withdrawing unread ones.
 use crate::{Coordination, daemon::Daemon};
 use anyhow::{Context as _, Result, bail, ensure};
-use rusqlite::{OptionalExtension as _, Transaction, params};
+use rusqlite::{Transaction, params};
 
-use super::{About, Alert, COLUMNS, FROM, NewAlert, Reader, Recipients, Route, Sender, Sent};
+use super::{About, Alert, NewAlert, Reader, Recipients, Route, Sender, Sent};
 use crate::{
     model::{Space, SpaceKind},
     repository::Selector,
@@ -387,17 +387,14 @@ impl Withdrawn {
             Some(_) => Sender::Space,
             None => Sender::User,
         };
-        let alert = tx
-            .query_row(
-                &format!(
-                    "SELECT {COLUMNS} FROM {FROM} WHERE a.id=?1 AND a.sender=?2 \
-                     AND a.space_id IS ?3 AND (?4 IS NULL OR a.recipient_id=?4)"
-                ),
-                params![id, sender, space, recipient],
-                super::row,
-            )
-            .optional()?
-            .with_context(|| format!("you sent no alert {id}"))?;
+        let alert = super::select(
+            tx,
+            "WHERE a.id=?1 AND a.sender=?2 AND a.space_id IS ?3 \
+                AND (?4 IS NULL OR a.recipient_id=?4)",
+            params![id, sender, space, recipient],
+        )?
+        .pop()
+        .with_context(|| format!("you sent no alert {id}"))?;
         ensure!(
             !alert.read,
             "alert {id} was already read; send a correction with shoal send"
