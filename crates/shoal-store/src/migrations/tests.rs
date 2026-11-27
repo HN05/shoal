@@ -249,6 +249,7 @@ mod journal_columns;
 mod journal_shapes;
 mod review_targets;
 mod schema;
+mod thread_outcomes;
 
 /// A thread at the floor where the holder offered choices twice, the user
 /// picked the second of the first offer, a post on the holder's own side
@@ -489,7 +490,7 @@ fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
         Some(serde_json::json!({"post": 4, "action": "1"}))
     );
     let outcome: String = db.query_row("SELECT outcome FROM threads", [], |row| row.get(0))?;
-    assert_eq!(outcome, r#"{"outcome":"answered"}"#);
+    assert_eq!(outcome, "answered");
     assert_eq!(journaled(&db)?, before);
     // The journal records the posts that come after.
     db.execute(

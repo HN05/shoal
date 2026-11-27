@@ -242,7 +242,7 @@ fn renames_threads_and_children_reach_their_spaces_logs() -> Result<()> {
              VALUES (1,1,'opener','space','fix','Postgres or SQLite?');
          INSERT INTO thread_posts(thread_id,created_at,side,sender,text,forwards,forwarded_to)
              VALUES (1,2,'holder','user','You decide',1,'parent');
-         UPDATE threads SET outcome=json_object('outcome','answered'),resolved_by='space',resolved_at=3
+         UPDATE threads SET outcome='answered',resolved_by='space',resolved_at=3
              WHERE id=1;
          DELETE FROM spaces WHERE id='chat';
          DELETE FROM spaces WHERE id='child';

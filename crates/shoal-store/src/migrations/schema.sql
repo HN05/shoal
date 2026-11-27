@@ -751,7 +751,7 @@ CREATE TABLE threads (
     outcome TEXT,
     resolved_by TEXT CHECK(resolved_by IN ('user','space','shoal')),
     resolver_id TEXT,
-    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER, holder_name TEXT, holder_number INTEGER, held INTEGER NOT NULL DEFAULT 0 CHECK(held IN (0,1)), opener_id TEXT, opener_name TEXT, opener_number INTEGER,
+    resolved_at INTEGER, severity TEXT CHECK(severity IN ('blocker','should-fix','nit')), review_id INTEGER, holder_name TEXT, holder_number INTEGER, held INTEGER NOT NULL DEFAULT 0 CHECK(held IN (0,1)), opener_id TEXT, opener_name TEXT, opener_number INTEGER, cause TEXT, outcome_details TEXT,
     CHECK((outcome IS NULL) = (resolved_by IS NULL)
         AND (outcome IS NULL) = (resolved_at IS NULL))
 );
@@ -1691,13 +1691,6 @@ CREATE TRIGGER thread_forwarded AFTER INSERT ON thread_posts WHEN NEW.forwards B
         FROM threads WHERE id=NEW.thread_id AND NOT held;
 END;
 
-CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome ON threads
-WHEN OLD.outcome IS NOT NEW.outcome AND NOT NEW.held BEGIN
-    SELECT journal_append('thread_resolved', NEW.space_id,
-        json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name,
-            'outcome', json(NEW.outcome)));
-END;
-
 CREATE TRIGGER space_events_retention AFTER INSERT ON space_events
 WHEN NEW.bulk BEGIN
     UPDATE journal_pruned SET id=MAX(id, COALESCE((
@@ -1719,4 +1712,13 @@ CREATE TRIGGER hub_packages_handed_over AFTER UPDATE OF member_id ON hub_spaces
     WHEN OLD.member_id <> NEW.member_id BEGIN
     DELETE FROM hub_packages
         WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
+END;
+
+CREATE TRIGGER thread_resolved AFTER UPDATE OF outcome,cause,outcome_details ON threads
+WHEN (OLD.outcome IS NOT NEW.outcome OR OLD.cause IS NOT NEW.cause
+        OR OLD.outcome_details IS NOT NEW.outcome_details)
+    AND NOT NEW.held BEGIN
+    SELECT journal_append('thread_resolved', NEW.space_id,
+        json_object('space_number', NEW.space_number, 'number', NEW.number, 'name', NEW.name,
+            'outcome', NEW.outcome));
 END;

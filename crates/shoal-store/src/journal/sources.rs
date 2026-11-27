@@ -340,12 +340,7 @@ struct Thread {
     number: u32,
     name: String,
     #[serde(default)]
-    outcome: Option<Outcome>,
-}
-
-#[derive(Deserialize)]
-struct Outcome {
-    outcome: shoal_protocol::threads::OutcomeKind,
+    outcome: Option<shoal_protocol::threads::OutcomeKind>,
 }
 
 impl Source for Thread {
@@ -366,7 +361,7 @@ impl Thread {
     /// it; none for a thread its space's number no longer numbers.
     fn thread(self, kind: EventKind) -> Option<ThreadEvent> {
         let outcome = match kind {
-            EventKind::ThreadResolved => self.outcome.map(|outcome| outcome.outcome),
+            EventKind::ThreadResolved => self.outcome,
             _ => None,
         };
         Some(ThreadEvent {

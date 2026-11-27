@@ -26,6 +26,7 @@ mod delivery;
 pub mod findings;
 mod forwarding;
 mod moving;
+mod outcomes;
 mod parties;
 pub mod posting;
 mod reading;

@@ -8,8 +8,8 @@ use shoal_protocol::{
     changes::MAX_ENTRIES_BYTES,
     space_names::SpaceName,
     threads::{
-        Finding, Holder, MAX_THREAD_BYTES, NewPost, Outcome, Post, Resolution, Sender, Side,
-        Thread, ThreadKind, ThreadSpace,
+        Finding, Holder, MAX_THREAD_BYTES, NewPost, Post, Resolution, Sender, Side, Thread,
+        ThreadKind, ThreadSpace,
     },
 };
 
@@ -31,7 +31,8 @@ const THREADS: &str = "SELECT t.id,t.space_number,t.number,t.space_id,
         COALESCE(h.name,t.holder_name) AS holder_name,
         COALESCE(h.number,t.holder_number) AS holder_number,t.opener_id,
         COALESCE(o.name,t.opener_name) AS opener_name,
-        COALESCE(o.number,t.opener_number) AS opener_number,t.outcome,t.resolved_by,t.resolver_id,
+        COALESCE(o.number,t.opener_number) AS opener_number,t.outcome,t.cause,t.outcome_details,
+        t.resolved_by,t.resolver_id,
         t.resolved_at,t.severity,t.review_id,t.held,EXISTS (SELECT 1 FROM space_current_thread c
             WHERE c.thread_id=t.id AND c.space_id=t.holder_id) AS working
     FROM threads t LEFT JOIN spaces s ON s.id=t.space_id LEFT JOIN spaces h ON h.id=t.holder_id
@@ -54,7 +55,7 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
             number: row.get("opener_number")?,
         }),
     };
-    let resolution = match shoal_store::json_column::<Outcome>(row, "outcome")? {
+    let resolution = match super::outcomes::read(row)? {
         None => None,
         Some(outcome) => Some(Resolution {
             outcome,
@@ -573,15 +574,22 @@ pub(super) fn set_resolution(
     id: i64,
     resolution: Option<&Resolution>,
 ) -> Result<()> {
-    let outcome = match resolution {
-        Some(resolution) => Some(serde_json::to_string(&resolution.outcome)?),
-        None => None,
+    let (outcome, cause, details) = match resolution {
+        Some(resolution) => {
+            let (kind, cause, details) = super::outcomes::columns(&resolution.outcome)?;
+            (Some(kind), cause, details)
+        }
+        None => (None, None, None),
     };
     tx.execute(
-        "UPDATE threads SET outcome=?2,resolved_by=?3,resolver_id=?4,resolved_at=?5 WHERE id=?1",
+        "UPDATE threads SET outcome=?2,cause=?3,outcome_details=?4,resolved_by=?5,resolver_id=?6,
+                resolved_at=?7
+            WHERE id=?1",
         params![
             id,
             outcome,
+            cause,
+            details,
             resolution.map(|resolution| resolution.by),
             resolution.and_then(|resolution| resolution.by_space.as_ref()),
             resolution.map(|resolution| resolution.resolved_at)

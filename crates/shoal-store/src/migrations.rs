@@ -13,9 +13,10 @@ mod item_activity_states;
 mod journal_shapes;
 mod post_surfaces;
 mod review_targets;
+mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 320;
+pub const SCHEMA_VERSION: i64 = 322;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -150,6 +151,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         320,
         include_str!("migrations/0320_approval_records.sql"),
         Some(approval_columns::move_queried_fields),
+    ),
+    (
+        321,
+        include_str!("migrations/0321_thread_outcome_columns.sql"),
+        None,
+    ),
+    (
+        322,
+        include_str!("migrations/0322_thread_outcome_kinds.sql"),
+        Some(thread_outcomes::split_outcomes),
     ),
 ];
 

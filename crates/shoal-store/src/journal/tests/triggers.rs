@@ -321,10 +321,20 @@ fn cases() -> Vec<Case> {
         case(
             "thread_resolved",
             THREAD,
-            "UPDATE threads SET outcome='{\"outcome\":\"answered\"}',resolved_by='space',
+            "UPDATE threads SET outcome='answered',resolved_by='space',
                 resolved_at=3",
             vec![json!({"space_id": "work", "kind": "thread_resolved",
                 "thread": with(json!({"outcome": "answered"}))})],
+        ),
+        case(
+            "thread_resolved",
+            "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
+                    outcome,outcome_details,resolved_by,resolved_at)
+                VALUES (1,'work',3,1,'review','Which database?',1,'shoal','deferred','{\"issue\":\"#1\"}',
+                    'space',2);",
+            "UPDATE threads SET outcome_details='{\"issue\":\"#2\"}',resolved_at=3",
+            vec![json!({"space_id": "work", "kind": "thread_resolved",
+                "thread": with(json!({"outcome": "deferred"}))})],
         ),
         case(
             "agent_handoff_started",
@@ -406,6 +416,8 @@ fn recording_triggers(db: &Connection) -> Result<Vec<String>> {
 fn each_trigger_that_records_events_has_a_case() -> Result<()> {
     let mut covered: Vec<_> = cases().iter().map(|case| case.trigger.to_owned()).collect();
     covered.sort();
+    // A trigger may have several cases, such as for each change it records.
+    covered.dedup();
     assert_eq!(covered, recording_triggers(&fixture()?)?);
     Ok(())
 }

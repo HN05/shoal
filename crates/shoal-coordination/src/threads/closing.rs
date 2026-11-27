@@ -6,7 +6,7 @@ use anyhow::Result;
 use rusqlite::{Transaction, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::threads::{
-    CloseCause, NewPost, Outcome, Resolution, Sender, Side, Thread, ThreadSpace,
+    CloseCause, NewPost, Outcome, OutcomeKind, Resolution, Sender, Side, Thread, ThreadSpace,
 };
 
 use super::{
@@ -119,14 +119,13 @@ pub fn reopen(
     let closed = records::query(
         tx,
         &format!(
-            "WHERE json_extract(t.outcome,'$.outcome')='closed'
-                AND json_extract(t.outcome,'$.cause')=?2 AND t.space_number IS NOT NULL
+            "WHERE t.outcome=?3 AND t.cause=?2 AND t.space_number IS NOT NULL
                 AND (t.resolver_id=?1 OR (?2='removal' AND (t.space_id=?1 OR t.holder_id=?1)))
                 AND NOT {} AND NOT {}",
             removed("t.resolver_id"),
             removed("t.holder_id")
         ),
-        params![space_id, cause],
+        params![space_id, cause, OutcomeKind::Closed],
     )?;
     let mut delivered = Delivered::default();
     for thread in &closed {
