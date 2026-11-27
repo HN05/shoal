@@ -53,3 +53,30 @@ pub fn chat(id: &str, repository: Option<&str>, mode: &str, path: &Path) -> crat
     }))
     .unwrap()
 }
+
+/// The repository `id` registered at its checkout `path`, its workspaces in
+/// the directory above.
+pub fn repository(id: &str, path: &Path) -> crate::model::Repository {
+    serde_json::from_value(serde_json::json!({
+        "id": id,
+        "path": path,
+        "source": path,
+        "last_used": 0,
+        "workspaces_dir": path.parent().unwrap(),
+    }))
+    .unwrap()
+}
+
+/// The running execution `id` of the space `space`, which registered nothing
+/// of its processes or agent.
+pub fn execution(id: &str, space: &str) -> crate::model::Execution {
+    serde_json::from_value(serde_json::json!({
+        "id": id,
+        "space_id": space,
+        "state": "running",
+        "wrapper": null,
+        "child": null,
+        "group_id": null,
+    }))
+    .unwrap()
+}

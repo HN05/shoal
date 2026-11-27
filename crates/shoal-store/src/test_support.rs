@@ -8,6 +8,7 @@ use crate::Store;
 
 pub mod queries;
 pub mod rows;
+pub mod seeds;
 
 /// Skip the syncs to disk that carry `db`'s commits through a power loss,
 /// which no test outlives: where `TMPDIR`'s disk syncs slowly, they take

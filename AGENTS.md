@@ -151,8 +151,11 @@ names its responsibility.
   `Send` `BoxFuture`, which the daemon implements. Its code is no method of
   `Manager`.
 - `shoal-store` holds the `Store`, its schema and migrations, and the row
-  mappers and guards every subsystem shares. A subsystem's own record
+  mappers, reads and guards every subsystem shares. A subsystem's own record
   functions stay with the subsystem.
+- A test outside `shoal-store` records the rows other subsystems read, such
+  as a workspace's or an execution's, through the seeds of `shoal-store`'s
+  `test-support`, never with SQL of its own.
 - A policy of the agent queue in `shoal-schedule` reads only the snapshot the
   daemon builds from its state, never the state itself. Admission stays in the
   daemon.

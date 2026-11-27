@@ -15,6 +15,7 @@ use shoal_protocol::{
     links::pr::{Registration, RegistrationKind},
     model::{Relation, Workspace},
     space_names::SpaceSelector,
+    test_support,
     time::UnixTime,
 };
 use shoal_store::Store;
@@ -22,7 +23,7 @@ use shoal_store::Store;
 use crate::{
     Links,
     space::LinkSpace,
-    stand_in::{StandIn, record, registered, service},
+    stand_in::{StandIn, record, service},
     wait::{
         branch_report::BranchReport,
         merge_lookups::{LOOKUP_WINDOW, PushedMerge, UNFOLLOWED_MERGE},
@@ -78,7 +79,7 @@ async fn following(watch: bool, runs: Value) -> Following {
     let links = service(root.path(), store.clone(), &config);
     let daemon = StandIn {
         workspaces: vec![workspace.clone()],
-        repositories: vec![registered("repo", &path)],
+        repositories: vec![test_support::repository("repo", &path)],
         config: Some(global_config(&config)),
         ..StandIn::default()
     };

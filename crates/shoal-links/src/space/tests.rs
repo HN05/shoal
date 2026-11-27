@@ -1,7 +1,8 @@
 use shoal_core::test_support::{global_config, repository};
 use shoal_protocol::{model::Repository, protocol::ItemContext, space_names::SpaceSelector};
 
-use crate::stand_in::{StandIn, record, registered, service};
+use crate::stand_in::{StandIn, record, service};
+use shoal_protocol::test_support;
 
 #[tokio::test]
 async fn a_space_naming_its_own_repository_acts_there_as_itself() {
@@ -11,8 +12,8 @@ async fn a_space_naming_its_own_repository_acts_there_as_itself() {
         .unwrap();
     let path = repository(root.path(), "repo");
     let repos = [
-        registered("repo", &path),
-        registered("other", &repository(root.path(), "other")),
+        test_support::repository("repo", &path),
+        test_support::repository("other", &repository(root.path(), "other")),
     ];
     let workspace = shoal_protocol::test_support::workspace("workspace", "repo", "topic", &path);
     record(&store, &workspace).await;

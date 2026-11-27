@@ -102,18 +102,6 @@ pub async fn record(store: &Store, workspace: &Workspace) {
         .unwrap();
 }
 
-/// The repository `id` registered at its checkout `path`.
-pub fn registered(id: &str, path: &std::path::Path) -> Repository {
-    serde_json::from_value(serde_json::json!({
-        "id": id,
-        "path": path,
-        "source": path,
-        "last_used": 0,
-        "workspaces_dir": path.parent().unwrap(),
-    }))
-    .unwrap()
-}
-
 /// The daemon as the links' tests see it.
 #[derive(Default)]
 pub struct StandIn {
