@@ -91,7 +91,7 @@ impl Hub {
     /// As the paused hub's own machine `own`: leave the space `id` where
     /// the hub placed it, for the hub's background to continue it there.
     pub(super) fn release_own(&self, own: &MemberId, id: &SpaceId) -> Result<()> {
-        let released = self.handovers.release(id, own)?;
+        let released = self.handovers.release(id, (own, None))?;
         (self.own_releases.sender)
             .send((own.clone(), id.clone(), released))
             .map_err(|_| anyhow!("the hub no longer continues the spaces handed over"))

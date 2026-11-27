@@ -139,7 +139,7 @@ impl Hub {
         member: &MemberId,
         id: &SpaceId,
     ) -> Result<()> {
-        let released = self.handovers.release(id, member)?;
+        let released = (self.handovers).release(id, (member, self.links.token(member)))?;
         let (daemon, from, id) = (daemon.clone(), member.clone(), id.clone());
         tokio::spawn((self.clone()).continue_released(daemon, from, id, released));
         Ok(())
@@ -210,7 +210,7 @@ impl Hub {
                 return None;
             }
             match self.place_elsewhere(daemon, from, start.clone()).await {
-                Ok(Some(decision)) if self.handovers.placed_later(id, from, decision.clone()) => {
+                Ok(Some(decision)) if self.placed_later(id, from, &decision) => {
                     return Some(decision);
                 }
                 Ok(_) => {}
@@ -222,6 +222,13 @@ impl Hub {
             };
             changed.ok()?;
         }
+    }
+
+    /// Record that the space `id`, which the hub keeps for `from`, goes where
+    /// `decision` says, unless `from` is back; whether it did.
+    fn placed_later(&self, id: &SpaceId, from: &MemberId, decision: &Decision) -> bool {
+        let link_of_from = || self.links.token(from);
+        (self.handovers).placed_later((id, from), decision.clone(), link_of_from)
     }
 
     /// Tell the user that the space `id`, which the hub kept for want of a

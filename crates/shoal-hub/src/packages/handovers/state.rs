@@ -22,6 +22,9 @@ struct Placed {
     within: Option<SpaceId>,
     /// Whether its machine released it to the hub.
     released: bool,
+    /// The link `from` released it on, none for the hub's own machine. A
+    /// newer link of `from` means it is back, which keeps the space.
+    released_on: Option<u64>,
 }
 
 /// What the hub keeps of the hand-overs under way.
@@ -117,17 +120,22 @@ impl Handovers {
     /// Record that the space `id`, which the hub keeps for `from`, goes where
     /// `decision` says, as the chats in its worktree do, and that the machine
     /// it names may claim it. False, recording nothing, once the hub no
-    /// longer keeps it, as once `from` stayed or another machine took it.
+    /// longer keeps it: once another machine took it, or `from` stayed or
+    /// registered a newer link than it released the space on, as
+    /// `link_of_from` reads `from`'s open link under this lock.
     pub(in crate::packages) fn placed_later(
         &self,
-        id: &SpaceId,
-        from: &MemberId,
+        (id, from): (&SpaceId, &MemberId),
         decision: Decision,
+        link_of_from: impl FnOnce() -> Option<u64>,
     ) -> bool {
         let mut placed = self.placed.lock().unwrap();
         let Some(placed) = placed.get_mut(id).filter(|placed| kept_from(placed, from)) else {
             return false;
         };
+        if link_of_from().is_some_and(|link| Some(link) != placed.released_on) {
+            return false;
+        }
         (self.claims.lock().unwrap()).insert(id.clone(), decision.machine.clone());
         placed.destination = Destination::Machine(decision);
         true
@@ -157,6 +165,7 @@ impl Handovers {
             start,
             within: within.cloned(),
             released: false,
+            released_on: None,
         };
         self.placed.lock().unwrap().insert(id.clone(), placed);
     }
@@ -181,10 +190,14 @@ impl Handovers {
         }
     }
 
-    /// Take `from`'s release of the space `id`, once: where it goes, and
-    /// the continuing of the workspace it follows, which its machine must
-    /// have released first.
-    pub(in crate::packages) fn release(&self, id: &SpaceId, from: &MemberId) -> Result<Released> {
+    /// Take `from`'s release of the space `id`, on its link `link`, once:
+    /// where it goes, and the continuing of the workspace it follows, which
+    /// its machine must have released first.
+    pub(in crate::packages) fn release(
+        &self,
+        id: &SpaceId,
+        (from, link): (&MemberId, Option<u64>),
+    ) -> Result<Released> {
         let mut placed = self.placed.lock().unwrap();
         let space = (placed.get_mut(id))
             .filter(|placed| &placed.from == from && !placed.released)
@@ -199,6 +212,7 @@ impl Handovers {
             None => None,
         };
         space.released = true;
+        space.released_on = link;
         continuing.insert(id.clone(), watch::channel(false).0);
         Ok(Released {
             destination: space.destination.clone(),

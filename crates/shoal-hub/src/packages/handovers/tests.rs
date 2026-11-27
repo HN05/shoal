@@ -165,8 +165,8 @@ async fn a_chat_in_a_workspace_s_worktree_follows_that_workspace() {
     // workspace's to end.
     let daemon: Arc<dyn Daemon> = Arc::new(StandIn::default());
     assert!(hub.hear_release(&daemon, &laptop, &talk).is_err());
-    hub.handovers.release(&fix, &laptop).unwrap();
-    let after = hub.handovers.release(&talk, &laptop).unwrap().after;
+    hub.handovers.release(&fix, (&laptop, None)).unwrap();
+    let after = hub.handovers.release(&talk, (&laptop, None)).unwrap().after;
     let mut after = after.expect("the chat waits for its workspace");
     // Even once the laptop stays, as after a cancelled shutdown.
     hub.handovers.stays(&laptop);
@@ -263,7 +263,7 @@ async fn a_space_the_hub_keeps_stays_on_its_machine_once_that_machine_is_back() 
         unanswered: None,
         skipped: Vec::new(),
     };
-    assert!(!hub.handovers.placed_later(&plan, &laptop, desk));
+    assert!(!hub.handovers.placed_later((&plan, &laptop), desk, || None));
 }
 
 #[tokio::test]
@@ -311,9 +311,34 @@ async fn another_machine_s_claim_is_refused_once_the_hub_placed_a_space_it_kept(
         unanswered: None,
         skipped: Vec::new(),
     };
-    assert!(hub.handovers.placed_later(&plan, &laptop, desk));
+    assert!(hub.handovers.placed_later((&plan, &laptop), desk, || None));
     // A restore on the server while the desk continues it.
     let claimed = hub.record_space_claim(&server, &plan, (None, true)).await;
     assert!(claimed.is_err());
     assert!(hub.handovers.handed_to(&plan, &"desk".into()));
+}
+
+#[tokio::test]
+async fn a_placement_after_the_machine_registered_a_new_link_sends_its_space_nowhere() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    keep_on_hub(&hub).await;
+    let (laptop, plan) = (
+        MemberId::from("laptop".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    // Its link registered, though the hub has not taken its stay yet.
+    let _link = hub.links.register(&laptop, "laptop").unwrap();
+    let desk = Decision {
+        machine: "desk".into(),
+        name: "desk".into(),
+        reason: Reason::Local,
+        policy: shoal_schedule::placement::Policy::Balanced,
+        unanswered: None,
+        skipped: Vec::new(),
+    };
+    let link = || hub.links.token(&laptop);
+    assert!(!hub.handovers.placed_later((&plan, &laptop), desk, link));
+    assert!(hub.handovers.keeps(&plan, &laptop));
 }
