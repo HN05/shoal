@@ -138,5 +138,13 @@ pub fn all_executions(db: &Connection) -> Result<Vec<Execution>> {
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// Each recorded execution's ID, with the space it runs in.
+pub fn execution_spaces(db: &Connection) -> Result<Vec<(ExecutionId, SpaceId)>> {
+    Ok(db
+        .prepare("SELECT id,space_id FROM executions ORDER BY rowid")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 #[cfg(test)]
 mod tests;

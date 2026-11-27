@@ -4,10 +4,7 @@ use std::collections::HashSet;
 
 use anyhow::Result;
 use rusqlite::Connection;
-use shoal_ids::{
-    execution_ids::ExecutionId, queue_entry_ids::QueueEntryId, repository_ids::RepositoryId,
-    space_ids::SpaceId,
-};
+use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_runner::daemon::{RecordedExecutions, WaitingEntry};
 
 use crate::daemon::agent_queue::jobs::{self, JobEntry};
@@ -53,11 +50,7 @@ impl shoal_runner::daemon::Records for RunnerRecords {
 
     fn recorded_executions(&self, db: &Connection) -> Result<RecordedExecutions> {
         let mut recorded = RecordedExecutions::default();
-        let rows = db
-            .prepare("SELECT id,space_id FROM executions")?
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
-            .collect::<rusqlite::Result<Vec<(ExecutionId, SpaceId)>>>()?;
-        for (id, space) in rows {
+        for (id, space) in shoal_store::execution_spaces(db)? {
             recorded.ids.insert(id);
             recorded.spaces.insert(space);
         }

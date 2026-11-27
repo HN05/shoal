@@ -18,7 +18,7 @@ pub mod tree;
 
 pub use executions::{
     AgentExecution, EXECUTION_COLUMNS, agent_executions, agent_wrappers, all_executions, execution,
-    executions, find_execution, scope_token,
+    execution_spaces, executions, find_execution, scope_token,
 };
 pub use guards::{
     ensure_no_pending_move, ensure_no_pending_rename, ensure_path_unrecorded,
