@@ -204,14 +204,22 @@ fn save_paused_agent(
     stop: &Halt,
     restorer: Restorer,
 ) -> Result<PathBuf> {
-    recovery.save(
+    let (space_id, id) = (&plan.space.id, &plan.id);
+    let path = recovery.save(
         paths,
-        &plan.space.id,
-        &plan.id,
+        space_id,
+        id,
         stop.saved_reason(),
         agent_place(mode),
         restorer,
-    )
+    )?;
+    // The record itself says the OOM killer ended the agent, so its restore
+    // waits for memory even when the daemon never hears of the kill. The
+    // daemon raises the count to the kills in a row once it does.
+    if matches!(stop, Halt::Killed { oom: true }) {
+        recovery::save_oom_kills(paths, space_id, id, 1, None)?;
+    }
+    Ok(path)
 }
 
 /// Save the recovery record of an agent before `stop`, the end of its session

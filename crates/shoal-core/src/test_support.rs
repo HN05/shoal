@@ -777,3 +777,28 @@ pub fn happy_message(variant: &str, key: &[u8], content: &[u8]) -> serde_json::V
     };
     serde_json::from_slice(&plaintext).unwrap()
 }
+
+/// The plan of a command in a workspace at `root`, which a wrapper under
+/// test runs.
+pub fn execution_plan(root: &Path) -> shoal_protocol::model::ExecutionPlan {
+    use shoal_protocol::{model, state};
+    shoal_protocol::model::ExecutionPlan {
+        id: shoal_ids::execution_ids::ExecutionId::generate(),
+        space: (&model::Workspace::new_record(
+            "repo".into(),
+            "worker".into(),
+            root.to_owned(),
+            model::Head::Branch("worker".into()),
+            state::WorkspaceState::Ready,
+        ))
+            .into(),
+        scope_token: "test-scope".into(),
+        setup_cmd: None,
+        copy_ignored: None,
+        ports: vec![],
+        environment: Default::default(),
+        merge: None,
+        unmerge: None,
+        reports_signals: false,
+    }
+}

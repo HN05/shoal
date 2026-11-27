@@ -1,4 +1,5 @@
 use super::*;
+use shoal_core::execution::recovery::RecordExt as _;
 
 #[test]
 fn stopped_lines_name_the_cause_and_how_to_restore() {
@@ -81,4 +82,28 @@ fn only_an_ended_session_kill_or_shutdown_of_an_agent_that_restores_unattended_q
         restorer(&recovery(true), &stop, false),
         Restorer::User
     ));
+}
+
+#[test]
+fn the_record_of_an_agent_the_oom_killer_ended_says_so_without_the_daemon() {
+    let root = tempfile::tempdir().unwrap();
+    let paths = Paths::for_test(root.path());
+    let plan = crate::test_support::execution_plan(root.path());
+    let recovery = recovery::Recovery {
+        narrowing: Default::default(),
+        mode: "worker".into(),
+        model: Default::default(),
+        agent: "claude".into(),
+        command: vec![],
+        automatic: true,
+        handoff_delivered: false,
+        proxy: None,
+    };
+    let mode = Mode::Detached {
+        log: root.path().join("log"),
+    };
+    let killed = Halt::Killed { oom: true };
+    let path = save_paused_agent(&paths, &plan, &mode, &recovery, &killed, Restorer::User).unwrap();
+    let record = recovery::Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.oom_kills, 1);
 }

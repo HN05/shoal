@@ -1,11 +1,10 @@
-use shoal_ids::execution_ids::ExecutionId;
 use std::time::Duration;
 
 use super::*;
+use crate::test_support::execution_plan as plan;
 use crate::test_support::printed;
 use crate::{
     execution::completion::report_completion,
-    model::Workspace,
     process::identity::Identity,
     protocol::{self, Reattach},
 };
@@ -742,29 +741,6 @@ async fn terminal_child() {
     };
     let ((), outcome) = tokio::join!(registration, wrapper);
     assert!(matches!(outcome, Outcome::Exited(0)), "{outcome:?}");
-}
-
-/// A plan for a command in a workspace at `root`.
-fn plan(root: &Path) -> ExecutionPlan {
-    ExecutionPlan {
-        id: ExecutionId::generate(),
-        space: (&Workspace::new_record(
-            "repo".into(),
-            "worker".into(),
-            root.to_owned(),
-            crate::model::Head::Branch("worker".into()),
-            crate::state::WorkspaceState::Ready,
-        ))
-            .into(),
-        scope_token: "test-scope".into(),
-        setup_cmd: None,
-        copy_ignored: None,
-        ports: vec![],
-        environment: Default::default(),
-        merge: None,
-        unmerge: None,
-        reports_signals: false,
-    }
 }
 
 /// Nothing restores the supervised command or saves it.
