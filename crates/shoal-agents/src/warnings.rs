@@ -88,11 +88,10 @@ impl Warnings {
 /// none when the spaces cannot be read, so the next check warns them.
 async fn running_agent_spaces(agents: &Agents) -> Vec<(SpaceId, SpaceKind)> {
     let running = agents.running_agent_workspaces().await;
-    let records = agents.records.clone();
     let kinds = agents
         .store
         .read(move |db| {
-            let kinds: HashMap<_, _> = (records.spaces(db)?.into_iter())
+            let kinds: HashMap<_, _> = (shoal_store::spaces::all_facts(db)?.into_iter())
                 .map(|space| (space.id, space.kind))
                 .collect();
             Ok(kinds)

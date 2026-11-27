@@ -155,10 +155,9 @@ impl Agents {
 
     /// Refuse `launch` where recording it would refuse it.
     async fn ensure_launch_recordable(&self, launch: &Arc<Launch>) -> Result<()> {
-        let (launch, records, removals) =
-            (launch.clone(), self.records.clone(), self.removals.clone());
+        let (launch, removals) = (launch.clone(), self.removals.clone());
         (self.store)
-            .read(move |tx| ensure_recordable(tx, &*records, &*removals, &launch))
+            .read(move |tx| ensure_recordable(tx, &*removals, &launch))
             .await
             .map(drop)
     }
@@ -244,9 +243,8 @@ impl Agents {
     /// those waiting.
     async fn ranked_entries(&self, daemon: &dyn Daemon) -> Result<Vec<QueueEntry>> {
         let ranked = self.ranked_queue(daemon).await?;
-        let records = self.records.clone();
         let (entries, failed) = (self.store)
-            .run(move |db| Ok((all_entries(db)?, super::failures::entries(db, &*records)?)))
+            .run(move |db| Ok((all_entries(db)?, super::failures::entries(db)?)))
             .await?;
         let mut entries = in_rank_order(entries, ranked);
         entries.extend(failed);
@@ -467,9 +465,9 @@ impl Agents {
         id: &QueueEntryId,
         error: &str,
     ) -> Result<()> {
-        let (entry, text, records) = (id.to_owned(), error.to_owned(), self.records.clone());
+        let (entry, text) = (id.to_owned(), error.to_owned());
         let failed = (self.store)
-            .write(move |tx| super::failures::end_start(tx, &*records, &entry, &text))
+            .write(move |tx| super::failures::end_start(tx, &entry, &text))
             .await?;
         let Some(failed) = failed else {
             return Ok(());

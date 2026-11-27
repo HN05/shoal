@@ -8,6 +8,7 @@ pub mod lifecycle;
 mod migrations;
 mod ports;
 mod rows;
+pub mod spaces;
 mod sql;
 mod store;
 #[cfg(any(test, feature = "test-support"))]

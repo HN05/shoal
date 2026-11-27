@@ -687,8 +687,8 @@ fn workdir(
 /// Deletes the record of a chat whose start failed before it ran, and
 /// journals that as a removed space.
 fn forget_unstarted(tx: &rusqlite::Transaction<'_>, id: &SpaceId, error: &str) -> Result<()> {
-    let unstarted = store::exists(tx, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])?
-        && crate::executions::execution_count(tx, id, None)? == 0;
+    let unstarted =
+        store::spaces::is_chat(tx, id)? && crate::executions::execution_count(tx, id, None)? == 0;
     if unstarted {
         let cause = crate::model::EventCause::StartFailed;
         events::record(tx, id, events::SpaceEvent::Removed, cause, Some(error))?;

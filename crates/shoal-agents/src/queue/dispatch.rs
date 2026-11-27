@@ -522,11 +522,11 @@ impl Agents {
     /// been gone for the grace period, whose agent failed to start, so say
     /// so; a launch stays on its space as failed.
     async fn expire_starting_entries(&self, daemon: &dyn Daemon) -> Result<()> {
-        let (held, records) = (self.agent_queue.held(), self.records.clone());
+        let held = self.agent_queue.held();
         let cutoff = UnixTime::now() - START_GRACE;
         let expired = self
             .store
-            .write(move |tx| expiry::expire_starts(tx, &*records, &held, cutoff))
+            .write(move |tx| expiry::expire_starts(tx, &held, cutoff))
             .await?;
         for failure in expired {
             self.report_expired_start(daemon, failure).await;

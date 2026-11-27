@@ -144,11 +144,7 @@ fn end_failed_starts(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Res
 /// The starting launches whose setup failed there do not count, since the
 /// launch left waiting for that setup takes their place. Nor does an asleep
 /// agent's waiting restore, which counts as its stopped agent.
-pub fn queues_agent_in(
-    tx: &rusqlite::Transaction<'_>,
-    records: &dyn Records,
-    workspace: &SpaceId,
-) -> Result<bool> {
+pub fn queues_agent_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
     shoal_store::exists(
         tx,
         "SELECT 1 FROM agent_queue WHERE ?1 IN (space_id,opens_workspace_id)
@@ -159,7 +155,7 @@ pub fn queues_agent_in(
             QueueKind::Launch,
             QueueKind::Restore,
             QueueState::Starting,
-            setup_failed(tx, records, workspace)?,
+            setup_failed(tx, workspace)?,
             QueueState::Queued
         ],
     )
@@ -218,15 +214,9 @@ pub fn queued_agent(
 /// Whether `workspace`'s setup failed, or never started and runs in no
 /// execution, as when the daemon refused it, either of which a retried
 /// setup can ready.
-fn setup_failed(
-    tx: &rusqlite::Transaction<'_>,
-    records: &dyn Records,
-    workspace: &SpaceId,
-) -> Result<bool> {
+fn setup_failed(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> Result<bool> {
     use crate::state::WorkspaceState;
-    let state = records
-        .space_facts(tx, workspace)?
-        .and_then(|space| space.state);
+    let state = shoal_store::spaces::facts(tx, workspace)?.and_then(|space| space.state);
     Ok(match state {
         Some(WorkspaceState::Failed) => true,
         Some(WorkspaceState::Preparing) => !shoal_store::exists(
@@ -247,7 +237,7 @@ pub fn insert_launch(
     removals: &dyn Removals,
     launch: &Launch,
 ) -> Result<()> {
-    let waits_for_setup = ensure_recordable(tx, records, removals, launch)?;
+    let waits_for_setup = ensure_recordable(tx, removals, launch)?;
     if let (Some(workspace), Awaits::FailedSetup) = (&launch.opens, launch.awaits)
         && waits_for_setup
     {
@@ -306,7 +296,6 @@ pub fn insert_launch(
 /// setup.
 pub fn ensure_recordable(
     tx: &rusqlite::Transaction<'_>,
-    records: &dyn Records,
     removals: &dyn Removals,
     launch: &Launch,
 ) -> Result<bool> {
@@ -319,7 +308,7 @@ pub fn ensure_recordable(
     let waits_for_setup = match (&launch.opens, launch.awaits) {
         (Some(_), Awaits::Preparation { .. }) => true,
         (Some(workspace), Awaits::FailedSetup) => {
-            !launch.request.now && setup_failed(tx, records, workspace)?
+            !launch.request.now && setup_failed(tx, workspace)?
         }
         (None, _) => false,
     };

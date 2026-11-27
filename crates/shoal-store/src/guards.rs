@@ -75,7 +75,7 @@ pub fn ensure_repository_not_moving(db: &Connection, repository_id: &RepositoryI
 /// threads, while it is a workspace that is not ready; a chat takes one
 /// whenever it is recorded.
 pub fn require_ready_space(db: &Connection, id: &SpaceId) -> Result<()> {
-    if exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])? {
+    if crate::spaces::is_chat(db, id)? {
         return Ok(());
     }
     require_ready(db, id)

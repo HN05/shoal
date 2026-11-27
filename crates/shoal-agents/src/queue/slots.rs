@@ -61,7 +61,7 @@ struct StartingEntry {
 
 /// Read the spaces, executions and queue entries that slots are counted from.
 fn persisted_slots(db: &rusqlite::Connection, records: &dyn Records) -> Result<PersistedSlots> {
-    let open = (records.spaces(db)?.into_iter())
+    let open = (shoal_store::spaces::all_facts(db)?.into_iter())
         .filter(|space| !space.done)
         .map(|space| (space.id, space.repository))
         .collect();

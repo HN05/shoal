@@ -9,7 +9,7 @@ use super::blockers;
 use super::store::{ENTRY_COLUMNS, copy_launch_waiting, entry};
 use crate::Agents;
 use crate::config::permissions::PermissionsConfig;
-use crate::daemon::{Daemon, Records};
+use crate::daemon::Daemon;
 use crate::log;
 use crate::model::QueueEntry;
 use crate::state::QueueKind;
@@ -64,10 +64,10 @@ impl Agents {
     /// agent waiting in its place, such as when the preparation's worker
     /// ended without doing so. Requires the queue gate.
     pub async fn return_failed_starts(&self) -> Result<()> {
-        let (preparing, records) = (self.operations.working_in(), self.records.clone());
+        let preparing = self.operations.working_in();
         let returned = self
             .store
-            .write(move |tx| return_failed_starts(tx, &*records, &preparing))
+            .write(move |tx| return_failed_starts(tx, &preparing))
             .await?;
         for (entry, workspace) in returned {
             log!("returned {entry} to the agent queue to wait for the setup of {workspace}");
@@ -149,11 +149,10 @@ fn released_at_once(db: &rusqlite::Connection, workspace: &SpaceId) -> Result<Ve
 /// setup failed to the queue, returning each new entry with its workspace.
 fn return_failed_starts(
     tx: &Transaction<'_>,
-    records: &dyn Records,
     preparing: &HashSet<SpaceId>,
 ) -> Result<Vec<(QueueEntryId, SpaceId)>> {
     let mut returned = Vec::new();
-    for start in failed_starts(tx, records)? {
+    for start in failed_starts(tx)? {
         if !preparing.contains(&start.workspace) {
             returned.push(return_start(tx, start)?);
         }
@@ -162,8 +161,8 @@ fn return_failed_starts(
 }
 
 /// The starting launches in workspaces whose setup failed.
-fn failed_starts(tx: &Transaction<'_>, records: &dyn Records) -> Result<Vec<FailedStart>> {
-    let failed: HashSet<SpaceId> = (records.spaces(tx)?.into_iter())
+fn failed_starts(tx: &Transaction<'_>) -> Result<Vec<FailedStart>> {
+    let failed: HashSet<SpaceId> = (shoal_store::spaces::all_facts(tx)?.into_iter())
         .filter(|space| space.state == Some(WorkspaceState::Failed) && !space.setup_finished)
         .map(|space| space.id)
         .collect();

@@ -118,8 +118,9 @@ What the base reads of the rest of the daemon, such as a space's coordinator or
 a repository's retention, is an interface the base declares. `Manager` holds
 the base's types as fields.
 
-`shoal-store` holds the store: its schema, its migrations and the row mappers
-and guards that every subsystem shares. It also walks the tree of spaces up and
+`shoal-store` holds the store: its schema, its migrations and the row mappers,
+reads and guards that every subsystem shares, such as what a space records of
+its kind, its workspace's state and its completion. It also walks the tree of spaces up and
 down and tells whether a space on the way has an agent. Every subsystem that
 follows the tree takes these walks in its own transactions.
 

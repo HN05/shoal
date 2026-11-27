@@ -163,7 +163,9 @@ fn release_attended_decisions(
         })
         .optional()?;
     match space {
-        Some(space) if records.space_is_chat(tx, &space)? => records.release_decided_by(tx, &space),
+        Some(space) if shoal_store::spaces::is_chat(tx, &space)? => {
+            records.release_decided_by(tx, &space)
+        }
         _ => Ok(Vec::new()),
     }
 }

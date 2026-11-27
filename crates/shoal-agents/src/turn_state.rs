@@ -744,7 +744,7 @@ fn save(
     records: &dyn Records,
     report: &Report,
 ) -> Result<Option<(AgentStatus, bool)>> {
-    if !takes_report(tx, records, &report.space)? {
+    if !takes_report(tx, &report.space)? {
         return Ok(None);
     }
     let recorded = recorded(tx, &report.space)?;
@@ -781,8 +781,8 @@ fn stopped(db: &Connection, records: &dyn Records, report: &Report) -> Result<bo
 /// Whether the space `id` takes a state report: a workspace, or a chat
 /// whose agent runs. A chat's stop or removal clears its state, so a report
 /// checked against the chat before either would otherwise outlive it.
-fn takes_report(db: &Connection, records: &dyn Records, id: &SpaceId) -> Result<bool> {
-    Ok(records.space_is_workspace(db, id)?
+fn takes_report(db: &Connection, id: &SpaceId) -> Result<bool> {
+    Ok(shoal_store::spaces::is_workspace(db, id)?
         || shoal_store::exists(db, "SELECT 1 FROM executions WHERE space_id=?1", [id])?)
 }
 

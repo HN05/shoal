@@ -86,10 +86,10 @@ impl Agents {
                 "{kind} {number} already has a running agent; attach to it with `shoal attach {number}`, restart it with `shoal restart {number}`, stop it with `shoal stop {number}` to replace it, or start a chat beside it with `-m chat`"
             )));
         }
-        let (id, records) = (space.id.clone(), self.records.clone());
+        let id = space.id.clone();
         if self
             .store
-            .read(move |tx| super::store::queues_agent_in(tx, &*records, &id))
+            .read(move |tx| super::store::queues_agent_in(tx, &id))
             .await?
         {
             bail!(HasAgent(format!(

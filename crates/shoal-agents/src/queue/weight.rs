@@ -63,10 +63,9 @@ impl Agents {
     /// a repository has one, and the agents of every space in a light one,
     /// whether they run or, stopped, wait for their restore.
     pub async fn light(&self, daemon: &dyn Daemon) -> Result<Light> {
-        let records = self.records.clone();
         let (mut executions, spaces, mut repositories) = (self.store)
             .read(move |tx| {
-                let spaces: Vec<_> = (records.spaces(tx)?.into_iter())
+                let spaces: Vec<_> = (shoal_store::spaces::all_facts(tx)?.into_iter())
                     .map(|space| (space.id, space.repository))
                     .collect();
                 Ok((

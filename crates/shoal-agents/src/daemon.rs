@@ -706,14 +706,6 @@ pub trait Records: Send + Sync {
         running: &[SpaceId],
     ) -> Result<bool>;
 
-    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
-
-    /// Whether the space `id` is a workspace, which takes its agent's state
-    /// reports whether an agent of it runs or not.
-    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
-
-    fn space_is_chat(&self, db: &Connection, id: &SpaceId) -> Result<bool>;
-
     /// The kind and ID of the space `selector` names, while it exists.
     fn selected_space(
         &self,
@@ -774,15 +766,6 @@ pub trait Records: Send + Sync {
         id: &ExecutionId,
     ) -> Result<Option<shoal_protocol::demos::Launch>>;
 
-    /// What each space records that the agents read, in the order the
-    /// spaces were recorded.
-    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>>;
-
-    /// What the space `id` records that the agents read, while it exists.
-    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>>;
-
-    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>>;
-
     /// The workspaces of `repository` that link the issue at `url`, by name.
     fn issue_workspaces(
         &self,
@@ -835,27 +818,6 @@ pub trait Removals: Send + Sync {
     fn require_taking_work(&self, db: &Connection, id: &SpaceId) -> Result<()>;
 
     fn being_removed(&self, id: &SpaceId) -> bool;
-}
-
-/// What a space records that the agents read.
-#[derive(Clone, Debug)]
-pub struct SpaceFacts {
-    pub id: SpaceId,
-    pub kind: SpaceKind,
-    pub repository: Option<RepositoryId>,
-    pub name: String,
-    /// A workspace's lifecycle state; none for a chat.
-    pub state: Option<WorkspaceState>,
-    pub setup_finished: bool,
-    pub done: bool,
-}
-
-impl SpaceFacts {
-    /// Whether agents work there now: a chat, or a ready workspace.
-    pub fn open(&self) -> bool {
-        self.state
-            .is_none_or(|state| state == WorkspaceState::Ready)
-    }
 }
 
 /// What a space records that its agent's terminal shows.

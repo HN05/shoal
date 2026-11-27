@@ -212,7 +212,10 @@ impl Home {
                     kind == ExecutionKind::Command && agent,
                     "a chat runs only its agent; run commands in a workspace"
                 );
-                ensure!(records.space_is_chat(tx, &chat.id)?, "the chat was removed");
+                ensure!(
+                    shoal_store::spaces::is_chat(tx, &chat.id)?,
+                    "the chat was removed"
+                );
                 ensure!(
                     !removals.being_removed(&chat.id),
                     "the chat is being removed"

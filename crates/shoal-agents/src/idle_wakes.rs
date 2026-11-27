@@ -5,14 +5,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use anyhow::Result;
 use rusqlite::Connection;
 
-use crate::{
-    Agents,
-    daemon::{Daemon, Records},
-    log, messages,
-    model::Space,
-    time::UnixTime,
-    turn_state,
-};
+use crate::{Agents, daemon::Daemon, log, messages, model::Space, time::UnixTime, turn_state};
 use shoal_ids::space_ids::SpaceId;
 
 pub mod sleep;
@@ -92,7 +85,7 @@ impl Agents {
         let (space, turn, message) = (id.to_owned(), idle.turn, wake_message(minutes));
         let records = self.records.clone();
         let queued = (self.store)
-            .write(move |tx| match still_idle(tx, &*records, &space, turn)? {
+            .write(move |tx| match still_idle(tx, &space, turn)? {
                 true => {
                     let kind = shoal_daemon_base::alerts::AlertKind::IdleWake;
                     messages::queue_shoal_message(tx, &*records, &space, kind, &message)
@@ -124,9 +117,9 @@ impl Agents {
 
 /// Whether the agent of the space `id` is still idle in the turn
 /// generation `turn`, neither sleeping nor in a space whose work is done.
-fn still_idle(db: &Connection, records: &dyn Records, id: &SpaceId, turn: i64) -> Result<bool> {
+fn still_idle(db: &Connection, id: &SpaceId, turn: i64) -> Result<bool> {
     let idle = turn_state::idle_in(db, id, turn)?;
-    Ok(idle && sleep::current(db, id)?.is_none() && !records.space_done(db, id)?)
+    Ok(idle && sleep::current(db, id)?.is_none() && !shoal_store::spaces::done(db, id)?)
 }
 
 /// What a wake tells an agent idle for `minutes`.

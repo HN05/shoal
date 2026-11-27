@@ -232,11 +232,7 @@ fn load_details(
     super::tree::load(db, workspace)?;
     let running = Some(crate::state::ExecutionState::Running);
     workspace.running = crate::executions::execution_count(db, &workspace.id, running)? > 0;
-    workspace.done = store::exists(
-        db,
-        "SELECT 1 FROM space_completion WHERE space_id=?1",
-        [&workspace.id],
-    )?;
+    workspace.done = store::spaces::done(db, &workspace.id)?;
     workspace.preparation_waits = crate::starts::preparation_waits(db, &workspace.id)?;
     records.load_workspace(db, workspace)
 }

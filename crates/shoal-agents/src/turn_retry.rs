@@ -302,12 +302,7 @@ fn due_spaces(db: &Connection, now: UnixTime) -> Result<Vec<SpaceId>> {
 }
 
 /// The space's retry when it is still due at `now`.
-fn due(
-    db: &Connection,
-    records: &dyn Records,
-    space_id: &SpaceId,
-    now: UnixTime,
-) -> Result<Option<Due>> {
+fn due(db: &Connection, space_id: &SpaceId, now: UnixTime) -> Result<Option<Due>> {
     let due = db
         .query_row(
             "SELECT r.failure,r.attempt,
@@ -330,7 +325,7 @@ fn due(
     let Some(mut due) = due else {
         return Ok(None);
     };
-    due.deliverable &= !records.space_done(db, space_id)?;
+    due.deliverable &= !shoal_store::spaces::done(db, space_id)?;
     Ok(Some(due))
 }
 
@@ -383,7 +378,7 @@ fn deliver(
     space_id: &SpaceId,
     now: UnixTime,
 ) -> Result<bool> {
-    let Some(due) = due(tx, records, space_id, now)? else {
+    let Some(due) = due(tx, space_id, now)? else {
         return Ok(false);
     };
     if due.deliverable {

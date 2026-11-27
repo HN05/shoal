@@ -16,25 +16,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
 };
 
-use crate::daemon::{Records, Removals, SpaceFacts, SpaceStatus, Steps};
-
-/// What [`space_facts`] reads of a space, before its condition.
-const SPACE_FACTS: &str = "SELECT s.id,s.kind,s.repository_id,s.name,w.state,
-    COALESCE(w.setup_finished,0),
-    EXISTS (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)
-    FROM spaces s LEFT JOIN workspaces w USING(id)";
-
-fn space_facts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceFacts> {
-    Ok(SpaceFacts {
-        id: row.get(0)?,
-        kind: row.get(1)?,
-        repository: row.get(2)?,
-        name: row.get(3)?,
-        state: row.get(4)?,
-        setup_finished: row.get(5)?,
-        done: row.get(6)?,
-    })
-}
+use crate::daemon::{Records, Removals, SpaceStatus, Steps};
 
 /// No removals: the stand-in removes no space.
 pub(crate) struct StandInRemovals;
@@ -86,18 +68,6 @@ impl Records for StandInRecords {
         Ok(self.open_prs.lock().unwrap().contains(id))
     }
 
-    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        shoal_store::exists(db, "SELECT 1 FROM space_completion WHERE space_id=?1", [id])
-    }
-
-    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        shoal_store::exists(
-            db,
-            "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
-            [id],
-        )
-    }
-
     fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         let present = shoal_store::exists(db, "SELECT 1 FROM spaces WHERE id=?1", [id])?;
         anyhow::ensure!(present, "no space {id}");
@@ -106,10 +76,6 @@ impl Records for StandInRecords {
 
     fn repository_registered(&self, db: &Connection, id: &RepositoryId) -> Result<bool> {
         shoal_store::exists(db, "SELECT 1 FROM repositories WHERE id=?1", [id])
-    }
-
-    fn space_is_chat(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        shoal_store::exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
     }
 
     fn selected_space(
@@ -171,32 +137,6 @@ impl Records for StandInRecords {
 
     fn demo_launch(&self, _: &Connection, _: &ExecutionId) -> Result<Option<Launch>> {
         Ok(None)
-    }
-
-    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>> {
-        Ok(db
-            .prepare(&format!("{SPACE_FACTS} ORDER BY s.rowid"))?
-            .query_map([], space_facts)?
-            .collect::<rusqlite::Result<_>>()?)
-    }
-
-    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>> {
-        Ok(db
-            .query_row(&format!("{SPACE_FACTS} WHERE s.id=?1"), [id], space_facts)
-            .optional()?)
-    }
-
-    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
-        Ok(db
-            .query_row(
-                &format!(
-                    "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
-                    shoal_store::WORKSPACE_COLUMNS
-                ),
-                [id],
-                shoal_store::workspace,
-            )
-            .optional()?)
     }
 
     fn issue_workspaces(

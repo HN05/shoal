@@ -4,7 +4,7 @@ use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use std::collections::{HashMap, HashSet};
 
-use shoal_agents::daemon::{Records, Removals, SpaceFacts, SpaceStatus, Steps, Waiting};
+use shoal_agents::daemon::{Records, Removals, SpaceStatus, Steps, Waiting};
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{demos::Launch, scope_tokens::ScopeToken, space_names::SpaceSelector};
 
@@ -58,18 +58,6 @@ impl Records for AgentRecords {
         Ok(false)
     }
 
-    fn space_done(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        store::exists(db, "SELECT 1 FROM space_completion WHERE space_id=?1", [id])
-    }
-
-    fn space_is_workspace(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        store::exists(
-            db,
-            "SELECT 1 FROM spaces WHERE id=?1 AND kind='workspace'",
-            [id],
-        )
-    }
-
     fn ensure_takes_alerts(&self, db: &Connection, id: &SpaceId) -> Result<()> {
         let present: Option<bool> = db
             .query_row(
@@ -81,10 +69,6 @@ impl Records for AgentRecords {
         ensure!(present.is_some(), "no space {id}");
         ensure!(present == Some(true), "the workspace is being removed");
         Ok(())
-    }
-
-    fn space_is_chat(&self, db: &Connection, id: &SpaceId) -> Result<bool> {
-        links::space::is_chat(db, id)
     }
 
     fn selected_space(
@@ -143,31 +127,6 @@ impl Records for AgentRecords {
 
     fn demo_launch(&self, db: &Connection, id: &ExecutionId) -> Result<Option<Launch>> {
         shoal_demos::records::execution_launch(db, id)
-    }
-
-    fn spaces(&self, db: &Connection) -> Result<Vec<SpaceFacts>> {
-        Ok(db
-            .prepare(&format!("{SPACE_FACTS} ORDER BY s.rowid"))?
-            .query_map([], space_facts)?
-            .collect::<rusqlite::Result<_>>()?)
-    }
-
-    fn space_facts(&self, db: &Connection, id: &SpaceId) -> Result<Option<SpaceFacts>> {
-        Ok(db
-            .query_row(&format!("{SPACE_FACTS} WHERE s.id=?1"), [id], space_facts)
-            .optional()?)
-    }
-
-    fn workspace(&self, db: &Connection, id: &SpaceId) -> Result<Option<Workspace>> {
-        Ok(db
-            .query_row(
-                &format!(
-                    "SELECT {WORKSPACE_COLUMNS} FROM spaces JOIN workspaces USING(id) WHERE id=?1"
-                ),
-                [id],
-                shoal_store::workspace,
-            )
-            .optional()?)
     }
 
     fn issue_workspaces(
@@ -293,24 +252,6 @@ impl Removals for SpaceRemovals {
     fn being_removed(&self, id: &SpaceId) -> bool {
         self.0.reserved(id)
     }
-}
-
-/// What [`space_facts`] reads of a space, before its condition.
-const SPACE_FACTS: &str = "SELECT s.id,s.kind,s.repository_id,s.name,w.state,
-    COALESCE(w.setup_finished,0),
-    EXISTS (SELECT 1 FROM space_completion c WHERE c.space_id=s.id)
-    FROM spaces s LEFT JOIN workspaces w USING(id)";
-
-fn space_facts(row: &rusqlite::Row<'_>) -> rusqlite::Result<SpaceFacts> {
-    Ok(SpaceFacts {
-        id: row.get(0)?,
-        kind: row.get(1)?,
-        repository: row.get(2)?,
-        name: row.get(3)?,
-        state: row.get(4)?,
-        setup_finished: row.get(5)?,
-        done: row.get(6)?,
-    })
 }
 
 fn space_name(db: &Connection, id: &SpaceId) -> Result<Option<String>> {

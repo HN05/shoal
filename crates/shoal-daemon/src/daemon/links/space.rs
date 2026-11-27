@@ -1,17 +1,11 @@
 //! What the daemon checks and reads for the space a request about items
 //! comes from: its worktree, the registered repository a name names, the
 //! settings it acts with, and whether it takes changes.
-use shoal_ids::space_ids::SpaceId;
 
 use anyhow::{Context, Result, bail};
-use rusqlite::Connection;
 use shoal_links::space::LinkSpace;
 
-use crate::{
-    config::Effective,
-    daemon::{manager::Manager, store},
-    model::Repository,
-};
+use crate::{config::Effective, daemon::manager::Manager, model::Repository};
 use shoal_forge::RepoRequests;
 
 impl Manager {
@@ -84,9 +78,7 @@ fn ensure_one(named: &str, found: &[Repository]) -> Result<()> {
 }
 
 /// Whether `id` names a recorded chat, whose links change whenever it runs.
-pub(crate) fn is_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
-    store::exists(db, "SELECT 1 FROM spaces WHERE id=?1 AND kind='chat'", [id])
-}
+pub(crate) use shoal_store::spaces::is_chat;
 
 pub(crate) use shoal_store::require_ready_space;
 

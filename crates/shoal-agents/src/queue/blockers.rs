@@ -105,7 +105,7 @@ fn space(
         Err(_) => None,
     };
     if let Some((kind, id)) = selected
-        && space_of(db, records, kind, &id, repository)?
+        && space_of(db, kind, &id, repository)?
     {
         return Ok((BlockerKind::Space, id.into()));
     }
@@ -127,13 +127,11 @@ fn space(
 /// Whether the `kind` space `id` belongs to `repository`.
 fn space_of(
     db: &Connection,
-    records: &dyn Records,
     kind: SpaceKind,
     id: &SpaceId,
     repository: &RepositoryId,
 ) -> Result<bool> {
-    Ok(records
-        .space_facts(db, id)?
+    Ok(shoal_store::spaces::facts(db, id)?
         .is_some_and(|space| space.kind == kind && space.repository.as_ref() == Some(repository)))
 }
 
@@ -268,10 +266,10 @@ impl Agents {
             }
             BlockerKind::Space => {
                 let id = SpaceId::from(target);
-                let (query, records) = (id.clone(), self.records.clone());
+                let query = id.clone();
                 match self
                     .store
-                    .run(move |db| records.workspace(db, &query))
+                    .run(move |db| shoal_store::spaces::find_workspace(db, &query))
                     .await?
                 {
                     Some(workspace) => self.workspace_progress(daemon, workspace).await,
@@ -280,10 +278,10 @@ impl Agents {
             }
             // The row goes once the setup is done.
             BlockerKind::Setup => {
-                let (workspace, records) = (SpaceId::from(target), self.records.clone());
+                let workspace = SpaceId::from(target);
                 let name = self
                     .store
-                    .run(move |db| records.workspace(db, &workspace))
+                    .run(move |db| shoal_store::spaces::find_workspace(db, &workspace))
                     .await?
                     .map(|workspace| workspace.name);
                 Ok(name.map_or(Progress::Complete, |name| {

@@ -16,7 +16,6 @@ use rusqlite::{Connection, params};
 use super::Start;
 use crate::Agents;
 use crate::daemon::Daemon;
-use crate::daemon::Records;
 use crate::execution::recovery;
 use crate::model::Asleep;
 use crate::model::QueueEntry;
@@ -98,8 +97,8 @@ impl Restore {
 /// automatic; a restore that starts at once refuses it. Its space must be a
 /// ready workspace or a chat. Its execution must have ended, since a recorded
 /// one runs or is unresolved, unless its wrapper waits to restore it.
-fn insert(tx: &rusqlite::Transaction<'_>, records: &dyn Records, restore: &Restore) -> Result<()> {
-    if !records.space_is_chat(tx, &restore.target.id)? {
+fn insert(tx: &rusqlite::Transaction<'_>, restore: &Restore) -> Result<()> {
+    if !shoal_store::spaces::is_chat(tx, &restore.target.id)? {
         shoal_store::require_ready(tx, &restore.target.id)
             .context("restore agents in a ready workspace")?;
     }
@@ -164,8 +163,8 @@ fn keep_wrapper_restore(db: &Connection, restore: &Restore) -> Result<bool> {
 
 /// The ready workspaces and the chats whose assignment is not done, where
 /// stopped agents restore on their own.
-fn open_spaces(db: &Connection, records: &dyn Records) -> Result<Vec<Target>> {
-    Ok((records.spaces(db)?.into_iter())
+fn open_spaces(db: &Connection) -> Result<Vec<Target>> {
+    Ok((shoal_store::spaces::all_facts(db)?.into_iter())
         .filter(|space| space.open() && !space.done)
         .map(|space| Target {
             id: space.id,
@@ -461,10 +460,7 @@ impl Agents {
         let restore = Restore::new(Target::of(space), execution, &agent, &env, None)?;
         // Read the entry before dispatch can start it and its agent take it.
         let _gate = self.agent_queue.lock_admission().await;
-        let records = self.records.clone();
-        self.store
-            .write(move |tx| insert(tx, &*records, &restore))
-            .await?;
+        self.store.write(move |tx| insert(tx, &restore)).await?;
         let entry = self
             .queue_entries(daemon)
             .await?
@@ -498,10 +494,7 @@ impl Agents {
             name: space.name.clone(),
             env,
         };
-        let records = self.records.clone();
-        self.store
-            .write(move |tx| insert(tx, &*records, &restore))
-            .await?;
+        self.store.write(move |tx| insert(tx, &restore)).await?;
         Ok(start)
     }
 
@@ -533,10 +526,7 @@ impl Agents {
                 Some(asleep(&record)),
             )?;
             let _gate = self.agent_queue.lock_admission().await;
-            let records = self.records.clone();
-            self.store
-                .write(move |tx| insert(tx, &*records, &restore))
-                .await
+            self.store.write(move |tx| insert(tx, &restore)).await
         };
         if let Err(error) = queued.await {
             crate::log!("agent queue: cannot queue failed restore of {execution}: {error:#}");
@@ -556,10 +546,9 @@ impl Agents {
     /// has ended. A done space's agent waits until `shoal resume` names its
     /// space.
     pub async fn queue_requested_restores(&self) -> Result<()> {
-        let records = self.records.clone();
         let (spaces, recorded) = self
             .store
-            .run(move |db| Ok((open_spaces(db, &*records)?, recorded_executions(db)?)))
+            .run(move |db| Ok((open_spaces(db)?, recorded_executions(db)?)))
             .await?;
         for space in spaces {
             for (execution, env) in recovery::restore_requests(&self.paths, &space.id)? {
@@ -586,8 +575,7 @@ impl Agents {
         if let Some(record) = recovery::Record::load(&path).ok().flatten() {
             let asleep = Some(asleep(&record));
             let restore = Restore::new(space.clone(), execution, &record.agent, env, asleep)?;
-            let records = self.records.clone();
-            let queued = (self.store).write(move |tx| insert(tx, &*records, &restore));
+            let queued = (self.store).write(move |tx| insert(tx, &restore));
             if let Err(error) = queued.await {
                 crate::log!("agent queue: cannot queue restore of {execution}: {error:#}");
                 return Ok(());
@@ -720,11 +708,12 @@ impl Agents {
     /// queue gate, which keeps restores in the queue, and a restart from
     /// recording its own, until it is released.
     pub async fn pending_restore_workspaces(&self) -> Result<HashSet<SpaceId>> {
-        let records = self.records.clone();
         let (spaces, queued) = self
             .store
             .run(move |db| {
-                let spaces = records.spaces(db)?.into_iter().map(|space| space.id);
+                let spaces = shoal_store::spaces::all_facts(db)?
+                    .into_iter()
+                    .map(|space| space.id);
                 Ok((spaces.collect::<Vec<_>>(), restoring_workspaces(db)?))
             })
             .await?;
