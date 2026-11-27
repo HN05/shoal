@@ -109,3 +109,22 @@ async fn a_space_blocker_of_a_space_without_a_repository_clears_once_that_space_
         .unwrap();
     assert!(cleared.is_some());
 }
+
+#[tokio::test]
+async fn the_blockers_of_waiting_launches_are_read_with_the_workspace_each_opens() {
+    let fixture = Fixture::new().await;
+    limit_globally(&fixture, 1);
+    add(&fixture, "first").await;
+    let second = add_blocked(&fixture, "second", vec![space(&fixture, "first").await]).await;
+
+    let read = fixture
+        .agents
+        .store
+        .run(|db| crate::queue::blockers::waiting_on(db));
+    let read = read.await.unwrap();
+    let waiting: Vec<_> = (read.iter())
+        .map(|blocker| (&blocker.entry, blocker.space.as_ref()))
+        .collect();
+    assert_eq!(waiting, [(&second.id, second.space())]);
+    assert!(second.space().is_some());
+}

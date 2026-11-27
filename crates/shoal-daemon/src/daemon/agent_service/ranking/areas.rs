@@ -2,13 +2,13 @@
 //! of its assigned issues and PRs, and those of the issue each waiting
 //! launch starts on, under its repository's `[issue] area_prefix`.
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::Connection;
 
 use super::{
     Settings,
     labels::{self, Labelled},
 };
-use crate::state::{QueueKind, QueueState};
+use crate::daemon::agent_queue;
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_schedule::snapshot::{Snapshot, Work};
 
@@ -61,21 +61,12 @@ fn workspaces(db: &Connection) -> Result<Vec<Labelled<SpaceId>>> {
 /// The waiting launches with the labels of their issues, as they were
 /// queued with them.
 fn launches(db: &Connection) -> Result<Vec<Labelled<QueueEntryId>>> {
-    let rows = db
-        .prepare(
-            "SELECT id,repository_id,issue_labels FROM agent_queue
-             WHERE kind=?1 AND state=?2
-                AND repository_id IS NOT NULL AND issue_labels IS NOT NULL",
-        )?
-        .query_map(params![QueueKind::Launch, QueueState::Queued], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?))
-        })?
-        .collect::<rusqlite::Result<Vec<(QueueEntryId, RepositoryId, String)>>>()?;
-    Ok((rows.into_iter())
-        .map(|(id, repository, labels)| Labelled {
-            id,
-            repository,
-            labels: serde_json::from_str(&labels).unwrap_or_default(),
+    let launches = agent_queue::store::labelled_launches(db)?;
+    Ok((launches.into_iter())
+        .map(|launch| Labelled {
+            id: launch.id,
+            repository: launch.repository,
+            labels: launch.labels,
         })
         .collect())
 }

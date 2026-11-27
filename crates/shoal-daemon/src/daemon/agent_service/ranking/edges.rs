@@ -4,9 +4,13 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 
 use crate::{
-    daemon::{approvals::Target, progress, threads},
+    daemon::{
+        agent_queue::{self, jobs},
+        approvals::Target,
+        progress, threads,
+    },
     model::QueuedJob,
-    state::{BlockerKind, QueueKind, QueueState},
+    state::{BlockerKind, QueueState},
 };
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_schedule::{
@@ -36,19 +40,11 @@ struct Blocking {
 
 impl Blocking {
     fn read(db: &Connection) -> Result<Self> {
-        let rows = db
-            .prepare(
-                "SELECT id,job FROM agent_queue WHERE kind=?1 AND state=?2 AND job IS NOT NULL",
-            )?
-            .query_map(params![QueueKind::Job, QueueState::Queued], |row| {
-                Ok((row.get::<_, QueueEntryId>(0)?, row.get::<_, String>(1)?))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let mut jobs = Vec::new();
-        for (id, job) in rows {
-            jobs.push((id, serde_json::from_str(&job)?));
-        }
-        Ok(Self { jobs })
+        let waiting = jobs::in_state(db, QueueState::Queued, None)?;
+        let jobs = (waiting.into_iter()).map(|entry| (entry.id, entry.job));
+        Ok(Self {
+            jobs: jobs.collect(),
+        })
     }
 
     /// The nodes the blocker `target` of `kind` stands for.
@@ -131,25 +127,12 @@ fn pr_spaces(db: &Connection, url: &str) -> Result<Vec<SpaceId>> {
 /// Queued launches on what blocks them, from their space once they opened
 /// one.
 fn queue_blockers(db: &Connection, blocking: &Blocking) -> Result<Vec<Edge>> {
-    let rows = db
-        .prepare(
-            "SELECT b.entry_id,COALESCE(q.space_id,q.opens_workspace_id),b.kind,b.target
-             FROM agent_queue_blockers b JOIN agent_queue q ON q.id=b.entry_id
-             WHERE q.state=?1",
-        )?
-        .query_map([QueueState::Queued], |row| {
-            Ok((
-                row.get::<_, QueueEntryId>(0)?,
-                row.get::<_, Option<SpaceId>>(1)?,
-                row.get::<_, BlockerKind>(2)?,
-                row.get::<_, String>(3)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut edges = Vec::new();
-    for (entry, space, kind, target) in rows {
-        let waiting = space.map_or(Node::Entry(entry), Node::Space);
-        edges.extend(blocking.edges(db, &waiting, kind, &target)?);
+    for blocker in agent_queue::blockers::waiting_on(db)? {
+        let waiting = blocker
+            .space
+            .map_or(Node::Entry(blocker.entry), Node::Space);
+        edges.extend(blocking.edges(db, &waiting, blocker.kind, &blocker.target)?);
     }
     Ok(edges)
 }

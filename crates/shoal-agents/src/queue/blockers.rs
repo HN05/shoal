@@ -426,6 +426,35 @@ fn waiting_blockers(db: &mut Connection) -> Result<Vec<(QueueEntryId, Recorded)>
         .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
+/// A blocker of a waiting entry, with the space the entry starts in or
+/// opens once it has one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaitingBlocker {
+    pub entry: QueueEntryId,
+    pub space: Option<SpaceId>,
+    pub kind: BlockerKind,
+    pub target: String,
+}
+
+/// Each blocker of the waiting entries, in queue order.
+pub fn waiting_on(db: &Connection) -> Result<Vec<WaitingBlocker>> {
+    Ok(db
+        .prepare(
+            "SELECT b.entry_id,COALESCE(q.space_id,q.opens_workspace_id),b.kind,b.target
+             FROM agent_queue_blockers b JOIN agent_queue q ON q.id=b.entry_id
+             WHERE q.state=?1 ORDER BY q.seq,b.rowid",
+        )?
+        .query_map([QueueState::Queued], |row| {
+            Ok(WaitingBlocker {
+                entry: row.get(0)?,
+                space: row.get(1)?,
+                kind: row.get(2)?,
+                target: row.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
 /// The blockers besides its setup of the launch waiting to open
 /// `workspace`, if one does.
 fn opening_blockers(db: &mut Connection, workspace: &SpaceId) -> Result<Option<Vec<Recorded>>> {

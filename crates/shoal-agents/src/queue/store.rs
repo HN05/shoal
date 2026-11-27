@@ -60,6 +60,38 @@ pub fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// A waiting launch in a repository, with the labels of its issue as it
+/// was queued with them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabelledLaunch {
+    pub id: QueueEntryId,
+    pub repository: RepositoryId,
+    pub labels: Vec<String>,
+}
+
+/// The waiting launches in a repository that were queued with their
+/// issue's labels, in order.
+pub fn labelled_launches(db: &rusqlite::Connection) -> Result<Vec<LabelledLaunch>> {
+    let rows = db
+        .prepare(
+            "SELECT id,repository_id,issue_labels FROM agent_queue
+             WHERE kind=?1 AND state=?2
+                AND repository_id IS NOT NULL AND issue_labels IS NOT NULL
+             ORDER BY seq",
+        )?
+        .query_map(params![QueueKind::Launch, QueueState::Queued], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get::<_, String>(2)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(QueueEntryId, RepositoryId, String)>>>()?;
+    Ok((rows.into_iter())
+        .map(|(id, repository, labels)| LabelledLaunch {
+            id,
+            repository,
+            labels: serde_json::from_str(&labels).unwrap_or_default(),
+        })
+        .collect())
+}
+
 /// A launch to record in the queue.
 pub struct Launch {
     pub id: QueueEntryId,
