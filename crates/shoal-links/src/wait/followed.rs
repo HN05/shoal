@@ -2,9 +2,12 @@
 use anyhow::Result;
 use rusqlite::{OptionalExtension, params};
 use shoal_forge::updates::Snapshot;
-use shoal_forge_types::items::{
-    link::{ItemKind, LinkKind},
-    reference::ItemRef,
+use shoal_forge_types::{
+    items::{
+        link::{ItemKind, LinkKind},
+        reference::ItemRef,
+    },
+    updates::SnapshotState,
 };
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::Relation;
@@ -105,16 +108,46 @@ pub(crate) fn observed_item(
     id: &SpaceId,
     url: &str,
 ) -> Result<Option<Snapshot>> {
-    let record: Option<String> = db
+    let stored: Option<(Option<SnapshotState>, String)> = db
         .query_row(
-            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
+            "SELECT state,record FROM space_item_activity WHERE space_id=?1 AND url=?2",
             params![id, url],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
+    Ok(stored
+        .map(|(state, record)| Snapshot::stored(state, &record))
         .transpose()?)
+}
+
+/// What the last polls saw of each item, by the space that follows it.
+pub fn observed_items(db: &rusqlite::Connection) -> Result<Vec<(SpaceId, String, Snapshot)>> {
+    let rows = db
+        .prepare("SELECT space_id,url,state,record FROM space_item_activity")?
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(SpaceId, String, Option<SnapshotState>, String)>>>()?;
+    rows.into_iter()
+        .map(|(space, url, state, record)| Ok((space, url, Snapshot::stored(state, &record)?)))
+        .collect()
+}
+
+/// The item's state as the space `id` last saw it: the background poll's
+/// observation, which is current, else its watch cursor's, which waits for
+/// its deliveries to be read; `None` before either read it.
+pub fn seen_state(
+    db: &rusqlite::Connection,
+    id: &SpaceId,
+    url: &str,
+) -> Result<Option<SnapshotState>> {
+    Ok(db.query_row(
+        "SELECT COALESCE(
+            (SELECT state FROM space_item_activity WHERE space_id=?1 AND url=?2),
+            (SELECT state FROM pr_activity WHERE space_id=?1 AND url=?2))",
+        params![id, url],
+        |row| row.get(0),
+    )?)
 }
 
 /// The item's activity as the space's watch cursor last recorded it.

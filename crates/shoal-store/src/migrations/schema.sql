@@ -154,14 +154,14 @@ CREATE TABLE space_items (
 CREATE TABLE "pr_activity" (
     space_id TEXT NOT NULL,
     url TEXT NOT NULL,
-    record TEXT NOT NULL,
+    record TEXT NOT NULL, state TEXT,
     PRIMARY KEY(space_id,url)
 );
 
 CREATE TABLE space_item_activity (
     space_id TEXT NOT NULL,
     url TEXT NOT NULL,
-    record TEXT NOT NULL,
+    record TEXT NOT NULL, state TEXT,
     PRIMARY KEY(space_id,url)
 );
 

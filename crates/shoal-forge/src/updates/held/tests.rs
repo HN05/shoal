@@ -2,7 +2,9 @@ use serde_json::json;
 
 use super::*;
 use shoal_forge_types::{
-    activity::status::CheckResult, ci::check_state::CheckState, updates::UpdateKind,
+    activity::status::CheckResult,
+    ci::check_state::CheckState,
+    updates::{SnapshotState, UpdateKind},
 };
 
 /// An open PR at `head` with `checks` by name and state, `pending` unfinished.
@@ -14,11 +16,10 @@ fn snapshot(head: &str, checks: &[(&str, &str)]) -> Snapshot {
             ((*name).to_owned(), check)
         })
         .collect::<serde_json::Map<_, _>>();
-    serde_json::from_value(json!({
-        "comments": {}, "checks": checks, "head": head,
-        "conflict": null, "state": "open", "errors": {}
-    }))
-    .unwrap()
+    let record = json!({
+        "comments": {}, "checks": checks, "head": head, "conflict": null, "errors": {}
+    });
+    Snapshot::stored(Some(SnapshotState::Open), &record.to_string()).unwrap()
 }
 
 fn completed(name: &str, result: &str) -> Update {

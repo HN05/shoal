@@ -3,6 +3,7 @@ use std::sync::Arc;
 use rusqlite::params;
 use serde_json::{Value, json};
 
+use crate::forge::updates::SnapshotState;
 use crate::{
     daemon::{
         links::wait::test_support::register_watch,
@@ -83,14 +84,13 @@ async fn following(watch: bool, runs: Value) -> Following {
 
 /// A read of the PR into `main` in `state`, with the merge commit
 /// `merge_commit` when it has one.
-fn pull(state: &str, merge_commit: Option<&str>) -> Snapshot {
-    let mut snapshot = json!({"comments": {}, "checks": {}, "conflict": null,
-        "state": state, "errors": {}, "details": {"title": "Fix", "body": "",
-        "labels": [], "assignees": [], "base": "main"}});
+fn pull(state: SnapshotState, merge_commit: Option<&str>) -> Snapshot {
+    let mut record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+        "details": {"title": "Fix", "body": "", "labels": [], "assignees": [], "base": "main"}});
     if let Some(commit) = merge_commit {
-        snapshot["merge_commit"] = commit.into();
+        record["merge_commit"] = commit.into();
     }
-    serde_json::from_value(snapshot).unwrap()
+    Snapshot::stored(Some(state), &record.to_string()).unwrap()
 }
 
 impl Following {
@@ -195,7 +195,10 @@ async fn pr_cleanup_waits_for_a_poll_to_see_the_merge() {
     assert!(workspace.path.exists());
 
     // The poll that sees the merge starts its lookup, which keeps the space.
-    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+    for snapshot in [
+        pull(SnapshotState::Open, None),
+        pull(SnapshotState::Merged, Some(MERGED)),
+    ] {
         (manager.links)
             .record_background_activity(
                 &**manager,
@@ -250,7 +253,10 @@ async fn completion_cleanup_waits_for_a_poll_to_see_a_done_chats_merge() {
     assert!(present().await, "the PR's merge is unseen");
 
     // The poll that sees the merge looks up its runs until the window ends.
-    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+    for snapshot in [
+        pull(SnapshotState::Open, None),
+        pull(SnapshotState::Merged, Some(MERGED)),
+    ] {
         (manager.links)
             .record_background_activity(
                 &**manager,

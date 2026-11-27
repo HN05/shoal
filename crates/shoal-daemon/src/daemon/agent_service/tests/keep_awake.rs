@@ -68,16 +68,11 @@ async fn an_idle_agent_has_work_while_its_watched_pr_is_open() {
         let id = workspace.id.clone();
         let mut snapshot = shoal_forge::updates::Snapshot::default();
         snapshot.adopt_state(Some(state));
-        let record = serde_json::to_string(&snapshot).unwrap();
         manager
             .store
-            .run(move |db| {
-                db.execute(
-                    "INSERT OR REPLACE INTO space_item_activity(space_id,url,record)
-                     VALUES (?1,'https://example.com/o/r/pulls/1',?2)",
-                    rusqlite::params![id, record],
-                )?;
-                Ok(())
+            .write(move |tx| {
+                let url = "https://example.com/o/r/pulls/1";
+                shoal_links::wait::background::save_observation(tx, &id, url, &snapshot)
             })
             .await
             .unwrap();

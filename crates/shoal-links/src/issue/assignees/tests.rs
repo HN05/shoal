@@ -337,10 +337,10 @@ async fn observe_issue(
 ) -> Vec<shoal_forge_types::updates::Update> {
     use shoal_forge_types::items::link::Selection;
     let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
-    let snapshot = serde_json::from_value(json!({"comments": {}, "checks": {},
-        "conflict": null, "state": "open", "errors": {}, "details": {"title": "Bug",
-        "body": "", "labels": [], "assignees": assignees}}))
-    .unwrap();
+    let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+        "details": {"title": "Bug", "body": "", "labels": [], "assignees": assignees}});
+    let open = Some(shoal_forge_types::updates::SnapshotState::Open);
+    let snapshot = shoal_forge::updates::Snapshot::stored(open, &record.to_string()).unwrap();
     let at = shoal_protocol::time::UnixTime::now() + std::time::Duration::from_secs(seconds);
     let (all, report) = (
         Selection::default(),

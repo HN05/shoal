@@ -41,8 +41,7 @@ fn of_items(
     Ok(labels)
 }
 
-/// The labels of the space `id`'s item `url`; none before they are read
-/// or when its record does not read, rather than failing the rank.
+/// The labels of the space `id`'s item `url`; none before they are read.
 fn of_item(db: &Connection, id: &SpaceId, url: &ItemRef) -> Result<Vec<String>> {
     let record: Option<String> = db.query_row(
         "SELECT COALESCE(
@@ -52,6 +51,7 @@ fn of_item(db: &Connection, id: &SpaceId, url: &ItemRef) -> Result<Vec<String>> 
         |row| row.get(0),
     )?;
     Ok((record.as_deref())
-        .and_then(|record| updates::saved_labels(record).ok())
+        .map(updates::saved_labels)
+        .transpose()?
         .unwrap_or_default())
 }

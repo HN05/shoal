@@ -1,5 +1,6 @@
 //! A forge that serves nothing, the items the tests link on it, and the
 //! activity the tests record on them as a background poll would.
+use crate::forge::updates::SnapshotState;
 use rusqlite::params;
 use serde_json::json;
 use shoal_forge::updates::Snapshot;
@@ -23,7 +24,9 @@ pub(crate) fn item_url(path: &str) -> String {
 
 /// An open item whose one comment reads `message`.
 pub(crate) fn snapshot(message: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": {"one": {"fingerprint": message}}, "checks": {}, "conflict": null, "state": "open", "errors": {}})).unwrap()
+    let record = json!({"comments": {"one": {"fingerprint": message}}, "checks": {},
+        "conflict": null, "errors": {}});
+    Snapshot::stored(Some(SnapshotState::Open), &record.to_string()).unwrap()
 }
 
 /// Have the space `id` watch the item at `url`.

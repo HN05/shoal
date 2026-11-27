@@ -1,3 +1,6 @@
+use crate::forge::updates::SnapshotState;
+use shoal_forge::updates::WatchRecord;
+use shoal_links::wait::{background::save_observation, cursor::save_cursor_record};
 use shoal_protocol::progress::Blocker;
 use shoal_store::test_support::seeds;
 use std::collections::HashSet;
@@ -190,41 +193,46 @@ async fn waits_come_from_blockers_threads_stacks_and_leases() {
     assert_eq!(edges, expected);
 }
 
+/// A watch's record of an item it last saw in `state`.
+fn watched(state: Option<SnapshotState>) -> WatchRecord {
+    let mut record = WatchRecord::default();
+    record.snapshot.adopt_state(state);
+    record
+}
+
 #[tokio::test]
 async fn a_space_with_a_pr_it_opened_finishes_until_the_pr_merges() {
     let (temp, manager) = manager().await;
     let repo = register(&manager, &temp, "repo").await;
     let workspace = create(&manager, &repo, "topic").await;
     let pr = "https://forge.example/team/repo/pulls/3";
-    let tier = |state: Option<&'static str>| {
+    let tier = |state: Option<SnapshotState>| {
         let id = workspace.id.clone();
         manager.store.read(move |tx| {
             tx.execute(
                 "INSERT OR IGNORE INTO space_items(space_id,relation,kind,url) VALUES (?1,'opened','pr',?2)",
                 params![id, pr],
             )?;
-            tx.execute("DELETE FROM pr_activity WHERE space_id=?1", [&id])?;
-            if let Some(state) = state {
-                tx.execute(
-                    "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,json_object('state',?3))",
-                    params![id, pr, state],
-                )?;
+            shoal_links::records::forget_activity(tx, &id, &[pr.to_owned()])?;
+            if state.is_some() {
+                save_cursor_record(tx, &id, pr, &watched(state))?;
             }
             Ok(spaces::ranked(tx)?[&id].tier)
         })
     };
     // No watch has read the PR yet, so it counts as open.
     assert_eq!(tier(None).await.unwrap(), Tier::Finishing);
-    assert_eq!(tier(Some("open")).await.unwrap(), Tier::Finishing);
-    assert_eq!(tier(Some("merged")).await.unwrap(), Tier::New);
+    assert_eq!(
+        tier(Some(SnapshotState::Open)).await.unwrap(),
+        Tier::Finishing
+    );
+    assert_eq!(tier(Some(SnapshotState::Merged)).await.unwrap(), Tier::New);
     // The poll saw it merge while the watch's cursor still says open.
     let id = workspace.id.clone();
     let tier = manager.store.read(move |tx| {
-        tx.execute(
-            "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,json_object('state','merged'))",
-            params![id, pr],
-        )?;
-        tx.execute("UPDATE pr_activity SET record=json_object('state','open') WHERE space_id=?1", [&id])?;
+        let merged = watched(Some(SnapshotState::Merged)).snapshot;
+        save_observation(tx, &id, pr, &merged)?;
+        save_cursor_record(tx, &id, pr, &watched(Some(SnapshotState::Open)))?;
         Ok(spaces::ranked(tx)?[&id].tier)
     });
     assert_eq!(tier.await.unwrap(), Tier::New);

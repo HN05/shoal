@@ -1,0 +1,2 @@
+-- The records of what a space last saw of an item no longer hold its
+-- state, which the migration's preparation moved into `state`.

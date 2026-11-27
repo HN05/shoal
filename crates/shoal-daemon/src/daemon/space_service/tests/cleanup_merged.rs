@@ -1,6 +1,7 @@
 use crate::daemon::cleanup::merged::*;
 use crate::daemon::manager::Manager;
 use crate::execution::recovery::RecordExt;
+use crate::forge::updates::SnapshotState;
 use crate::model::EventCause;
 use crate::paths::StateFiles;
 use crate::time::UnixTime;
@@ -605,18 +606,10 @@ async fn merged_cleanup_waits_for_a_poll_to_see_a_watched_prs_merge() {
 
     // The poll sees the merge, without a merge commit to look up runs of.
     let id = f.workspace.id.clone();
+    let mut merged = shoal_forge::updates::Snapshot::default();
+    merged.adopt_state(Some(SnapshotState::Merged));
     (f.manager.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
-                rusqlite::params![
-                    id,
-                    pr,
-                    r#"{"comments":{},"checks":{},"conflict":null,"state":"merged","errors":{}}"#
-                ],
-            )?;
-            Ok(())
-        })
+        .write(move |tx| shoal_links::wait::background::save_observation(tx, &id, &pr, &merged))
         .await
         .unwrap();
     assert!(!f.kept_after(5).await);

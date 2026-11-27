@@ -22,6 +22,7 @@ use super::{
     test_support::{item_url, register_watch, snapshot},
     wake::{UNWATCHED_WAKE_DELAY, WakePhase},
 };
+use crate::forge::updates::SnapshotState;
 use crate::time::UnixTime;
 use crate::{
     daemon::{
@@ -250,10 +251,16 @@ async fn background_activity_uses_its_own_baseline_and_publishes_events() {
 
 /// A read of an open item that shows `title`.
 fn titled(title: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-        "state": "open", "errors": {},
-        "details": {"title": title, "body": "", "labels": [], "assignees": []}}))
-    .unwrap()
+    stored(
+        SnapshotState::Open,
+        json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+            "details": {"title": title, "body": "", "labels": [], "assignees": []}}),
+    )
+}
+
+/// A snapshot in `state` whose record, as a store keeps it, is `record`.
+fn stored(state: SnapshotState, record: Value) -> Snapshot {
+    Snapshot::stored(Some(state), &record.to_string()).unwrap()
 }
 
 #[tokio::test]
@@ -1627,11 +1634,10 @@ fn checks_at(head: &str, checks: &[(&str, &str)]) -> Snapshot {
             ((*name).to_owned(), check)
         })
         .collect::<serde_json::Map<_, _>>();
-    serde_json::from_value(json!({
-        "comments": {}, "checks": checks, "head": head,
-        "conflict": null, "state": "open", "errors": {}
-    }))
-    .unwrap()
+    stored(
+        SnapshotState::Open,
+        json!({"comments": {}, "checks": checks, "head": head, "conflict": null, "errors": {}}),
+    )
 }
 
 #[tokio::test]
@@ -1770,16 +1776,17 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .await
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
-    let observe = |comments: Value, state: &str| {
+    let observe = |comments: Value, state: SnapshotState| {
         let comments: serde_json::Map<_, _> = (comments.as_object().into_iter().flatten())
             .map(|(key, fingerprint)| (key.clone(), json!({"fingerprint": fingerprint})))
             .collect();
-        let snapshot = serde_json::from_value(json!({"comments": comments, "checks": {},
-                "conflict": null, "state": state, "errors": {}}))
-        .unwrap();
+        let snapshot = stored(
+            state,
+            json!({"comments": comments, "checks": {}, "conflict": null, "errors": {}}),
+        );
         manager.record_pr_activity(&workspace.id, vec![(PR.as_str().into(), snapshot)])
     };
-    let first = observe(json!({"discussion:1": "theirs"}), "open")
+    let first = observe(json!({"discussion:1": "theirs"}), SnapshotState::Open)
         .await
         .unwrap();
     manager
@@ -1807,11 +1814,11 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
         .unwrap();
     // A poll that read the item before the agent closed it records its
     // comments, but not its stale state.
-    let stale = serde_json::from_value(
+    let stale = stored(
+        SnapshotState::Open,
         json!({"comments": {"discussion:1": {"fingerprint": "theirs"}},
-            "checks": {}, "conflict": null, "state": "open", "errors": {}}),
-    )
-    .unwrap();
+            "checks": {}, "conflict": null, "errors": {}}),
+    );
     let all = Selection::default();
     let report = BranchReport::Conflicts;
     let before = manager.links.record_observed(
@@ -1824,9 +1831,14 @@ async fn own_changes_are_not_reported_back_to_the_workspace() {
     );
     assert!(before.await.unwrap().is_empty());
     let own = json!({"discussion:1": "theirs", "discussion:2": "mine"});
-    assert!(observe(own, "closed").await.unwrap().is_empty());
+    assert!(
+        observe(own, SnapshotState::Closed)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     let next = json!({"discussion:1": "theirs", "discussion:2": "mine", "discussion:3": "new"});
-    let updates = observe(next, "closed").await.unwrap();
+    let updates = observe(next, SnapshotState::Closed).await.unwrap();
     assert_eq!(
         updates.iter().map(|update| update.kind).collect::<Vec<_>>(),
         [UpdateKind::Comment]
@@ -1848,10 +1860,12 @@ async fn edits_are_reported_except_the_workspaces_own() {
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
     let snapshot = |base: &str, labels: Value| -> Snapshot {
-        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
-                "labels": labels, "assignees": [], "draft": false, "base": base}}))
-        .unwrap()
+        stored(
+            SnapshotState::Open,
+            json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+                "details": {"title": "Fix", "body": "", "labels": labels, "assignees": [],
+                    "draft": false, "base": base}}),
+        )
     };
     let all = Selection::default();
     let observe = |snapshot: Snapshot, at: UnixTime| {
@@ -1920,10 +1934,11 @@ async fn assigned_issue() -> Fixture {
 /// change so far.
 async fn observe_issue(fixture: &Fixture, assignees: &[&str], seconds: u64) -> Vec<Update> {
     let url = format!("http://{}/team/repo/issues/7", fixture.server.host);
-    let snapshot = serde_json::from_value(json!({"comments": {}, "checks": {},
-        "conflict": null, "state": "open", "errors": {}, "details": {"title": "Bug",
-        "body": "", "labels": [], "assignees": assignees}}))
-    .unwrap();
+    let snapshot = stored(
+        SnapshotState::Open,
+        json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+            "details": {"title": "Bug", "body": "", "labels": [], "assignees": assignees}}),
+    );
     let at = UnixTime::now() + Duration::from_secs(seconds);
     let id = &fixture.workspaces[0].id;
     let report = BranchReport::Conflicts;
@@ -2022,10 +2037,12 @@ async fn a_coordinators_own_edit_reaches_only_a_child_agent() {
         .unwrap();
     register_watch(&manager, &child.id, CHILD_PR.as_str()).await;
     let based = |base: &str| -> Snapshot {
-        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
-                "labels": [], "assignees": [], "draft": false, "base": base}}))
-        .unwrap()
+        stored(
+            SnapshotState::Open,
+            json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+                "details": {"title": "Fix", "body": "", "labels": [], "assignees": [],
+                    "draft": false, "base": base}}),
+        )
     };
     let observe = |base: &str| {
         let observation = vec![(CHILD_PR.as_str().into(), based(base))];
@@ -2138,14 +2155,15 @@ async fn background_activity_does_not_repeat_an_unchanged_baseline_failure() {
         .await
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
-    let failed: Snapshot = serde_json::from_value(serde_json::json!({
-        "comments": {},
-        "checks": {},
-        "conflict": null,
-        "state": "open",
-        "errors": {"forge": "temporarily unavailable"}
-    }))
-    .unwrap();
+    let failed = stored(
+        SnapshotState::Open,
+        json!({
+            "comments": {},
+            "checks": {},
+            "conflict": null,
+            "errors": {"forge": "temporarily unavailable"}
+        }),
+    );
 
     manager
         .links
@@ -2213,19 +2231,19 @@ async fn polls_stop_looking_up_items_whose_activity_ended() {
     };
     assert!(poll().await.is_err());
 
-    let ended = |state: &str| {
-        serde_json::from_value::<Snapshot>(
-            json!({"comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {}}),
+    let ended = |state| {
+        stored(
+            state,
+            json!({"comments": {}, "checks": {}, "conflict": null, "errors": {}}),
         )
-        .unwrap()
     };
     let updates = manager
         .record_activity(
             &workspace.id,
             vec![
-                (PR.as_str().into(), ended("merged")),
-                (ISSUE.as_str().into(), ended("closed")),
-                (RUN.as_str().into(), ended("failed")),
+                (PR.as_str().into(), ended(SnapshotState::Merged)),
+                (ISSUE.as_str().into(), ended(SnapshotState::Closed)),
+                (RUN.as_str().into(), ended(SnapshotState::Failed)),
             ],
             &Selection::default(),
         )
@@ -3266,10 +3284,11 @@ fn resolved_branch(workspace_id: &SpaceId) -> Snapshot {
 }
 
 /// A run in `state`, as a poll observes it.
-fn run_snapshot(state: &str) -> Snapshot {
-    serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-        "state": state, "errors": {}}))
-    .unwrap()
+fn run_snapshot(state: SnapshotState) -> Snapshot {
+    stored(
+        state,
+        json!({"comments": {}, "checks": {}, "conflict": null, "errors": {}}),
+    )
 }
 
 #[tokio::test]
@@ -3300,7 +3319,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .record_background_activity(
             &*manager,
             &id,
-            vec![(RUN.as_str().into(), run_snapshot("running"))],
+            vec![(RUN.as_str().into(), run_snapshot(SnapshotState::Running))],
         )
         .await
         .unwrap();
@@ -3313,7 +3332,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
     let delivered = manager
         .record_activity(
             &id,
-            vec![(RUN.as_str().into(), run_snapshot("finished"))],
+            vec![(RUN.as_str().into(), run_snapshot(SnapshotState::Finished))],
             &selection,
         )
         .await
@@ -3334,7 +3353,7 @@ async fn background_activity_records_a_run_finish_a_watch_delivered_first() {
         .record_background_activity(
             &*manager,
             &id,
-            vec![(RUN.as_str().into(), run_snapshot("finished"))],
+            vec![(RUN.as_str().into(), run_snapshot(SnapshotState::Finished))],
         )
         .await
         .unwrap();
@@ -3368,7 +3387,7 @@ async fn a_watch_reports_each_attempt_of_a_linked_run() {
         .record_items(&id, vec![(crate::model::Relation::Related, run)])
         .await
         .unwrap();
-    let observe = |state: &str| {
+    let observe = |state: SnapshotState| {
         let observations = vec![(RUN.to_owned(), run_snapshot(state))];
         let id = id.clone();
         let manager = &*manager;
@@ -3388,11 +3407,17 @@ async fn a_watch_reports_each_attempt_of_a_linked_run() {
                 .collect::<Vec<_>>()
         }
     };
-    assert!(observe("running").await.is_empty());
-    assert_eq!(observe("failed").await, [UpdateKind::CiCompleted]);
+    assert!(observe(SnapshotState::Running).await.is_empty());
+    assert_eq!(
+        observe(SnapshotState::Failed).await,
+        [UpdateKind::CiCompleted]
+    );
     // A rerun opens the same run again, and its finish is reported anew.
-    assert!(observe("running").await.is_empty());
-    assert_eq!(observe("finished").await, [UpdateKind::CiCompleted]);
+    assert!(observe(SnapshotState::Running).await.is_empty());
+    assert_eq!(
+        observe(SnapshotState::Finished).await,
+        [UpdateKind::CiCompleted]
+    );
 }
 
 /// A workspace whose repository holds agent messages for a minute.
@@ -3547,11 +3572,11 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
         .await
         .unwrap();
     register_watch(&manager, &workspace.id, PR.as_str()).await;
-    let in_state = |state: &str| {
-        serde_json::from_value::<Snapshot>(
-            json!({"comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {}}),
+    let in_state = |state| {
+        stored(
+            state,
+            json!({"comments": {}, "checks": {}, "conflict": null, "errors": {}}),
         )
-        .unwrap()
     };
     let record = |state| {
         manager.links.record_background_activity(
@@ -3560,9 +3585,9 @@ async fn a_merge_a_background_poll_sees_asks_for_a_sync() {
             vec![(PR.as_str().into(), in_state(state))],
         )
     };
-    assert!(!record("open").await.unwrap().merged);
-    assert!(!record("open").await.unwrap().merged);
-    assert!(record("merged").await.unwrap().merged);
+    assert!(!record(SnapshotState::Open).await.unwrap().merged);
+    assert!(!record(SnapshotState::Open).await.unwrap().merged);
+    assert!(record(SnapshotState::Merged).await.unwrap().merged);
 }
 
 #[tokio::test]

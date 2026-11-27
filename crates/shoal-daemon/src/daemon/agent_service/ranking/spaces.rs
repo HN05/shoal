@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, params};
 
 use super::{
     Settings,
@@ -158,23 +158,8 @@ fn has_open_pr(db: &Connection, id: &SpaceId) -> Result<bool> {
     let links = shoal_links::linked::space_links(db, id)?;
     let opened = (links.opened.iter()).filter(|item| item.kind() == LinkKind::Pr);
     for url in links.prs.iter().chain(opened).map(|item| &item.url) {
-        // The background poll's observation is current; a watch's cursor
-        // waits for its deliveries to be read.
-        let state: Option<Option<String>> = db
-            .query_row(
-                "SELECT COALESCE(
-                    (SELECT json_extract(record,'$.state') FROM space_item_activity
-                        WHERE space_id=?1 AND url=?2),
-                    (SELECT json_extract(record,'$.state') FROM pr_activity
-                        WHERE space_id=?1 AND url=?2))",
-                params![id, url],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let ended = [SnapshotState::Merged, SnapshotState::Closed]
-            .map(SnapshotState::as_str)
-            .map(Some);
-        if !ended.contains(&state.flatten().as_deref()) {
+        let state = shoal_links::wait::followed::seen_state(db, id, url.url())?;
+        if !matches!(state, Some(SnapshotState::Merged | SnapshotState::Closed)) {
             return Ok(true);
         }
     }

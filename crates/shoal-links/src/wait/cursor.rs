@@ -6,7 +6,7 @@ use rusqlite::{OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 
 use shoal_forge::updates::WatchRecord;
-use shoal_forge_types::updates::Update;
+use shoal_forge_types::updates::{SnapshotState, Update};
 
 /// The item's record on the workspace's watch cursor, if it has one: what
 /// its watch saw of the item, or updates queued from it before any watch did.
@@ -15,19 +15,19 @@ pub fn cursor_record(
     id: &SpaceId,
     url: &str,
 ) -> Result<Option<WatchRecord>> {
-    let record: Option<String> = db
+    let stored: Option<(Option<SnapshotState>, String)> = db
         .query_row(
-            "SELECT record FROM pr_activity WHERE space_id=?1 AND url=?2",
+            "SELECT state,record FROM pr_activity WHERE space_id=?1 AND url=?2",
             params![id, url],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()?;
     let pending = pending_updates(db, id, url)?;
-    if record.is_none() && pending.is_empty() {
+    if stored.is_none() && pending.is_empty() {
         return Ok(None);
     }
-    let mut record: WatchRecord = record
-        .map(|text| serde_json::from_str(&text))
+    let mut record = stored
+        .map(|(state, record)| WatchRecord::stored(state, &record))
         .transpose()?
         .unwrap_or_default();
     record.pending = pending;
@@ -50,9 +50,14 @@ pub fn save_cursor_record(
     record: &WatchRecord,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-        params![id, url, serde_json::to_string(record)?],
+        "INSERT INTO pr_activity(space_id,url,state,record) VALUES (?1,?2,?3,?4)
+         ON CONFLICT(space_id,url) DO UPDATE SET state=excluded.state,record=excluded.record",
+        params![
+            id,
+            url,
+            record.snapshot.state(),
+            serde_json::to_string(record)?
+        ],
     )?;
     if let Some(title) = record.snapshot.title() {
         crate::linked::refresh_titles(db, id, url, title)?;

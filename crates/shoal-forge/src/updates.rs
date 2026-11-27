@@ -76,8 +76,9 @@ pub struct Snapshot {
     #[serde(skip)]
     pub(crate) conflict_exact: bool,
     /// The item's or run's state; `None` for a branch, and before a first
-    /// observation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// observation. A store keeps it apart from the record, in a column its
+    /// queries read, as [`Snapshot::stored`] takes it.
+    #[serde(skip)]
     pub(crate) state: Option<SnapshotState>,
     /// What people edit of an issue or PR; `None` for a CI run or branch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -405,6 +406,14 @@ impl Snapshot {
 
     pub fn state(&self) -> Option<SnapshotState> {
         self.state
+    }
+
+    /// The snapshot a store keeps as `record`, the JSON of the snapshot,
+    /// and `state`, which it keeps apart.
+    pub fn stored(state: Option<SnapshotState>, record: &str) -> serde_json::Result<Self> {
+        let mut snapshot: Self = serde_json::from_str(record)?;
+        snapshot.state = state;
+        Ok(snapshot)
     }
 
     /// Whether the snapshot holds no read of the item yet, as a watch's

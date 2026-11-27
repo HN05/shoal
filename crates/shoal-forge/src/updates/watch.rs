@@ -8,7 +8,7 @@ use shoal_time::UnixTime;
 
 use super::{Edited, Snapshot, held::HeldPasses};
 use shoal_forge_types::items::item::ItemState;
-use shoal_forge_types::updates::{Update, UpdateKind};
+use shoal_forge_types::updates::{SnapshotState, Update, UpdateKind};
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct WatchRecord {
@@ -30,6 +30,14 @@ pub struct WatchRecord {
 }
 
 impl WatchRecord {
+    /// The record a store keeps as `record`, its JSON, and the snapshot's
+    /// `state`, which it keeps apart as [`Snapshot::stored`] does.
+    pub fn stored(state: Option<SnapshotState>, record: &str) -> serde_json::Result<Self> {
+        let mut stored: Self = serde_json::from_str(record)?;
+        stored.snapshot.state = state;
+        Ok(stored)
+    }
+
     /// Start the watch from `snapshot` of the item at `url`, read by a
     /// lookup that began at `read_at`, as when its space links the item or
     /// an agent begins a new session there. What the item's discussion and

@@ -269,19 +269,30 @@ fn comment_updates_count_changes_by_kind_and_author() {
 
 #[test]
 fn a_snapshot_without_a_kind_reports_the_next_observations_state() {
-    let saved = |state: &str| -> Snapshot {
-        serde_json::from_value(json!({
-            "comments": {}, "checks": {}, "conflict": null, "state": state, "errors": {},
-        }))
-        .unwrap()
+    let saved = |state: SnapshotState| -> Snapshot {
+        let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {}});
+        Snapshot::stored(Some(state), &record.to_string()).unwrap()
     };
     let closed = Snapshot::of(SnapshotKind::Issue, Some(SnapshotState::Closed));
-    let updates = saved("open").changes(&closed, "issue");
+    let updates = saved(SnapshotState::Open).changes(&closed, "issue");
     assert_eq!(updates[0].kind, UpdateKind::Closed);
     assert!(updates[0].message.starts_with("Issue"));
-    let stored: Snapshot = serde_json::from_str(&serde_json::to_string(&closed).unwrap()).unwrap();
+    let record = serde_json::to_string(&closed).unwrap();
+    let stored = Snapshot::stored(closed.state(), &record).unwrap();
     assert!(stored.changes(&closed, "issue").is_empty());
     assert_eq!(stored.kind, Some(SnapshotKind::Issue));
+}
+
+#[test]
+fn a_stored_snapshot_keeps_its_state_apart_from_its_record() {
+    let merged = Snapshot::of(SnapshotKind::Pr, Some(SnapshotState::Merged));
+    let record = serde_json::to_value(&merged).unwrap();
+    assert!(record.get("state").is_none());
+    let stored = Snapshot::stored(merged.state(), &record.to_string()).unwrap();
+    assert_eq!(
+        (stored.kind, stored.state()),
+        (Some(SnapshotKind::Pr), Some(SnapshotState::Merged))
+    );
 }
 
 #[test]
@@ -310,15 +321,15 @@ fn commits_a_snapshot_lacks_are_stored_as_empty_text() {
 
 #[test]
 fn checks_saved_in_forge_casings_match_the_same_checks() {
-    let saved: Snapshot = serde_json::from_value(json!({
-        "comments": {}, "conflict": null, "state": "open", "errors": {}, "head": "1",
+    let record = json!({
+        "comments": {}, "conflict": null, "errors": {}, "head": "1",
         "checks": {
             "rust": {"name": "rust", "state": "SUCCESS", "revision": "1", "complete": true},
             "lint": {"name": "lint", "state": "Pending", "revision": "1", "complete": false},
             "deploy": {"name": "deploy", "state": "EXPECTED", "revision": "1", "complete": false},
         },
-    }))
-    .unwrap();
+    });
+    let saved = Snapshot::stored(Some(SnapshotState::Open), &record.to_string()).unwrap();
     assert!(saved.checks_pending());
     let mut next = saved.clone();
     for (name, state) in [
@@ -755,9 +766,9 @@ fn a_conflict_kept_from_an_earlier_head_or_base_is_unknown_at_the_new_one() {
 #[test]
 fn edits_to_an_items_details_are_reported_together() {
     let details = |details: serde_json::Value| -> Snapshot {
-        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-                "state": "open", "errors": {}, "details": details}))
-        .unwrap()
+        let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+            "details": details});
+        Snapshot::stored(Some(SnapshotState::Open), &record.to_string()).unwrap()
     };
     let before = details(
         json!({"title": "Fix", "body": "Steps", "labels": ["bug", "wip"],
@@ -792,10 +803,10 @@ fn edits_to_an_items_details_are_reported_together() {
 #[test]
 fn own_edits_are_taken_as_seen_leaving_other_changes_reported() {
     let snapshot = |base: &str, labels: serde_json::Value| -> Snapshot {
-        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-                "state": "open", "errors": {}, "details": {"title": "Fix", "body": "",
-                "labels": labels, "assignees": [], "base": base}}))
-        .unwrap()
+        let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+            "details": {"title": "Fix", "body": "", "labels": labels, "assignees": [],
+                "base": base}});
+        Snapshot::stored(Some(SnapshotState::Open), &record.to_string()).unwrap()
     };
     let mut seen = snapshot("feature", json!([]));
     seen.adopt_edited(&Edited::retarget(&"feature".into(), &"main".into()));

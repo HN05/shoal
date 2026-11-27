@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use futures_util::{StreamExt, stream};
-use rusqlite::{OptionalExtension, params};
+use rusqlite::params;
 use shoal_daemon_base::events;
 use shoal_forge::updates::Snapshot;
 use shoal_forge_types::{
@@ -19,7 +19,7 @@ use shoal_protocol::{model::Space, state::WorkspaceState, time::UnixTime};
 
 use super::{
     branch_report::{BranchReport, branch_report},
-    followed::{followed_items, opened_open_prs},
+    followed::{followed_items, observed_item, opened_open_prs},
     merge_lookups::{MergeTarget, follow_merge},
     reads::Lookup,
     starts::PollStart,
@@ -256,7 +256,7 @@ fn record_baseline_item(
     seen: &mut Seen,
 ) -> Result<()> {
     let (url, mut snapshot) = (observed.url, observed.snapshot);
-    let previous = saved_observation(tx, id, url)?;
+    let previous = observed_item(tx, id, url)?;
     if previous.is_none() && snapshot.unread() {
         return Ok(());
     }
@@ -282,23 +282,6 @@ fn record_baseline_item(
     save_observation(tx, id, url, &snapshot)
 }
 
-/// The background poll's last observation of the item at `url` for the
-/// space `id`, if one is recorded.
-fn saved_observation(
-    db: &rusqlite::Connection,
-    id: &SpaceId,
-    url: &str,
-) -> Result<Option<Snapshot>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM space_item_activity WHERE space_id=?1 AND url=?2",
-            params![id, url],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record.map(|text| serde_json::from_str(&text)).transpose()?)
-}
-
 /// Whether `space` is ready for work: a worktree once its setup readied it;
 /// a space without one has no setup to wait for.
 fn is_ready(space: &Space) -> bool {
@@ -316,16 +299,16 @@ pub struct Seen {
 
 /// Store `snapshot` as the background poll's observation of the item at
 /// `url` for the space `id`, taking the title it shows as the item's.
-fn save_observation(
+pub fn save_observation(
     db: &rusqlite::Connection,
     id: &SpaceId,
     url: &str,
     snapshot: &Snapshot,
 ) -> Result<()> {
     db.execute(
-        "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id,url) DO UPDATE SET record=excluded.record",
-        params![id, url, serde_json::to_string(snapshot)?],
+        "INSERT INTO space_item_activity(space_id,url,state,record) VALUES (?1,?2,?3,?4)
+         ON CONFLICT(space_id,url) DO UPDATE SET state=excluded.state,record=excluded.record",
+        params![id, url, snapshot.state(), serde_json::to_string(snapshot)?],
     )?;
     if let Some(title) = snapshot.title() {
         crate::linked::refresh_titles(db, id, url, title)?;

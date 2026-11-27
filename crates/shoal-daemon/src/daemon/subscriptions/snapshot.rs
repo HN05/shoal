@@ -303,21 +303,12 @@ async fn alerts(
 /// What the daemon last observed of each linked item on its forge, by space
 /// ID and URL.
 async fn item_activity(manager: &Manager) -> Result<HashMap<SpaceId, HashMap<String, Snapshot>>> {
-    let rows = manager
-        .store
-        .run(|db| {
-            Ok(db
-                .prepare("SELECT space_id,url,record FROM space_item_activity")?
-                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-                .collect::<rusqlite::Result<Vec<(SpaceId, String, String)>>>()?)
-        })
+    let rows = (manager.store)
+        .read(|tx| shoal_links::wait::followed::observed_items(tx))
         .await?;
     let mut activity: HashMap<SpaceId, HashMap<String, Snapshot>> = HashMap::new();
-    for (space, url, record) in rows {
-        // An unreadable observation shows the link without one.
-        if let Ok(snapshot) = serde_json::from_str(&record) {
-            activity.entry(space).or_default().insert(url, snapshot);
-        }
+    for (space, url, snapshot) in rows {
+        activity.entry(space).or_default().insert(url, snapshot);
     }
     Ok(activity)
 }

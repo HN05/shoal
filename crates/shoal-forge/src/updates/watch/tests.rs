@@ -7,11 +7,10 @@ use shoal_forge_types::updates::UpdateKind;
 /// A snapshot of a PR in `state` whose comments have the fingerprints
 /// `comments` holds.
 fn snapshot(comments: Value, state: &str) -> Snapshot {
-    serde_json::from_value(
-        json!({"kind": "pr", "comments": entries(comments), "checks": {},
-            "conflict": null, "state": state, "errors": {}}),
-    )
-    .unwrap()
+    let record = json!({"kind": "pr", "comments": entries(comments), "checks": {},
+        "conflict": null, "errors": {}});
+    let state = serde_json::from_value(Value::String(state.into())).unwrap();
+    Snapshot::stored(Some(state), &record.to_string()).unwrap()
 }
 
 /// Each fingerprint of `comments` as an entry without an author.

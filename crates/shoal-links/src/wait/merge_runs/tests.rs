@@ -8,7 +8,7 @@ use shoal_forge::updates::Snapshot;
 use shoal_forge_types::{
     backends::ForgeKind,
     items::link::{LinkKind, Selection},
-    updates::{Update, UpdateKind},
+    updates::{SnapshotState, Update, UpdateKind},
 };
 use shoal_protocol::{
     events::EventKind,
@@ -105,14 +105,13 @@ fn listed_run(status: &str) -> Value {
 
 /// A read of the PR into `main` in `state`, with the merge commit
 /// `merge_commit` when it has one.
-fn pull(state: &str, merge_commit: Option<&str>) -> Snapshot {
-    let mut snapshot = json!({"comments": {}, "checks": {}, "conflict": null,
-        "state": state, "errors": {}, "details": {"title": "Fix", "body": "",
-        "labels": [], "assignees": [], "base": "main"}});
+fn pull(state: SnapshotState, merge_commit: Option<&str>) -> Snapshot {
+    let mut record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {},
+        "details": {"title": "Fix", "body": "", "labels": [], "assignees": [], "base": "main"}});
     if let Some(commit) = merge_commit {
-        snapshot["merge_commit"] = commit.into();
+        record["merge_commit"] = commit.into();
     }
-    serde_json::from_value(snapshot).unwrap()
+    Snapshot::stored(Some(state), &record.to_string()).unwrap()
 }
 
 impl Following {
@@ -232,10 +231,11 @@ impl Following {
     /// merge's updates.
     async fn merge(&self, merge_commit: Option<&str>) -> Vec<Update> {
         let pr = self.pr.clone();
-        self.observe(&pr, pull("open", None)).await;
-        let delivered = self.observe(&pr, pull("open", None)).await;
+        self.observe(&pr, pull(SnapshotState::Open, None)).await;
+        let delivered = self.observe(&pr, pull(SnapshotState::Open, None)).await;
         assert!(delivered.is_empty(), "{delivered:?}");
-        self.observe(&pr, pull("merged", merge_commit)).await
+        self.observe(&pr, pull(SnapshotState::Merged, merge_commit))
+            .await
     }
 
     /// The forge's repository, as a remote URL.
@@ -287,8 +287,10 @@ fn run_url(following: &Following) -> String {
 async fn a_restart_that_reads_the_merge_follows_it() {
     let following = following(true, json!([listed_run("running")])).await;
     let pr = following.pr.clone();
-    following.observe(&pr, pull("open", None)).await;
-    let merged = following.start(pull("merged", Some(MERGED)), Start::Every);
+    following
+        .observe(&pr, pull(SnapshotState::Open, None))
+        .await;
+    let merged = following.start(pull(SnapshotState::Merged, Some(MERGED)), Start::Every);
     let merged = merged.await;
     assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
     assert!(following.awaits().await);
@@ -301,12 +303,17 @@ async fn a_restart_that_reads_the_merge_follows_it() {
 /// past a read of the PR merged.
 async fn hold_a_comment(following: &Following) {
     let pr = following.pr.clone();
-    following.observe(&pr, pull("open", None)).await;
-    let mut commented = serde_json::to_value(pull("open", None)).unwrap();
+    following
+        .observe(&pr, pull(SnapshotState::Open, None))
+        .await;
+    let mut commented = serde_json::to_value(pull(SnapshotState::Open, None)).unwrap();
     commented["comments"] = json!({"discussion:1": {"fingerprint": "first"}});
-    let waiting = (following.observe(&pr, serde_json::from_value(commented).unwrap())).await;
+    let commented = Snapshot::stored(Some(SnapshotState::Open), &commented.to_string()).unwrap();
+    let waiting = following.observe(&pr, commented).await;
     assert_eq!(waiting[0].kind, UpdateKind::Comment, "{waiting:?}");
-    let replayed = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    let replayed = following
+        .observe(&pr, pull(SnapshotState::Merged, Some(MERGED)))
+        .await;
     assert_eq!(replayed, waiting);
 }
 
@@ -316,7 +323,7 @@ async fn a_first_background_read_of_a_merged_pr_follows_its_merge() {
     hold_a_comment(&following).await;
     assert!(!following.awaits().await);
     let pr = following.pr.clone();
-    let merged = pull("merged", Some(MERGED));
+    let merged = pull(SnapshotState::Merged, Some(MERGED));
     following.record_background(&pr, merged).await.unwrap();
     assert!(following.awaits().await);
 }
@@ -328,7 +335,10 @@ async fn the_background_poll_follows_a_merge_while_older_updates_wait() {
     hold_a_comment(&following).await;
     assert!(!following.awaits().await);
 
-    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+    for snapshot in [
+        pull(SnapshotState::Open, None),
+        pull(SnapshotState::Merged, Some(MERGED)),
+    ] {
         following.record_background(&pr, snapshot).await.unwrap();
     }
     assert!(following.awaits().await);
@@ -339,13 +349,13 @@ async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_nex
     let following = following(true, json!([])).await;
     let pr = following.pr.clone();
     following
-        .record_background(&pr, pull("open", None))
+        .record_background(&pr, pull(SnapshotState::Open, None))
         .await
         .unwrap();
     // Without a remote, the checkout's branch names the default branch.
     let checkout = following.root.path().join("repo");
     git(&checkout, &["checkout", "-q", "--detach"]);
-    let merged = || pull("merged", Some(MERGED));
+    let merged = || pull(SnapshotState::Merged, Some(MERGED));
     assert!(following.record_background(&pr, merged()).await.is_err());
     assert!(!following.awaits().await);
 
@@ -358,20 +368,28 @@ async fn a_merge_seen_while_its_default_branch_is_unknown_is_followed_by_the_nex
 async fn a_run_the_background_poll_saw_finish_ends_its_wait_while_its_updates_wait() {
     let following = following(true, json!([listed_run("running")])).await;
     let pr = following.pr.clone();
-    following.observe(&pr, pull("open", None)).await;
-    let delivered = following.observe(&pr, pull("open", None)).await;
+    following
+        .observe(&pr, pull(SnapshotState::Open, None))
+        .await;
+    let delivered = following
+        .observe(&pr, pull(SnapshotState::Open, None))
+        .await;
     assert!(delivered.is_empty(), "{delivered:?}");
-    following.observe(&pr, pull("merged", Some(MERGED))).await;
+    following
+        .observe(&pr, pull(SnapshotState::Merged, Some(MERGED)))
+        .await;
     following.follow().await;
     let run = run_url(&following);
-    let read = |state: &str, errors: Value| -> Snapshot {
-        serde_json::from_value(json!({"comments": {}, "checks": {}, "conflict": null,
-            "state": state, "errors": errors}))
-        .unwrap()
+    let read = |state, errors: Value| -> Snapshot {
+        let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": errors});
+        Snapshot::stored(Some(state), &record.to_string()).unwrap()
     };
     // A failed read waits on the cursor for an agent that does not take it.
     let failed = following
-        .observe(&run, read("running", json!({"CI run": "unreachable"})))
+        .observe(
+            &run,
+            read(SnapshotState::Running, json!({"CI run": "unreachable"})),
+        )
         .await;
     assert_eq!(failed[0].kind, UpdateKind::LookupFailed, "{failed:?}");
     following.end_window().await;
@@ -379,7 +397,7 @@ async fn a_run_the_background_poll_saw_finish_ends_its_wait_while_its_updates_wa
     assert!(following.awaits().await);
 
     // The background poll's own reads see it finish.
-    for state in ["running", "failed"] {
+    for state in [SnapshotState::Running, SnapshotState::Failed] {
         let finishing = read(state, json!({}));
         following.record_background(&run, finishing).await.unwrap();
     }
@@ -391,7 +409,10 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
     let following = following(true, json!([])).await;
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
     hold_a_comment(&following).await;
-    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+    for snapshot in [
+        pull(SnapshotState::Open, None),
+        pull(SnapshotState::Merged, Some(MERGED)),
+    ] {
         following.record_background(&pr, snapshot).await.unwrap();
     }
     following.end_window().await;
@@ -400,13 +421,17 @@ async fn a_cursor_that_sees_the_merge_after_its_lookup_ended_starts_none() {
     assert_eq!(following.events(EventKind::NoMergeRuns).await, 1);
 
     // The agent takes the held comment, and the cursor then sees the merge.
-    let held = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    let held = following
+        .observe(&pr, pull(SnapshotState::Merged, Some(MERGED)))
+        .await;
     let deliveries = held.into_iter().map(|update| update.delivery).collect();
     let space = SpaceSelector::id(&id);
     let acknowledged =
         (following.links).acknowledge_pr_updates(&following.daemon, &space, deliveries);
     acknowledged.await.unwrap();
-    let merged = following.observe(&pr, pull("merged", Some(MERGED))).await;
+    let merged = following
+        .observe(&pr, pull(SnapshotState::Merged, Some(MERGED)))
+        .await;
     let kinds: Vec<_> = merged.iter().map(|update| update.kind).collect();
     assert!(kinds.contains(&UpdateKind::Merged), "{merged:?}");
     assert!(!following.awaits().await);
@@ -432,7 +457,10 @@ async fn opening(watch: bool, runs: Value) -> Following {
 async fn the_merge_of_a_pr_linked_as_opened_reports_nothing_of_the_pr() {
     let following = opening(true, json!([])).await;
     let (pr, id) = (following.pr.clone(), following.workspace.id.clone());
-    for snapshot in [pull("open", None), pull("merged", Some(MERGED))] {
+    for snapshot in [
+        pull(SnapshotState::Open, None),
+        pull(SnapshotState::Merged, Some(MERGED)),
+    ] {
         following.record_background(&pr, snapshot).await.unwrap();
     }
     assert!(following.awaits().await);
@@ -484,9 +512,8 @@ async fn a_merge_links_the_default_branchs_runs_for_its_merge_commit() {
     following.follow().await;
     assert_eq!(following.related().await, std::slice::from_ref(&run));
     assert!(following.awaits().await);
-    let finished = serde_json::from_value(json!({"comments": {}, "checks": {},
-        "conflict": null, "state": "failed", "errors": {}}))
-    .unwrap();
+    let record = json!({"comments": {}, "checks": {}, "conflict": null, "errors": {}});
+    let finished = Snapshot::stored(Some(SnapshotState::Failed), &record.to_string()).unwrap();
     let reported = following.observe(&run, finished).await;
     assert_eq!(reported[0].kind, UpdateKind::CiCompleted, "{reported:?}");
     assert!(!following.awaits().await);
@@ -498,7 +525,7 @@ async fn a_merge_links_the_default_branchs_runs_for_its_merge_commit() {
 #[tokio::test]
 async fn linking_a_merged_pr_follows_its_merge() {
     let following = following(true, json!([listed_run("running")])).await;
-    let merged = following.start(pull("merged", Some(MERGED)), Start::Unread);
+    let merged = following.start(pull(SnapshotState::Merged, Some(MERGED)), Start::Unread);
     let merged = merged.await;
     assert_eq!(merged[0].kind, UpdateKind::Merged, "{merged:?}");
     assert!(following.awaits().await);
