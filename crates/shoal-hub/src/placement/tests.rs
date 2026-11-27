@@ -17,6 +17,7 @@ fn snapshot() -> Snapshot {
             agents: vec!["claude".into()],
             ..Capacity::default()
         }),
+        speed: None,
     };
     Snapshot {
         request: Request {

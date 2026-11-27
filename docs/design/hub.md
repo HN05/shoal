@@ -638,7 +638,12 @@ The stages, in order:
 3. The caller's machine comes first, beside the start's parent and unpushed
    work. It follows the lifetime stage, so disposable work leaves an
    `always_on` caller for an `intermittent` machine.
-4. A heavy start goes where a heavy agent is admitted now, with the most
+4. A heavy start prefers the machine fastest at its repository, and a light
+   start the slowest, since a light agent mostly waits on its model and
+   keeps the fast machines free. A machine without a speed there ranks as
+   an average one, not a slow one. Speeds within a factor of 1.25 of each
+   other rank equal, so the noise of medians leaves the choice to room.
+5. A heavy start goes where a heavy agent is admitted now, with the most
    spare memory. A light start goes where it takes the least from heavy
    agents, since dynamic admission gives them the same memory: first to a
    machine that runs no heavy agents, then to one where no heavy work waits,
@@ -647,10 +652,9 @@ The stages, in order:
 `balanced` never clones a repository onto a machine; that stays with
 `--machine`.
 
-Three more stages are proposed. Before the lifetime stage, a machine whose
-exclusive work waits now ranks after those where none waits. Before room, a
-machine scarce in recent exclusive demand ranks later, and heavy work prefers
-fast machines while light work prefers slow ones.
+Two more stages are proposed. Before the lifetime stage, a machine whose
+exclusive work waits now ranks after those where none waits. Before speed, a
+machine scarce in recent exclusive demand ranks later.
 
 `external` lets an app on the hub's machine take the decision over, registered
 as the placer. A start waits for it only briefly, and otherwise places by

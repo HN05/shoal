@@ -91,6 +91,12 @@ fn reason(reason: Reason) -> String {
         Reason::Local => "placement is local".into(),
         Reason::Intermittent => "intermittent, takes disposable work".into(),
         Reason::CallerHasRoom => "the machine it was made on has room".into(),
+        Reason::Faster { speed } => {
+            format!("faster than the others at its repository, {speed}% of their speed")
+        }
+        Reason::Slower { speed } => {
+            format!("slower than the others at its repository, {speed}% of their speed")
+        }
         Reason::HeavySlot { memory_free } => {
             format!("always_on, heavy slot free{}", memory(memory_free))
         }

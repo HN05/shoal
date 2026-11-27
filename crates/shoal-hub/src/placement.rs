@@ -241,6 +241,7 @@ fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine
             always_on: (member.availability)
                 .is_some_and(|classified| classified.availability == Availability::AlwaysOn),
             capacity: member.capacity.clone(),
+            speed: None,
         })
         .collect()
 }

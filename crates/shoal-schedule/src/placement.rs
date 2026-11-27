@@ -6,6 +6,7 @@ use shoal_states::states;
 
 mod balanced;
 pub mod snapshot;
+pub mod speeds;
 
 pub use balanced::Balanced;
 use snapshot::{Lifetime, Snapshot};
@@ -62,6 +63,12 @@ pub enum Reason {
     /// The caller's machine, beside the start's parent and unpushed work,
     /// which has room for the start.
     CallerHasRoom,
+    /// A machine that does the start's repository's work at `speed`, fast
+    /// enough to lead for heavy work.
+    Faster { speed: speeds::Speed },
+    /// A machine that does the start's repository's work at `speed`, slow
+    /// enough to lead for light work, which mostly waits on its model.
+    Slower { speed: speeds::Speed },
     /// An `always_on` machine whose admission lets a heavy agent in now,
     /// with `memory_free` bytes spare, none while it reads none.
     HeavySlot {

@@ -4,7 +4,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_states::states;
 use shoal_time::UnixTime;
 
-use super::SkippedBy;
+use super::{SkippedBy, speeds::Speed};
 
 /// The start to place and the machines connected to the hub, the caller's
 /// among them.
@@ -63,6 +63,10 @@ pub struct Machine {
     /// before its first report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capacity: Option<Capacity>,
+    /// Its speed at the start's repository's work; none where it shares no
+    /// run with another machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed: Option<Speed>,
 }
 
 /// What a machine reports of its repositories, the agents it can launch

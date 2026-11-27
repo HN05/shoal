@@ -8,6 +8,11 @@ use super::{
     snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
+/// How far apart two machines' speeds stand before the speed stage tells
+/// them apart, as a factor, so the noise of their medians leaves the choice
+/// to their room.
+const SPEED_STEP: f64 = 1.25;
+
 /// The `balanced` policy. It ranks only the machines with room the start's
 /// lifetime may go to and the caller's machine, so a start no such machine
 /// has room for stays on the caller's.
@@ -42,6 +47,7 @@ struct Rank<'a> {
     fit: Fit,
     lifetime: bool,
     caller: bool,
+    speed: i32,
     room: RoomKey,
     name: &'a str,
 }
@@ -57,15 +63,17 @@ fn rank<'a>(request: &Request, machine: &'a Machine) -> Option<(Rank<'a>, Placed
     let fit = fit(request, machine, room.is_some())?;
     let lifetime = lifetime(request, machine);
     let caller = caller(request, machine);
+    let speed = speed(request, machine);
     let (room, room_reason) = room.unzip();
     let rank = Rank {
         fit: fit.0,
         lifetime: lifetime.0,
         caller: caller.0,
+        speed: speed.0,
         room: room.unwrap_or_default(),
         name: &machine.name,
     };
-    let reason = [fit.1, lifetime.1, caller.1, room_reason];
+    let reason = [fit.1, lifetime.1, caller.1, speed.1, room_reason];
     let placed = Placed {
         machine: machine.id.clone(),
         reason: reason.into_iter().flatten().next()?,
@@ -107,6 +115,20 @@ fn lifetime(request: &Request, machine: &Machine) -> Stage<bool> {
 fn caller(request: &Request, machine: &Machine) -> Stage<bool> {
     let caller = machine.id == request.caller;
     (!caller, caller.then_some(Reason::CallerHasRoom))
+}
+
+/// Heavy work prefers the machines fastest at its repository, and light
+/// work the slowest, which keeps the fast ones free. A machine without a
+/// speed there ranks as one of average speed.
+fn speed(request: &Request, machine: &Machine) -> Stage<i32> {
+    let Some(speed) = machine.speed else {
+        return (0, None);
+    };
+    let steps = (f64::from(speed) / 100.0).log(SPEED_STEP).round() as i32;
+    match request.heavy {
+        true => (-steps, (steps > 0).then_some(Reason::Faster { speed })),
+        false => (steps, (steps < 0).then_some(Reason::Slower { speed })),
+    }
 }
 
 /// How a machine with room for `request` ranks among the others by its

@@ -31,6 +31,7 @@ fn machine(id: &str, always_on: bool, capacity: Capacity) -> Machine {
             agents: vec!["claude".into()],
             ..capacity
         }),
+        speed: None,
     }
 }
 
@@ -110,6 +111,38 @@ fn a_light_start_goes_first_to_a_machine_that_runs_no_heavy_agents() {
     let order: Vec<&str> = ranked.iter().map(|(machine, _)| machine.as_str()).collect();
     assert_eq!(order, ["light", "idle", "waiting", "laptop"]);
     assert_eq!(ranked[2].1, Reason::HeavyWaiting { waiting: 3 });
+}
+
+/// An `always_on` machine with room for a heavy agent, at `speed`.
+fn at_speed(id: &str, speed: Option<u32>) -> Machine {
+    Machine {
+        speed,
+        ..machine(id, true, capacity(1, 32, 0))
+    }
+}
+
+#[test]
+fn a_heavy_start_goes_to_the_fastest_machine_and_a_light_one_to_the_slowest() {
+    let machines = vec![
+        laptop(),
+        at_speed("unknown", None),
+        at_speed("fast", Some(200)),
+        at_speed("slow", Some(50)),
+        // Within a step of average, which leaves the order to its room.
+        Machine {
+            speed: Some(110),
+            ..machine("roomy", true, capacity(1, 64, 0))
+        },
+    ];
+    let heavy = ranked(request(true), machines.clone());
+    let order: Vec<&str> = heavy.iter().map(|(machine, _)| machine.as_str()).collect();
+    // A machine without a speed ranks as an average one, not a slow one.
+    assert_eq!(order, ["fast", "roomy", "unknown", "slow", "laptop"]);
+    assert_eq!(heavy[0].1, Reason::Faster { speed: 200 });
+    let light = ranked(request(false), machines);
+    let order: Vec<&str> = light.iter().map(|(machine, _)| machine.as_str()).collect();
+    assert_eq!(order, ["slow", "roomy", "unknown", "fast", "laptop"]);
+    assert_eq!(light[0].1, Reason::Slower { speed: 50 });
 }
 
 #[test]

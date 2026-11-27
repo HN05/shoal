@@ -22,6 +22,7 @@ fn snapshot(agents: &[&str]) -> Snapshot {
                 agents: agents.iter().map(|agent| (*agent).into()).collect(),
                 ..Capacity::default()
             }),
+            speed: None,
         }],
     }
 }
