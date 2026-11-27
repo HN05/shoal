@@ -207,6 +207,13 @@ impl shoal_spaces::daemon::Agents for Manager {
         Box::pin(self.agents.idle_restores(self, workspace_id))
     }
 
+    fn asleep_hold<'a>(
+        &'a self,
+        id: &'a SpaceId,
+    ) -> BoxFuture<'a, Result<Option<shoal_protocol::model::HeldBy>>> {
+        Box::pin(self.agents.asleep_hold(self, id))
+    }
+
     fn note_interaction<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, ()> {
         Box::pin(self.agents.note_interaction(self, selector))
     }

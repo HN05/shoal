@@ -136,6 +136,17 @@ impl Wake {
             Wake::Slot => Some(Grant::Queue),
         }
     }
+
+    /// Whether what the restore waits for besides a slot has come, so only
+    /// admission holds it back: for [`Wake::Recovery`], once healthy
+    /// readings were `recovered`.
+    pub fn has_come(self, recovered: bool) -> bool {
+        match self {
+            Wake::Recovery => recovered,
+            Wake::Update { due } => due,
+            Wake::Slot => true,
+        }
+    }
 }
 
 /// A queued entry and the repository it starts an agent in.

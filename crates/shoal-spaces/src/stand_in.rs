@@ -50,9 +50,10 @@ use shoal_protocol::hub::{Machine, Member};
 use shoal_protocol::links::{Unlinked, issue, pr};
 use shoal_protocol::model::KeptLease;
 use shoal_protocol::model::{
-    Chat, CheckoutSync, Execution, LinkedItem, Located, MergePath, MergeWarning, QueueAdmission,
-    QueueEntry, QueuedJob, Relation, Repository, ReviewMark, RunningAgent, Selected, Space,
-    SpaceLinks, SpaceRef, SpaceTarget, StoppedSpace, SyncedRepository, Workspace, WorkspaceRef,
+    Chat, CheckoutSync, Execution, HeldBy, LinkedItem, Located, MergePath, MergeWarning,
+    QueueAdmission, QueueEntry, QueuedJob, Relation, Repository, ReviewMark, RunningAgent,
+    Selected, Space, SpaceLinks, SpaceRef, SpaceTarget, StoppedSpace, SyncedRepository, Workspace,
+    WorkspaceRef,
 };
 use shoal_protocol::paths::Paths;
 use shoal_protocol::processes::Identity;
@@ -1213,6 +1214,10 @@ impl Agents for StandIn {
 
     fn idle_restores<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<HashSet<ExecutionId>>> {
         Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn asleep_hold<'a>(&'a self, _: &'a SpaceId) -> BoxFuture<'a, Result<Option<HeldBy>>> {
+        Box::pin(async { Ok(None) })
     }
 
     fn note_interaction<'a>(&'a self, _: &'a SpaceSelector) -> BoxFuture<'a, ()> {

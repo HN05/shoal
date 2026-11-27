@@ -90,12 +90,12 @@ impl Spaces {
                 let mut status =
                     (self.worktree_status(daemon, &SpaceSelector::id(&workspace.id))).await?;
                 let workspace = &mut status.workspace;
-                add_kept_leases(daemon, &workspace.id, workspace.asleep.as_mut()).await;
+                add_asleep_details(daemon, &workspace.id, workspace.asleep.as_mut()).await;
                 let path = workspace.path.clone();
                 (SpaceDetail::Workspace(Box::new(status)), path)
             }
             ByKind::Chat(mut chat) => {
-                add_kept_leases(daemon, &chat.id, chat.asleep.as_mut()).await;
+                add_asleep_details(daemon, &chat.id, chat.asleep.as_mut()).await;
                 let checkout = self.chat_checkout_path(daemon, &chat).await?;
                 let chat = Box::new(chat);
                 (SpaceDetail::Chat { chat }, checkout)
@@ -161,13 +161,18 @@ impl Spaces {
     }
 }
 
-/// A status that cannot read the leases shows none.
-async fn add_kept_leases(daemon: &dyn Daemon, id: &SpaceId, asleep: Option<&mut Asleep>) {
+/// Add the leases an asleep agent keeps and what holds back its woken
+/// restore. A status that cannot read either shows none.
+async fn add_asleep_details(daemon: &dyn Daemon, id: &SpaceId, asleep: Option<&mut Asleep>) {
     let Some(asleep) = asleep else {
         return;
     };
     match daemon.kept_leases(id).await {
         Ok(keeps) => asleep.keeps = keeps,
         Err(error) => crate::log!("leases the agent of {id} keeps unread: {error:#}"),
+    }
+    match daemon.asleep_hold(id).await {
+        Ok(held_by) => asleep.held_by = held_by,
+        Err(error) => crate::log!("what holds back the restore of {id} unread: {error:#}"),
     }
 }

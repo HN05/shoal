@@ -36,7 +36,8 @@ switched with Shift-Tab, approvals given for the session or a `/model` switch.
   shows when Shoal stops it, such as
   `simulator default (until 14:30), resource signing`.
 
-With `--json`, status gives `asleep` with `reason`, `wakes_when` and `keeps`.
+With `--json`, status gives `asleep` with `reason`, `wakes_when`, `keeps` and,
+once its restore is due and held back, `held_by` as `shoal queue` gives it.
 Each entry of `keeps` has its `kind`, `name` and `until`.
 
 ## The sleep screen

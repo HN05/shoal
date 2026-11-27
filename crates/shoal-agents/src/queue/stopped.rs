@@ -336,6 +336,7 @@ fn asleep(record: &recovery::Record) -> Asleep {
         reason: reason.unwrap_or(UNKNOWN_STOP).to_owned(),
         wakes_when: wakes_when.to_owned(),
         keeps: Vec::new(),
+        held_by: None,
     }
 }
 

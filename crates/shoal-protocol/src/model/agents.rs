@@ -36,6 +36,11 @@ pub struct Asleep {
     /// shows.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keeps: Vec<KeptLease>,
+    /// What admission holds back its restore for once what wakes it has
+    /// come, which a space's status shows: the agent stays asleep until a
+    /// slot or room frees.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held_by: Option<super::queue::HeldBy>,
 }
 
 /// A lease an asleep agent keeps.

@@ -7,6 +7,8 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::stopped::{UNKNOWN_STOP, WAKES_IN_QUEUE};
 use crate::model::Asleep;
 use crate::state::QueueKind;
+use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::space_ids::SpaceId;
 
 /// Why the agent of the space `id` is asleep and what wakes it, while a
@@ -26,7 +28,23 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Asleep>> {
         reason: reason.unwrap_or_else(|| UNKNOWN_STOP.to_owned()),
         wakes_when: wakes_when.unwrap_or_else(|| WAKES_IN_QUEUE.to_owned()),
         keeps: Vec::new(),
+        held_by: None,
     }))
+}
+
+/// The entry of the restore [`current`] describes, with the execution it
+/// restores, once it names one.
+pub fn restore(db: &Connection, id: &SpaceId) -> Result<Option<(QueueEntryId, ExecutionId)>> {
+    let found: Option<(QueueEntryId, Option<ExecutionId>)> = db
+        .prepare_cached(
+            "SELECT id,execution_id FROM agent_queue
+             WHERE space_id=?1 AND kind=?2 AND automatic ORDER BY seq LIMIT 1",
+        )?
+        .query_row(params![id, QueueKind::Restore], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .optional()?;
+    Ok(found.and_then(|(entry, execution)| Some((entry, execution?))))
 }
 
 /// Wake the agent of the space `id` if it is asleep: the restores Shoal

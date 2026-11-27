@@ -9,10 +9,12 @@ use std::collections::HashSet;
 use anyhow::Result;
 use rusqlite::Connection;
 
+use super::asleep;
 use super::limits::Wake;
 use crate::Agents;
 use crate::daemon::Daemon;
 use crate::execution::recovery;
+use crate::model::HeldBy;
 use crate::state::QueueKind;
 use crate::state::QueueState;
 use shoal_protocol::space_names::SpaceSelector;
@@ -164,6 +166,25 @@ impl Agents {
             .filter(|row| self.stopped_as(&row.workspace, &row.execution) == Stopped::BetweenTurns)
             .map(|row| row.id)
             .collect())
+    }
+
+    /// What held back the restore of the asleep agent of the space `id` at
+    /// the last admission pass, once what wakes it has come.
+    pub async fn asleep_hold(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<Option<HeldBy>> {
+        let space = id.to_owned();
+        let restore = self
+            .store
+            .read(move |db| asleep::restore(db, &space))
+            .await?;
+        let Some((entry, execution)) = restore else {
+            return Ok(None);
+        };
+        let wake = self.restore_wake(daemon, id, &execution, true).await?;
+        let recovered = self.overload_recovery.published().is_some();
+        Ok(wake
+            .has_come(recovered)
+            .then(|| self.agent_queue.held_back(&entry))
+            .flatten())
     }
 
     /// What the queued restore of `execution` in the space `id` waits for,

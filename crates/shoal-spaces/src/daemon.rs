@@ -36,9 +36,9 @@ use shoal_protocol::hub::{Machine, Member};
 use shoal_protocol::links::{Unlinked, issue, pr};
 use shoal_protocol::model::KeptLease;
 use shoal_protocol::model::{
-    Chat, CheckoutSync, Execution, LinkedItem, MergePath, MergeWarning, QueueAdmission, QueueEntry,
-    QueuedJob, Relation, Repository, ReviewMark, RunningAgent, Selected, Space, SpaceLinks,
-    SpaceRef, StoppedSpace, SyncedRepository, Workspace, WorkspaceRef,
+    Chat, CheckoutSync, Execution, HeldBy, LinkedItem, MergePath, MergeWarning, QueueAdmission,
+    QueueEntry, QueuedJob, Relation, Repository, ReviewMark, RunningAgent, Selected, Space,
+    SpaceLinks, SpaceRef, StoppedSpace, SyncedRepository, Workspace, WorkspaceRef,
 };
 use shoal_protocol::processes::Identity;
 use shoal_protocol::progress::Blocker;
@@ -444,6 +444,10 @@ pub trait Agents: Send + Sync {
         &'a self,
         workspace_id: &'a SpaceId,
     ) -> BoxFuture<'a, Result<HashSet<ExecutionId>>>;
+
+    /// What holds back the restore of the space's asleep agent, once what
+    /// wakes it has come.
+    fn asleep_hold<'a>(&'a self, id: &'a SpaceId) -> BoxFuture<'a, Result<Option<HeldBy>>>;
 
     fn note_interaction<'a>(&'a self, selector: &'a SpaceSelector) -> BoxFuture<'a, ()>;
 

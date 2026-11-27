@@ -1166,3 +1166,38 @@ async fn a_warm_cache_keeps_no_idle_agent_under_the_balanced_schedule() {
 async fn a_warm_cache_keeps_no_idle_agent_under_the_speed_schedule() {
     assert!(warm_agent_sleeps("speed").await);
 }
+
+/// An agent asleep while the user is away whose update came, on a machine
+/// with no free slot, names the limit that holds back its restore; before
+/// the update, nothing does.
+#[tokio::test]
+async fn an_asleep_agent_due_to_wake_names_what_holds_its_restore() {
+    let (root, manager) = manager().await;
+    let repo = repository(root.path(), "repo");
+    let repo = manager
+        .repositories
+        .register(repo.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let (workspace, execution) = asleep_while_away(&manager, &repo.id, "away").await;
+    manager.publish_config(crate::daemon::test_support::global_config(
+        "[machine]\nmax_heavy_agents = 0\n[machine.overload.disk]\nenabled = false",
+    ));
+    let _link = manager
+        .agents
+        .agent_queue()
+        .link_restore(&execution.plan.id);
+    let hold = async || {
+        manager.agents.dispatch_queue(&*manager).await.unwrap();
+        manager
+            .agents
+            .asleep_hold(&*manager, &workspace.id)
+            .await
+            .unwrap()
+    };
+    assert_eq!(hold().await, None, "before its update");
+
+    crate::daemon::links::wait::test_support::comment_on_watched_pr(&manager, &workspace.id).await;
+
+    assert_eq!(hold().await, Some(crate::model::HeldBy::MaxHeavyAgents));
+}

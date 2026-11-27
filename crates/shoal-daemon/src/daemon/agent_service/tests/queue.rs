@@ -580,6 +580,54 @@ async fn an_idle_stopped_agent_frees_its_slot_until_an_update_restores_it() {
     );
 }
 
+/// A working agent load stopped names the limit that holds back its restore
+/// once healthy readings came, and nothing before them.
+#[tokio::test]
+async fn a_recovered_load_stopped_agent_names_what_holds_its_restore() {
+    let (temp, manager) = manager().await;
+    let repo = register(&manager, &temp, "repo").await;
+    limit_globally(&manager, 1);
+    let working = create(&manager, &repo, "working").await;
+    let (execution, _stop) = connected_agent(&manager, &working).await;
+    manager
+        .agents
+        .set_agent_state(
+            &*manager,
+            &SpaceSelector::id(&working.id),
+            crate::state::AgentState::Working,
+            Some(execution.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, crate::daemon::overload::Pressure::Memory)
+            .await
+    );
+    manager
+        .agents
+        .queue_agent_restore(&*manager, &execution)
+        .await
+        .unwrap();
+    let _restoring = await_restore(&manager, &execution).await;
+    limit_globally(&manager, 0);
+    let hold = async || {
+        manager.agents.dispatch_queue(&*manager).await.unwrap();
+        manager
+            .agents
+            .asleep_hold(&*manager, &working.id)
+            .await
+            .unwrap()
+    };
+    assert_eq!(hold().await, None, "before healthy readings");
+
+    publish_recovery(&manager);
+
+    assert_eq!(hold().await, Some(crate::model::HeldBy::MaxHeavyAgents));
+}
+
 #[tokio::test]
 async fn a_message_to_every_agent_restores_an_idle_stopped_agent() {
     let (temp, manager) = manager().await;
