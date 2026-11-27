@@ -161,7 +161,9 @@ nothing of the job.
 
 One table keeps the runs of every kind Shoal measures, by repository, kind and
 key. A CI job's key is its workflow and job name. The table forgets a key that
-has not run for 30 days.
+has not run for 30 days. It also keeps a key's whole runs of the last 7 days
+beyond those its estimate reads, for the medians the hub compares machines'
+[speeds](hub.md#capacity-reports) by.
 
 ### Reservation
 

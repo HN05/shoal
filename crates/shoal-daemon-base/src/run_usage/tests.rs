@@ -75,7 +75,9 @@ fn a_key_counts_at_the_95th_percentile_of_its_whole_runs() {
 fn only_the_latest_whole_runs_count_whatever_their_age() {
     let db = database();
     record(&db, [run(1, 40 * GIB)]);
-    record(&db, (2..=31).map(|n| run(n, 10 * GIB)));
+    // After the window a median reads, so only an estimate could read it.
+    let later = MEDIAN_WINDOW.as_secs() as i64;
+    record(&db, (2..=31).map(|n| run(later + n, 10 * GIB)));
     assert_eq!(estimate(&db), Some(10 * GIB));
     assert_eq!(kept_runs(&db), WHOLE_RUNS);
 }
@@ -160,7 +162,8 @@ fn a_keys_median_reads_its_whole_runs_since_the_window_began() {
         [cut_short, oom_killed, lasting(12, 200), lasting(13, 600)],
     );
     record_run(&db, &repository(), &RunKey::SeedBuild, &lasting(14, 90)).unwrap();
-    let medians = median_durations(&db, UnixTime::from_seconds(10)).unwrap();
+    let now = UnixTime::from_seconds(10) + MEDIAN_WINDOW;
+    let medians = median_durations(&db, now).unwrap();
     let medians: Vec<(&str, u64)> = (medians.iter())
         .map(|median| (median.run.as_str(), median.seconds))
         .collect();
@@ -171,4 +174,20 @@ fn a_keys_median_reads_its_whole_runs_since_the_window_began() {
             (r#"seed_build "seed""#, 90)
         ]
     );
+}
+
+#[test]
+fn a_keys_median_reads_every_whole_run_of_the_window_beyond_those_an_estimate_reads() {
+    let db = database();
+    let window = MEDIAN_WINDOW.as_secs() as i64;
+    // Long runs well before the window, then many short runs across it.
+    record(&db, (0..20).map(|at| lasting(at, 1000)));
+    let start = window + 100;
+    record(&db, (0..70).map(|at| lasting(start + at, 600)));
+    record(&db, (70..100).map(|at| lasting(start + at, 100)));
+    let now = UnixTime::from_seconds(start + 100);
+    let medians = median_durations(&db, now).unwrap();
+    assert_eq!(medians[0].seconds, 600);
+    // Runs before the window go once an estimate reads them no more.
+    assert_eq!(kept_runs(&db), 100);
 }

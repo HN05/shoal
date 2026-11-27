@@ -21,6 +21,10 @@ const PERCENTILE: f64 = 0.95;
 /// at, since it needed more than it got.
 const OOM_KILLED_FACTOR: f64 = 1.2;
 
+/// How far back the runs a key's median duration reads ended, which the
+/// hub compares machines' speeds by.
+pub const MEDIAN_WINDOW: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
 /// How long a key's runs are kept after its latest one ended.
 const KEPT_FOR: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 
@@ -91,7 +95,7 @@ pub fn record_run(
             run.oom_killed,
         ],
     )?;
-    forget_unread_runs(db, repository, key)?;
+    forget_unread_runs(db, repository, key, run.ended_at - MEDIAN_WINDOW)?;
     forget_idle_keys(db, run.ended_at - KEPT_FOR)
 }
 
@@ -122,10 +126,11 @@ pub struct MedianDuration {
     pub seconds: u64,
 }
 
-/// The median duration of each key's whole runs that ended from `since`,
-/// leaving out those the OOM killer hit, which ran short of memory rather
-/// than at the machine's speed.
-pub fn median_durations(db: &Connection, since: UnixTime) -> Result<Vec<MedianDuration>> {
+/// The median duration of each key's whole runs that ended in the
+/// [`MEDIAN_WINDOW`] before `now`, leaving out those the OOM killer hit,
+/// which ran short of memory rather than at the machine's speed.
+pub fn median_durations(db: &Connection, now: UnixTime) -> Result<Vec<MedianDuration>> {
+    let since = now - MEDIAN_WINDOW;
     let medians = (durations_by_key(db, since)?.into_iter())
         .map(|((repository, run), durations)| MedianDuration {
             repository,
@@ -143,11 +148,11 @@ type Keyed = (RepositoryId, String);
 /// The durations of the runs [`median_durations`] reads, by key, each
 /// key's in order.
 fn durations_by_key(db: &Connection, since: UnixTime) -> Result<Vec<(Keyed, Vec<u64>)>> {
-    let mut statement = db.prepare(
+    let mut statement = db.prepare(&format!(
         "SELECT repository_id, kind, key, duration FROM run_usage
-         WHERE whole AND NOT oom_killed AND duration IS NOT NULL AND ended_at>=?1
-         ORDER BY repository_id, kind, key, duration",
-    )?;
+         WHERE {TIMED} AND ended_at>=?1
+         ORDER BY repository_id, kind, key, duration"
+    ))?;
     let rows = statement.query_map([since], |row| {
         let (kind, key): (String, String) = (row.get(1)?, row.get(2)?);
         let seconds: i64 = row.get(3)?;
@@ -181,6 +186,10 @@ const KEY: &str = "repository_id=?1 AND kind=?2 AND key=?3";
 /// The condition that selects the runs an estimate reads as whole: one the
 /// OOM killer hit needed at least what it held, however it ended.
 const WHOLE: &str = "(whole OR oom_killed)";
+
+/// The condition that selects the runs a median reads, of those in its
+/// window.
+const TIMED: &str = "(whole AND NOT oom_killed AND duration IS NOT NULL)";
 
 /// The peaks of the latest [`WHOLE_RUNS`] whole runs of `key`, each one the
 /// OOM killer hit raised by [`OOM_KILLED_FACTOR`].
@@ -219,17 +228,24 @@ fn percentile(mut peaks: Vec<f64>) -> f64 {
     peaks[below] + (peaks[above] - peaks[below]) * (rank - below as f64)
 }
 
-/// Forget the whole runs of `key` before its latest [`WHOLE_RUNS`], and its
-/// runs cut short once it has a whole one.
-fn forget_unread_runs(db: &Connection, repository: &RepositoryId, key: &RunKey) -> Result<()> {
+/// Forget the whole runs of `key` before its latest [`WHOLE_RUNS`], unless
+/// a median from `since` reads them, and its runs cut short once it has a
+/// whole one.
+fn forget_unread_runs(
+    db: &Connection,
+    repository: &RepositoryId,
+    key: &RunKey,
+    since: UnixTime,
+) -> Result<()> {
     db.execute(
         &format!(
             "DELETE FROM run_usage WHERE {KEY}
              AND rowid NOT IN (SELECT rowid FROM run_usage WHERE {KEY} AND {WHOLE}
                  ORDER BY ended_at DESC, rowid DESC LIMIT ?4)
+             AND NOT ({TIMED} AND ended_at>=?5)
              AND ({WHOLE} OR EXISTS (SELECT 1 FROM run_usage WHERE {KEY} AND {WHOLE}))"
         ),
-        params![repository, key.kind(), key.text(), WHOLE_RUNS],
+        params![repository, key.kind(), key.text(), WHOLE_RUNS, since],
     )?;
     Ok(())
 }

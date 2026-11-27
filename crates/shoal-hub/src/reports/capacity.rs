@@ -20,9 +20,6 @@ const MEASURE_EVERY: Duration = Duration::from_secs(15);
 /// How far the memory new work may use moves before a report goes.
 const MEMORY_STEP: u64 = 1 << 30;
 
-/// How far back the runs a machine's medians read ended.
-const RUNS_WINDOW: Duration = Duration::from_secs(7 * 24 * 60 * 60);
-
 /// What a machine last measured of itself: its capacity and the medians of
 /// its runs, each none before it measured it, and how it is powered, none
 /// without a battery.
@@ -95,13 +92,13 @@ impl Hub {
         })
     }
 
-    /// The medians of this machine's runs over the last [`RUNS_WINDOW`], by
-    /// the origins of their repositories.
+    /// The medians of this machine's runs, by the origins of their
+    /// repositories.
     async fn measure_medians(&self, daemon: &dyn Daemon, origins: &mut Origins) -> Result<Medians> {
         let origins = by_origin(&daemon.repositories().await?, origins).await;
-        let since = UnixTime::now() - RUNS_WINDOW;
+        let now = UnixTime::now();
         let medians = (self.store)
-            .read(move |db| median_durations(db, since))
+            .read(move |db| median_durations(db, now))
             .await?;
         Ok(by_repository(medians, &origins))
     }
