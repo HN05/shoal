@@ -429,6 +429,30 @@ fn the_hub_s_requests_and_summaries_take_the_new_shape_too() -> Result<()> {
 }
 
 #[test]
+fn the_hub_s_kept_placement_requests_become_lasting_work() -> Result<()> {
+    let mut db = at_floor()?;
+    let start =
+        serde_json::json!({"agent": "claude", "mode": "worker", "heavy": true, "caller": ""});
+    db.execute_batch(&format!(
+        "INSERT INTO hub_members(id,kind,name,public_key,joined_at)
+            VALUES ('laptop','machine','laptop','key',1);
+        INSERT INTO hub_packages(space_id,member_id,built_at,size,kept_at,start)
+            VALUES ('w1','laptop',1,1,1,'{start}'), ('w2','laptop',1,1,1,NULL);"
+    ))?;
+    migrate(&mut db)?;
+    let start_of = |id: &str| -> Result<Option<serde_json::Value>> {
+        let sql = "SELECT start FROM hub_packages WHERE space_id=?1";
+        let text: Option<String> = db.query_row(sql, [id], |row| row.get(0))?;
+        Ok(text.map(|text| serde_json::from_str(&text)).transpose()?)
+    };
+    let mut lasting = start;
+    lasting["lifetime"] = "lasting".into();
+    assert_eq!(start_of("w1")?, Some(lasting));
+    assert_eq!(start_of("w2")?, None);
+    Ok(())
+}
+
+#[test]
 fn a_resolution_s_pick_becomes_the_opener_s_answer_before_it() -> Result<()> {
     let mut db = at_floor()?;
     thread_with_picks(&db)?;
