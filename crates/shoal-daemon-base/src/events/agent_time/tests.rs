@@ -18,6 +18,7 @@ async fn store() -> (tempfile::TempDir, Store) {
 /// started or ended as `kind` says, at the second `at`.
 fn journal(db: &Connection, space: &str, kind: EventKind, execution: &str, mode: &str, at: i64) {
     let agent = AgentEvent {
+        cause: None,
         source: None,
         name: "claude".into(),
         execution_id: Some(execution.into()),

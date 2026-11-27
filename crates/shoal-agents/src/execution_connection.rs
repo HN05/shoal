@@ -41,6 +41,7 @@ use shoal_daemon_base::callers::Caller;
 use shoal_daemon_base::events::AgentEvent;
 use shoal_daemon_base::events::EventKind;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::stop_causes::StopCause;
 
 pub struct ExecutionContext {
     pub space: SpaceSelector,
@@ -93,6 +94,9 @@ pub struct Connected {
     /// Why Shoal cancelled on its own the automatic restore the wrapper
     /// waited for, which the agent's exit alert reports.
     restore_cancelled: Option<String>,
+    /// What the stop the daemon sent ends the agent for, which its
+    /// `agent_stopped` event names unless the wrapper reports its own.
+    stop_cause: Option<StopCause>,
     stop: watch::Receiver<bool>,
     /// What the execution changes in the merge records once it ends.
     records: Option<RecordChange>,
@@ -223,6 +227,7 @@ pub async fn reattach(
         reports_status: request.reports_status,
         stopped: false,
         restore_cancelled: None,
+        stop_cause: None,
         stop,
         records: None,
         source: None,
@@ -408,6 +413,7 @@ async fn relay(
         takes_narrowing,
         stopped,
         restore_cancelled,
+        stop_cause,
         stop,
         source,
         memory,
@@ -431,7 +437,10 @@ async fn relay(
     let mut restored_record = None;
     loop {
         let event = if std::mem::take(&mut resumed_pause) {
-            ExecutionEvent::Paused { memory: None }
+            ExecutionEvent::Paused {
+                memory: None,
+                cause: None,
+            }
         } else if awaiting_started {
             incoming.recv().await.context("execution disconnected")??
         } else {
@@ -443,7 +452,8 @@ async fn relay(
                     changed = stop.changed(), if !sent_stop => {
                         changed?;
                         if *stop.borrow_and_update() {
-                            let PreparedStop { control, recovery } = prepare_stop(agents,stopping).await;
+                            let PreparedStop { control, recovery, cause } = prepare_stop(agents,stopping).await;
+                            *stop_cause = cause;
                             if let Some(recovery) = recovery {
                                 recovering = recovery.recovering;
                                 if unattachable.is_none() {
@@ -575,7 +585,10 @@ async fn relay(
                 controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
-            ExecutionEvent::Paused { memory: reported } => {
+            ExecutionEvent::Paused {
+                memory: reported,
+                cause,
+            } => {
                 *handoff_claimed = true;
                 // Named again by the stop's alert once the wrapper finishes
                 // without a restore; a restored run reports its own.
@@ -583,15 +596,10 @@ async fn relay(
                 if let Some(tracked) = agent {
                     let stopped = AgentEvent {
                         oom_kills: reported.map_or(0, |memory| memory.oom_kills),
+                        cause: cause.or(*stop_cause),
                         ..agent_event(tracked, execution_id, None)
                     };
-                    (shoal_daemon_base::events::record_agent(
-                        &agents.store,
-                        &space.id,
-                        EventKind::AgentStopped,
-                        stopped,
-                    ))
-                    .await;
+                    record_stop(agents, space, stopped).await;
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
@@ -703,6 +711,9 @@ struct Stopping<'a> {
 struct PreparedStop {
     control: Control,
     recovery: Option<OverloadRecovery>,
+    /// What the stop ends the agent for; none for a detach, which ends
+    /// nothing.
+    cause: Option<StopCause>,
 }
 
 /// Whether an overload stop's agent waits to be restored.
@@ -722,16 +733,17 @@ async fn prepare_stop(agents: &Agents, stopping: Stopping<'_>) -> PreparedStop {
     if agents.restart_requested(stopping.execution_id).await {
         return prepare_restart();
     }
-    let control = if stopping.reattach && agents.executions.shutting_down() {
-        Control::Detach
-    } else {
-        requested_stop(
-            agents.executions.stop_request(stopping.execution_id).await,
-            stopping,
-        )
-    };
+    if stopping.reattach && agents.executions.shutting_down() {
+        return PreparedStop {
+            control: Control::Detach,
+            recovery: None,
+            cause: None,
+        };
+    }
+    let request = agents.executions.stop_request(stopping.execution_id).await;
     PreparedStop {
-        control,
+        cause: request.as_ref().map(|request| request.cause),
+        control: requested_stop(request, stopping),
         recovery: None,
     }
 }
@@ -752,6 +764,7 @@ async fn prepare_overload_stop(
         .await
         .filter(|_| recovering);
     PreparedStop {
+        cause: Some(protection.cause()),
         control: Control::OverloadStop {
             recover: recovering,
             reason: protection.reason,
@@ -772,6 +785,7 @@ fn prepare_restart() -> PreparedStop {
         resumes_when,
     } = Protection::restart();
     PreparedStop {
+        cause: Some(StopCause::Restart),
         control: Control::OverloadStop {
             recover: true,
             reason,
@@ -826,6 +840,7 @@ async fn finish(
         resuming,
         stopped,
         restore_cancelled,
+        stop_cause,
         memory,
         ..
     } = execution;
@@ -909,15 +924,25 @@ async fn finish(
     };
     if let Some(agent) = agent.as_ref().filter(|_| !requeued && !renewed) {
         let code = result.as_ref().ok().copied();
-        let (kind, code) = match stopped {
-            true => (EventKind::AgentStopped, None),
-            false => (EventKind::AgentExited, code),
-        };
-        let ended = AgentEvent {
-            oom_kills,
-            ..agent_event(agent, &execution_id, code)
-        };
-        shoal_daemon_base::events::record_agent(&agents.store, &space.id, kind, ended).await;
+        match stopped {
+            true => {
+                let ended = AgentEvent {
+                    oom_kills,
+                    cause: stop_cause,
+                    ..agent_event(agent, &execution_id, None)
+                };
+                record_stop(agents, &space, ended).await;
+            }
+            false => {
+                let ended = AgentEvent {
+                    oom_kills,
+                    ..agent_event(agent, &execution_id, code)
+                };
+                let kind = EventKind::AgentExited;
+                shoal_daemon_base::events::record_agent(&agents.store, &space.id, kind, ended)
+                    .await;
+            }
+        }
         agents
             .notify_agent_exit(
                 daemon,
@@ -963,6 +988,12 @@ async fn finish(
     result.map(|_| ())
 }
 
+/// Record that the agent of `space` stopped, as `stopped` says.
+async fn record_stop(agents: &Agents, space: &Space, stopped: AgentEvent) {
+    let kind = EventKind::AgentStopped;
+    shoal_daemon_base::events::record_agent(&agents.store, &space.id, kind, stopped).await;
+}
+
 /// What a space's log records of the agent that execution `id` runs.
 fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -> AgentEvent {
     AgentEvent {
@@ -971,6 +1002,7 @@ fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -
         mode: Some(agent.mode.clone()),
         exit_code,
         oom_kills: 0,
+        cause: None,
         source: None,
     }
 }

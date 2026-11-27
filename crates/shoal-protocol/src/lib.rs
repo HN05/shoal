@@ -56,6 +56,7 @@ pub mod sleep;
 pub mod space_names;
 pub mod state;
 pub mod status;
+pub mod stop_causes;
 pub mod subscriptions;
 pub mod surfaces;
 #[cfg(feature = "test-support")]

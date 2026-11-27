@@ -44,7 +44,8 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
         proxy: None,
     };
     let closed = Halt::Ended {
-        reason: "its terminal closed",
+        signal: shoal_protocol::stop_causes::EndSignal::Hangup,
+        reached: shoal_protocol::stop_causes::SignalTarget::Wrapper,
     };
     assert!(matches!(
         restorer(&recovery(true), &closed, false),

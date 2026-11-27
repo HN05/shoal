@@ -9,6 +9,7 @@ use crate::{
     process::identity::Identity,
     protocol::{self, Reattach},
 };
+use shoal_protocol::stop_causes::EndSignal;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -431,7 +432,8 @@ async fn ended_session_child() {
             Outcome::Paused {
                 code: 129,
                 stop: Halt::Ended {
-                    reason: "its terminal closed"
+                    signal: EndSignal::Hangup,
+                    reached: SignalTarget::Wrapper,
                 },
             }
         ),
@@ -464,7 +466,8 @@ async fn ended_session_child() {
             Outcome::Paused {
                 code: 143,
                 stop: Halt::Ended {
-                    reason: "its session was terminated"
+                    signal: EndSignal::Terminate,
+                    reached: SignalTarget::Agent,
                 },
             }
         ),

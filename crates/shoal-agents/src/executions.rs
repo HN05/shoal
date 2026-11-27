@@ -324,6 +324,7 @@ impl Agents {
                 mode: execution.mode.clone(),
                 exit_code: Some(0),
                 oom_kills: 0,
+                cause: None,
             };
             let kind = shoal_daemon_base::events::EventKind::AgentExited;
             shoal_daemon_base::events::record_agent(&self.store, &execution.space_id, kind, ended)

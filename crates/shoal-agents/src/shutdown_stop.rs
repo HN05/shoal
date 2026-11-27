@@ -24,6 +24,7 @@ use shoal_daemon_base::alerts::AlertKind;
 use shoal_daemon_base::jobs::JobStop;
 use shoal_daemon_base::notifications::About;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::stop_causes::StopCause;
 
 /// The spaces a stop of every running space stopped.
 #[derive(Default)]
@@ -62,13 +63,19 @@ pub enum Shutdown {
 
 impl Shutdown {
     fn request(self) -> StopRequest {
-        StopRequest::shutdown(match self {
+        let reason = match self {
             Self::System => "the system is shutting down",
             Self::Daemon => "the Shoal daemon is stopping",
             Self::Away => "the user walked away from this machine",
             Self::Sleep => "this machine is going to sleep",
             Self::Pause => "the user paused this machine",
-        })
+        };
+        let cause = match self {
+            Self::System => StopCause::SystemShutdown,
+            Self::Daemon => StopCause::DaemonStop,
+            Self::Away | Self::Sleep | Self::Pause => StopCause::Handover,
+        };
+        StopRequest::shutdown(reason, cause)
     }
 
     /// When the work stopped, as the user's notifications say it.

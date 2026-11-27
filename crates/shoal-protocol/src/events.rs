@@ -557,6 +557,9 @@ pub struct AgentEvent {
     /// killed while it ran, on an exit or stop.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub oom_kills: u64,
+    /// What ended an agent that stopped; absent for a start or an exit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<crate::stop_causes::StopCause>,
     /// What made the launch a start carries out; absent for a stop, an
     /// exit, and a start that restores an agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]

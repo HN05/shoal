@@ -34,8 +34,9 @@ A space's log shows these events of the space:
   or stopped with the reason, and a workspace's restore;
 - its agent's starts, stops and exits. Each names the agent's `mode`, null for
   an agent whose execution was gone when Shoal began recording it. A start
-  names its launch's source, such as `manual` for `shoal start`'s. An exit
-  gives the exit code;
+  names its launch's source, such as `manual` for `shoal start`'s. A stop
+  names what ended the agent, such as `idle sleep`, `shoal stop` or
+  `SIGTERM to the wrapper`. An exit gives the exit code;
 - its ready marks, its completion, and the withdrawal of each;
 - the issues, PRs and CI runs it links and unlinks, and the changes Shoal makes
   to them;

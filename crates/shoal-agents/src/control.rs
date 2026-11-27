@@ -31,6 +31,7 @@ use crate::protocol::timing;
 use crate::state::AgentState;
 use crate::state::TurnFailure;
 use shoal_daemon_base::alerts::AlertKind;
+use shoal_protocol::stop_causes::StopCause;
 
 pub mod forks;
 pub mod idle_stop;
@@ -91,6 +92,9 @@ pub trait ProtectionExt {
     /// stopped it; a blocked one's would only restore an agent with nothing
     /// left to do, since `shoal done` removes the blockers.
     fn ends_with_assignment(&self) -> bool;
+
+    /// What the agent's `agent_stopped` event names as its end.
+    fn cause(&self) -> StopCause;
 }
 
 impl ProtectionExt for Protection {
@@ -166,6 +170,17 @@ impl ProtectionExt for Protection {
 
     fn ends_with_assignment(&self) -> bool {
         !self.is_idle() || self.is_blocked()
+    }
+
+    fn cause(&self) -> StopCause {
+        match self.reason.as_str() {
+            RESTART_REASON => StopCause::Restart,
+            AWAY_REASON => StopCause::Idle,
+            ROOM_REASON => StopCause::MakingRoom,
+            BLOCKED_REASON => StopCause::Blocked,
+            LIMITED_REASON | FAILED_TURN_REASON => StopCause::TurnRetry,
+            _ => StopCause::Protection,
+        }
     }
 }
 

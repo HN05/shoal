@@ -92,6 +92,7 @@ impl shoal_runner::daemon::Executions for Manager {
         let request = StopRequest {
             reason,
             save: Save::Nothing,
+            cause: shoal_protocol::stop_causes::StopCause::Stop,
         };
         Box::pin(async move {
             self.agents

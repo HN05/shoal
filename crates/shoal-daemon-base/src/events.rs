@@ -355,12 +355,12 @@ pub fn record_absorb(
     journal::append(db, id, event)
 }
 
-/// Record that the agent of the space `id` started, stopped or exited. An
-/// execution's agent ends once: a stop that saved it for a restore, then its
-/// wrapper's end, records one stop.
-fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEvent) -> Result<()> {
+/// Record that the agent of the space `id` started, stopped or exited,
+/// returning whether it did. An execution's agent ends once: a stop that
+/// saved it for a restore, then its wrapper's end, records one stop.
+fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEvent) -> Result<bool> {
     if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_ref())? {
-        return Ok(());
+        return Ok(false);
     }
     let agent = Box::new(agent);
     let event = match kind {
@@ -369,7 +369,8 @@ fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEven
         EventKind::AgentExited => SpaceEvent::AgentExited { agent },
         other => bail!("{other} records no agent"),
     };
-    journal::append(db, id, event)
+    journal::append(db, id, event)?;
+    Ok(true)
 }
 
 /// When the agent of the space `id` last stopped or exited, as its log
@@ -447,11 +448,26 @@ pub fn record_gate(
 /// lifecycle.
 pub async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
     let space = id.clone();
+    let stop = (kind == EventKind::AgentStopped).then(|| stop_line(&agent));
     let recorded = store
         .run(move |db| insert_agent(db, &space, kind, agent))
         .await;
-    if let Err(error) = recorded {
-        log!("agent event of {id} not recorded: {error:#}");
+    match recorded {
+        Ok(true) => {
+            if let Some(stop) = stop {
+                log!("{stop} in space {id}");
+            }
+        }
+        Ok(false) => {}
+        Err(error) => log!("agent event of {id} not recorded: {error:#}"),
+    }
+}
+
+/// The daemon's log line for the stop of `agent`, naming what ended it.
+fn stop_line(agent: &AgentEvent) -> String {
+    match agent.cause {
+        Some(cause) => format!("agent {} stopped: {cause}", agent.name),
+        None => format!("agent {} stopped", agent.name),
     }
 }
 

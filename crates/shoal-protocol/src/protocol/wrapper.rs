@@ -91,6 +91,10 @@ pub enum ExecutionEvent {
         /// one of its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         memory: Option<ScopeMemory>,
+        /// What ended the agent, when the wrapper ended it unasked, as a
+        /// signal makes it. The daemon knows the cause of a stop it sent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<crate::stop_causes::StopCause>,
     },
     /// The user woke the agent whose restore the wrapper waits for: start
     /// that restore now, whatever the limits. Ignored while no restore of it

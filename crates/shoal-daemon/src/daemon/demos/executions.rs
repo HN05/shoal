@@ -55,6 +55,7 @@ impl Executions for Manager {
             let request = StopRequest {
                 reason,
                 save: Save::Nothing,
+                cause: shoal_protocol::stop_causes::StopCause::Stop,
             };
             // Native scans run after the connection map is released, as a
             // workspace stop runs them.

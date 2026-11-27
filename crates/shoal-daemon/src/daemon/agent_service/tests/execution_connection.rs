@@ -8,6 +8,7 @@ use crate::protocol::{
 use anyhow::Result;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::stop_causes::{EndSignal, SignalTarget, StopCause};
 use shoal_protocol::threads::ThreadOpening;
 use std::sync::Arc;
 use tokio::io::BufReader;
@@ -736,7 +737,7 @@ mod registration;
 /// The kills an agent's log records on its stop or exit and its last
 /// alert, once a run that a pause with 2 kills stopped finished without a
 /// memory report.
-async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
+async fn kills_after_a_pause() -> (Vec<(String, Option<i64>, Option<String>)>, String) {
     let (root, manager) = manager().await;
     let path = repository(root.path(), "repo");
     let repo = manager
@@ -787,6 +788,10 @@ async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
             oom_kills: 2,
             peak: 1 << 30,
         }),
+        cause: Some(StopCause::Signal {
+            signal: EndSignal::Terminate,
+            reached: SignalTarget::Wrapper,
+        }),
     };
     for event in [started, paused] {
         protocol::write(wrapper_side.get_mut(), &event)
@@ -811,12 +816,13 @@ async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
     let kills = (manager.store)
         .run(move |db| {
             let mut query = db.prepare(
-                "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills')
+                "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills'),
+                     json_extract(record,'$.agent.cause.signal')
                  FROM space_events WHERE space_id=?1
                  AND json_extract(record,'$.kind') IN ('agent_stopped','agent_exited')",
             )?;
             Ok(query
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
                 .collect::<rusqlite::Result<_>>()?)
         })
         .await
@@ -826,8 +832,15 @@ async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
 }
 
 #[tokio::test]
-async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
+async fn an_agents_pause_records_the_kills_of_the_run_it_stopped_and_its_cause() {
     let (kills, alert) = kills_after_a_pause().await;
-    assert_eq!(kills, [("agent_stopped".to_owned(), Some(2))]);
+    assert_eq!(
+        kills,
+        [(
+            "agent_stopped".to_owned(),
+            Some(2),
+            Some("SIGTERM".to_owned())
+        )]
+    );
     assert!(alert.contains("killed 2"), "{alert}");
 }

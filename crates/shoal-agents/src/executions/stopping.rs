@@ -23,6 +23,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::SpaceName;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::stop_causes::StopCause;
 use shoal_store;
 use std::collections::HashSet;
 use tokio::time::{Instant, sleep};
@@ -283,6 +284,7 @@ impl Agents {
         let request = StopRequest {
             reason,
             save: Save::Everything,
+            cause: StopCause::Protection,
         };
         self.stop_keeping_restores(daemon, selector, request).await
     }
@@ -495,6 +497,7 @@ impl Agents {
             .shut_down(StopRequest {
                 reason: "the Shoal daemon shut down".into(),
                 save: Save::Everything,
+                cause: StopCause::DaemonStop,
             })
             .await;
         while Instant::now() < deadline && self.executions.has_connections().await {

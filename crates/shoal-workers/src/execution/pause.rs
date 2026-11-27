@@ -8,6 +8,7 @@ use std::{ffi::OsString, io::Write, path::PathBuf};
 use anyhow::Result;
 
 use shoal_protocol::protocol::ScopeMemory;
+use shoal_protocol::stop_causes::{EndSignal, SignalTarget, StopCause};
 
 use super::{
     Mode,
@@ -86,7 +87,7 @@ pub(super) async fn pause_agent(
         return Ok(AfterPause::Finish);
     }
     let awaited = stop.protection().filter(|_| automatic);
-    report_pause(link, awaited.clone(), memory).await?;
+    report_pause(link, awaited.clone(), memory, stop.cause()).await?;
     let Some(protection) = awaited else {
         return Ok(AfterPause::Finish);
     };
@@ -253,18 +254,20 @@ fn agent_place(mode: &Mode) -> Option<crate::sessions::Origin> {
 }
 
 /// Tell the daemon the agent paused, with what its scope recorded of its
-/// `memory`. Awaiting a restore keeps the link armed to reattach; otherwise
-/// the daemon may forget the stopped child.
+/// `memory` and the `cause` of an end the daemon did not ask for. Awaiting a
+/// restore keeps the link armed to reattach; otherwise the daemon may forget
+/// the stopped child.
 async fn report_pause(
     link: &mut Link,
     awaited: Option<Protection>,
     memory: Option<ScopeMemory>,
+    cause: Option<StopCause>,
 ) -> Result<()> {
     match awaited {
         Some(protection) => link.await_restore(protection),
         None => link.disarm(),
     }
-    link.send(&ExecutionEvent::Paused { memory }).await
+    link.send(&ExecutionEvent::Paused { memory, cause }).await
 }
 
 /// Keep a stopped command for `shoal resume` to report.
@@ -308,9 +311,13 @@ pub(super) enum Halt {
         removed: bool,
     },
     /// A hangup or terminate signal ended the session the command ran in, as
-    /// closing its terminal, logging out or shutting down does; the reason is
-    /// saved for `shoal resume`.
-    Ended { reason: &'static str },
+    /// closing its terminal, logging out or shutting down does, `reached`
+    /// first by the wrapper or the command alone; the reason is saved for
+    /// `shoal resume`.
+    Ended {
+        signal: EndSignal,
+        reached: SignalTarget,
+    },
     /// The daemon stopped it before the system shut down; the reason is
     /// saved for `shoal resume`.
     Shutdown { reason: Option<String> },
@@ -339,20 +346,32 @@ impl Halt {
     fn saved_reason(&self) -> Option<&str> {
         match self {
             Self::Protection { reason, .. } => Some(reason),
-            Self::Ended { reason } => Some(reason),
+            Self::Ended { signal, .. } => Some(ended_reason(*signal)),
             Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
         }
     }
 
-    /// The halt for a session ended by `signal`, which the wrapper received or
-    /// which ended the command before the wrapper's own arrived.
-    pub(super) fn ended_by(signal: i32) -> Option<Self> {
-        let reason = match signal {
-            libc::SIGHUP => "its terminal closed",
-            libc::SIGTERM => "its session was terminated",
+    /// What ended the agent, when the wrapper ended it unasked; the daemon
+    /// knows the cause of every stop it asked for.
+    fn cause(&self) -> Option<StopCause> {
+        match self {
+            Self::Ended { signal, reached } => Some(StopCause::Signal {
+                signal: *signal,
+                reached: *reached,
+            }),
+            Self::Protection { .. } | Self::Pause { .. } | Self::Shutdown { .. } => None,
+        }
+    }
+
+    /// The halt for a session ended by `signal`, which `reached` the wrapper,
+    /// or ended the command before the wrapper's own arrived.
+    pub(super) fn ended_by(signal: i32, reached: SignalTarget) -> Option<Self> {
+        let signal = match signal {
+            libc::SIGHUP => EndSignal::Hangup,
+            libc::SIGTERM => EndSignal::Terminate,
             _ => return None,
         };
-        Some(Self::Ended { reason })
+        Some(Self::Ended { signal, reached })
     }
 
     /// The cause for every line after the stop.
@@ -366,7 +385,7 @@ impl Halt {
             | Self::Shutdown {
                 reason: Some(reason),
             } => format!(": {reason}"),
-            Self::Ended { reason } => format!(": {reason}"),
+            Self::Ended { signal, .. } => format!(": {}", ended_reason(*signal)),
             Self::Pause { reason: None, .. } | Self::Shutdown { reason: None } => String::new(),
         }
     }
@@ -386,6 +405,15 @@ impl Halt {
                 matches!(self, Self::Pause { removed: true, .. })
             )
         )
+    }
+}
+
+/// Why `signal` ended the session, which a restore tells the agent.
+fn ended_reason(signal: EndSignal) -> &'static str {
+    match signal {
+        EndSignal::Hangup => "its terminal closed",
+        EndSignal::Terminate => "its session was terminated",
+        EndSignal::Kill => "it was killed",
     }
 }
 
@@ -445,7 +473,7 @@ pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
     let signalled = || Ok(Waited::cancelled("interrupted"));
     let ended = |signal| {
         Ok(Waited::Ended(
-            Halt::ended_by(signal).expect("a session signal"),
+            Halt::ended_by(signal, SignalTarget::Wrapper).expect("a session signal"),
         ))
     };
     loop {

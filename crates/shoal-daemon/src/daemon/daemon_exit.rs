@@ -106,6 +106,7 @@ impl Manager {
                         let request = StopRequest {
                             reason: "the Shoal daemon stopped".into(),
                             save: Save::Everything,
+                            cause: shoal_protocol::stop_causes::StopCause::DaemonStop,
                         };
                         return self
                             .agents

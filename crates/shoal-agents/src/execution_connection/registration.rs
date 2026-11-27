@@ -202,6 +202,7 @@ pub async fn register(
         reports_status: false,
         stopped: false,
         restore_cancelled: None,
+        stop_cause: None,
         stop,
         records: RecordChange::of(&plan),
         source,

@@ -1,6 +1,7 @@
 //! How the daemon stops a space's executions: why, which their wrappers
 //! show, what the stop saves for `shoal resume`, and the proof it requires
 //! of an execution that disconnected.
+use shoal_protocol::stop_causes::StopCause;
 
 /// The proof required after stopping a disconnected execution. Both policies
 /// signal only native identity-verified processes and reject owned survivors.
@@ -22,6 +23,8 @@ pub enum StopPolicy {
 pub struct StopRequest {
     pub reason: String,
     pub save: Save,
+    /// What the agent's `agent_stopped` event names as its end.
+    pub cause: StopCause,
 }
 
 /// What a stop saves for `shoal resume`.
@@ -44,6 +47,7 @@ impl StopRequest {
         Self {
             reason: "stopped by shoal stop".into(),
             save: Save::Everything,
+            cause: StopCause::Stop,
         }
     }
 
@@ -53,6 +57,7 @@ impl StopRequest {
         Self {
             reason: "its restore was cancelled with shoal queue cancel".into(),
             save: Save::Everything,
+            cause: StopCause::QueueCancel,
         }
     }
 
@@ -62,6 +67,7 @@ impl StopRequest {
         Self {
             reason: format!("{reason}; its stop could not be recorded"),
             save: Save::Everything,
+            cause: StopCause::Protection,
         }
     }
 
@@ -72,6 +78,7 @@ impl StopRequest {
         Self {
             reason: "its space moves to another machine".into(),
             save: Save::Everything,
+            cause: StopCause::Move,
         }
     }
 
@@ -82,6 +89,7 @@ impl StopRequest {
         Self {
             reason: "another machine took its space over".into(),
             save: Save::Everything,
+            cause: StopCause::Move,
         }
     }
 
@@ -89,14 +97,16 @@ impl StopRequest {
         Self {
             reason: "stopped to repair the workspace".into(),
             save: Save::Nothing,
+            cause: StopCause::Repair,
         }
     }
 
     /// The stop before the system or the daemon shuts down, for `reason`.
-    pub fn shutdown(reason: &str) -> Self {
+    pub fn shutdown(reason: &str, cause: StopCause) -> Self {
         Self {
             reason: reason.into(),
             save: Save::Shutdown,
+            cause,
         }
     }
 
@@ -106,6 +116,7 @@ impl StopRequest {
         Self {
             reason: "its chat became a workspace".into(),
             save: Save::Nothing,
+            cause: StopCause::Conversion,
         }
     }
 
@@ -115,6 +126,7 @@ impl StopRequest {
         Self {
             reason: "another agent tool takes its space's work over".into(),
             save: Save::Nothing,
+            cause: StopCause::Conversion,
         }
     }
 
@@ -123,6 +135,7 @@ impl StopRequest {
         Self {
             reason: "the workspace is being removed".into(),
             save: Save::Nothing,
+            cause: StopCause::Removal,
         }
     }
 
