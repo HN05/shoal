@@ -1,6 +1,7 @@
 use rusqlite::params;
 use serde_json::json;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_protocol::events::{EventDetails, SpaceEvent};
 use shoal_protocol::model::QueuedJob;
 
 use super::*;
@@ -55,12 +56,17 @@ async fn ends(fixture: &Fixture, workspace: &SpaceId) -> Vec<String> {
     (fixture.runner.store)
         .run(move |db| {
             let mut query = db.prepare(
-                "SELECT json_extract(record,'$.job.reason') FROM space_events
-                 WHERE space_id=?1 AND json_extract(record,'$.kind')='job_ended'",
+                "SELECT record FROM space_events WHERE space_id=?1 AND kind='job_ended'",
             )?;
-            Ok(query
-                .query_map([workspace], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?)
+            let records = query.query_map([workspace], |row| row.get::<_, String>(0))?;
+            let mut reasons = Vec::new();
+            for record in records {
+                let details: EventDetails = serde_json::from_str(&record?)?;
+                if let SpaceEvent::JobEnded { job } = details.event {
+                    reasons.push(job.reason);
+                }
+            }
+            Ok(reasons)
         })
         .await
         .unwrap()
