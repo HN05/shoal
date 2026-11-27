@@ -6,6 +6,7 @@ use crate::state::TurnFailure;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::agent::Agent;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::seeds;
 use std::sync::Arc;
 
 /// The turn generation the space `id` records.
@@ -30,16 +31,12 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
     let fixture = Fixture::new().await;
     let workspace = fixture.workspace("agent").await;
     let id = workspace.id.clone();
-    let execution = |sql: &'static str| {
+    let execution = |name: &'static str| {
         let id = id.clone();
-        fixture.agents.store.run(move |db| {
-            db.execute(sql, [id])?;
-            Ok(())
-        })
+        (fixture.agents.store)
+            .run(move |db| seeds::bare_execution(db, name, &id, ExecutionState::Running))
     };
-    execution("INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')")
-        .await
-        .unwrap();
+    execution("agent").await.unwrap();
     let selected = SpaceSelector::id(&workspace.id);
     let report = |state, execution: &str| {
         fixture.agents.set_agent_state(
@@ -60,12 +57,12 @@ async fn turn_generations_count_turn_starts_and_continue_after_the_state_goes() 
     assert_eq!(turn(&fixture, &workspace.id).await, first + 1);
 
     // The state goes with its execution, and the next one counts on.
-    execution("DELETE FROM executions WHERE space_id=?1")
+    let ended = id.clone();
+    (fixture.agents.store)
+        .run(move |db| Ok(db.execute("DELETE FROM executions WHERE space_id=?1", [ended])?))
         .await
         .unwrap();
-    execution("INSERT INTO executions(id,space_id,state) VALUES ('next',?1,'running')")
-        .await
-        .unwrap();
+    execution("next").await.unwrap();
     report(AgentState::Idle, "next").await.unwrap();
     assert_eq!(turn(&fixture, &workspace.id).await, first + 2);
 }
@@ -80,10 +77,7 @@ async fn an_interrupt_stays_with_the_execution_whose_turn_it_ended() {
         .store
         .run(move |db| {
             for execution in ["first", "second"] {
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,'running')",
-                    rusqlite::params![execution, id],
-                )?;
+                seeds::bare_execution(db, execution, &id, ExecutionState::Running)?;
             }
             Ok(())
         })
@@ -297,11 +291,9 @@ async fn a_forgotten_execution_keeps_its_turn_in_the_record_it_saved() {
         .agents
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES
-                    ('stopped',?1,'unknown'),('exited',?1,'unknown')",
-                [id],
-            )?;
+            for execution in ["stopped", "exited"] {
+                seeds::bare_execution(db, execution, &id, ExecutionState::Unknown)?;
+            }
             Ok(())
         })
         .await

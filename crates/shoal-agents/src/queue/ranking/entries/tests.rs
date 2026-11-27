@@ -1,4 +1,6 @@
 use rusqlite::params;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
 
 use super::*;
 use crate::queue::{Serving, last_seq};
@@ -60,10 +62,10 @@ async fn a_queued_restore_reads_when_its_agents_prompt_cache_expires() {
     let id = workspace.id.clone();
     let entries = (fixture.agents.store)
         .read(move |tx| {
-            tx.execute(
-                "INSERT INTO executions(id,space_id,state,agent) VALUES ('agent',?1,?2,'claude')",
-                params![id, ExecutionState::Unknown],
-            )?;
+            let mut agent = test_support::execution("agent", id.as_str());
+            agent.state = ExecutionState::Unknown;
+            agent.agent = Some("claude".into());
+            seeds::execution(tx, &agent, None)?;
             tx.execute(
                 "INSERT INTO space_agent_state(space_id,state,execution_id,since,prompt_cache_expires_at)
                  VALUES (?1,'idle','agent',1,500)",

@@ -1,5 +1,6 @@
 //! Startup reconciles the unknown executions of stopped agents from their
 //! recovery records and the processes they left.
+use shoal_store::test_support::seeds;
 use std::fs;
 
 use super::*;
@@ -76,19 +77,11 @@ async fn interrupted(
     let saved = (id.clone(), workspace_id.clone());
     (locked.fixture.agents.store)
         .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper,child,group_id)
-                    VALUES (?1,?2,?3,?4,?5,?6)",
-                rusqlite::params![
-                    id,
-                    workspace_id,
-                    ExecutionState::Unknown,
-                    shoal_store::json_text(Some(&wrapper))?,
-                    shoal_store::json_text(child.as_ref())?,
-                    group,
-                ],
-            )?;
-            Ok(())
+            let mut recorded =
+                shoal_protocol::test_support::execution(id.as_str(), workspace_id.as_str());
+            recorded.state = ExecutionState::Unknown;
+            (recorded.wrapper, recorded.child, recorded.group_id) = (Some(wrapper), child, group);
+            seeds::execution(db, &recorded, None)
         })
         .await
         .unwrap();

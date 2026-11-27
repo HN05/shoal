@@ -1,4 +1,5 @@
 //! The queue's admission, restores and launches over the stand-in.
+use shoal_store::test_support::seeds;
 use std::{
     collections::{BTreeMap, HashSet},
     time::Duration,
@@ -424,10 +425,7 @@ async fn each_agent_execution_uses_its_own_slot() {
     (fixture.agents.store)
         .run(move |db| {
             for execution in ["first", "second"] {
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,?3)",
-                    params![execution, id, ExecutionState::Unknown],
-                )?;
+                seeds::bare_execution(db, execution, &id, ExecutionState::Unknown)?;
             }
             Ok(())
         })
@@ -453,13 +451,7 @@ async fn a_ci_jobs_runner_awaiting_reattachment_holds_no_agent_slot() {
     let id = workspace.id.clone();
     // A job's runner awaits reattachment after a daemon restart.
     (fixture.agents.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('runner',?1,?2)",
-                params![id, ExecutionState::Unknown],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "runner", &id, ExecutionState::Unknown))
         .await
         .unwrap();
     (fixture.records.job_workspaces.lock().unwrap()).insert(workspace.id.clone());
@@ -1154,15 +1146,10 @@ async fn a_heavy_chats_agent_holds_a_slot() {
 async fn limit_claude(fixture: &Fixture) -> (SpaceSelector, crate::time::UnixTime) {
     use shoal_protocol::executions::{ServiceLimit, UpstreamLimit};
     let workspace = fixture.workspace("busy").await;
-    let id = workspace.id.clone();
+    let mut running = shoal_protocol::test_support::execution("running", workspace.id.as_str());
+    running.agent = Some("claude".into());
     (fixture.agents.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,agent) VALUES ('running',?1,?2,'claude')",
-                params![id, ExecutionState::Running],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::execution(db, &running, None))
         .await
         .unwrap();
     let until = crate::time::UnixTime::now() + Duration::from_secs(3600);
@@ -1223,14 +1210,13 @@ async fn any_agent_of_the_tool_that_gets_an_answer_lifts_its_upstream_limit() {
     limit_globally(&fixture, 3);
     let (selector, _) = limit_claude(&fixture).await;
     let claude = add(&fixture, "claude").await.entry.unwrap();
+    let space = selector.given_id().unwrap().clone();
     (fixture.agents.store)
-        .run(|db| {
+        .run(move |db| {
             for (id, agent) in [("codex-agent", "codex"), ("other-claude", "claude")] {
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state,agent)
-                     SELECT ?1,space_id,state,?2 FROM executions WHERE id='running'",
-                    params![id, agent],
-                )?;
+                let mut other = shoal_protocol::test_support::execution(id, space.as_str());
+                other.agent = Some(agent.into());
+                seeds::execution(db, &other, None)?;
             }
             Ok(())
         })

@@ -1,12 +1,16 @@
 //! The rows of the shared tables a test records, each holding what its
 //! record gives and else the least the schema accepts, so that no test
 //! writes the columns of another subsystem's table itself.
+use std::path::Path;
+
 use anyhow::{Result, bail};
 use rusqlite::{Connection, params};
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
     model::{Chat, Checkout, Execution, Head, Repository, Space, SpaceKind, Workspace},
     scope_tokens::ScopeToken,
+    state::ExecutionState,
+    test_support,
 };
 
 use crate::{json_text, narrowing_column};
@@ -64,6 +68,23 @@ pub fn workspace(db: &Connection, workspace: &Workspace) -> Result<SpaceNumber> 
         )?;
         space(db, workspace, SpaceKind::Workspace)
     })
+}
+
+/// Record a ready workspace `id` on the branch `branch` at `/work/<id>`, of
+/// the repository `repository` at `/<repository>`, which it records unless
+/// it is recorded.
+pub fn ready_workspace(
+    db: &Connection,
+    repository: &str,
+    id: &str,
+    branch: &str,
+) -> Result<Workspace> {
+    let checkout = Path::new("/").join(repository);
+    self::repository(db, &test_support::repository(repository, &checkout))?;
+    let path = Path::new("/work").join(id);
+    let mut recorded = test_support::workspace(id, repository, branch, &path);
+    recorded.number = workspace(db, &recorded)?;
+    Ok(recorded)
 }
 
 /// Record `chat` and return the number the store gives it in place of the
@@ -135,6 +156,19 @@ pub fn execution(
         ],
     )?;
     Ok(())
+}
+
+/// Record the execution `id` of the space `space` in `state`, which
+/// registered nothing of its processes or agent.
+pub fn bare_execution(
+    db: &Connection,
+    id: &str,
+    space: &SpaceId,
+    state: ExecutionState,
+) -> Result<()> {
+    let mut recorded = test_support::execution(id, space.as_str());
+    recorded.state = state;
+    execution(db, &recorded, None)
 }
 
 /// Record the space `child` below `parent`.

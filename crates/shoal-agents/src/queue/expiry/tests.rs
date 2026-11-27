@@ -2,20 +2,16 @@ use super::*;
 use crate::time::UnixTime;
 use rusqlite::Connection;
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 
 async fn database() -> Result<(tempfile::TempDir, Store)> {
     let root = tempfile::tempdir()?;
     let store = Store::open(root.path().join("state.sqlite")).await?;
     store
         .run(|db| {
+            seeds::ready_workspace(db, "repo", "workspace", "work")?;
             db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used)
-                 VALUES ('repo','/unused/repo','local',0);
-                 INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES ('workspace','workspace','repo','work');
-                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES ('workspace','/unused/work','work','ready','abc','/admin');
-                 INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
+                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,plan,env,
                      execution_id,state,created_at,seen_at,space_id) VALUES
                  ('launch','launch','repo','launch','codex','{}','{}',NULL,'starting',0,99,NULL),
                  ('opened','launch','repo','opened','codex','{}','{}',NULL,'starting',0,99,'workspace'),

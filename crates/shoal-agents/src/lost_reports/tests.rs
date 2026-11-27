@@ -8,19 +8,14 @@ use crate::{
 };
 use shoal_core::paths::StateFiles;
 use shoal_protocol::agent::Agent;
+use shoal_store::test_support::seeds;
 
 /// A workspace whose agent runs in the execution `agent`, in `state`.
 async fn workspace_in(fixture: &Fixture, state: ExecutionState) -> Workspace {
     let workspace = fixture.workspace("reporter").await;
     let id = workspace.id.clone();
     (fixture.agents.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,?2)",
-                rusqlite::params![id, state],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "agent", &id, state))
         .await
         .unwrap();
     workspace

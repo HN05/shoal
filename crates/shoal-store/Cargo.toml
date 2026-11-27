@@ -12,7 +12,7 @@ workspace = true
 
 [features]
 # Fixtures for the tests of crates over the store.
-test-support = []
+test-support = ["shoal-protocol/test-support"]
 
 [dependencies]
 anyhow.workspace = true

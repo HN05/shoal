@@ -1,4 +1,5 @@
 use crate::execution::recovery::record_path;
+use shoal_store::test_support::seeds;
 
 use super::*;
 
@@ -16,10 +17,11 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
     (fixture.agents.store)
         .run(move |db| {
             for (execution, mode) in [("heavy", "worker"), ("light", "triage")] {
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state,agent,mode) VALUES (?1,?2,?3,'claude',?4)",
-                    params![execution, id, ExecutionState::Unknown, mode],
-                )?;
+                let mut agent = shoal_protocol::test_support::execution(execution, id.as_str());
+                agent.state = ExecutionState::Unknown;
+                agent.agent = Some("claude".into());
+                agent.mode = Some(mode.parse()?);
+                seeds::execution(db, &agent, None)?;
             }
             Ok(())
         })

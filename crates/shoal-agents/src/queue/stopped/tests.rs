@@ -1,6 +1,7 @@
 use super::*;
 use crate::execution::recovery::LastSession;
 use crate::stand_in::Fixture;
+use shoal_store::test_support::seeds;
 
 /// Queue the restore of `execution` in the fixture's space, `starting`
 /// or waiting, its last session kept by a conversion when `converted`.
@@ -43,14 +44,7 @@ async fn a_conversions_or_a_starting_restore_moves_the_agent() {
     let fixture = Fixture::new().await;
     (fixture.agents.store)
         .run(|db| {
-            db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used)
-                     VALUES ('repo','/unused/repo','local',0);
-                 INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES ('workspace','workspace','repo','work');
-                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES ('workspace','/unused/work','work','ready','abc','/admin');",
-            )?;
+            seeds::ready_workspace(db, "repo", "workspace", "work")?;
             Ok(())
         })
         .await
