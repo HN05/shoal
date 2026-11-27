@@ -4,7 +4,7 @@ This file says what the `hub` commands do and how machines joined to a hub work
 together. [Hub](../design/hub.md) gives the reasons.
 
 ```sh
-shoal hub pair                     # On the hub or a joined machine: a code and its QR code
+shoal hub pair                     # On the hub or a joined machine: a code
 shoal hub join <code> [--name N]   # Join this machine with that code
 shoal hub join --connect "ssh desk shoal daemon connect"   # Or through a command, without a code
 shoal hub ls                       # The listener, and every machine and device
@@ -47,8 +47,8 @@ can it read, change, add or replay a frame.
 
 ## Pair and join
 
-`shoal hub pair` runs on the hub or on a joined machine. It prints a code and
-its QR code. The code holds the hub's URL, its key's fingerprint and a secret.
+`shoal hub pair` runs on the hub or on a joined machine. It prints a code.
+The code holds the hub's URL, its key's fingerprint and a secret.
 The secret admits one join within ten minutes. `hub pair` warns when the URL
 is `http://` to another machine.
 

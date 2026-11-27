@@ -1,5 +1,5 @@
 //! `shoal hub pair`.
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 
 use crate::{
     cli::{
@@ -21,11 +21,6 @@ pub(super) async fn pair(ctx: &Context) -> Result<i32> {
         .into_iter()
         .collect();
     let code = pairing.code.to_string();
-    let qr = qrcode::QrCode::new(code.as_bytes()).context("encode the pairing code")?;
-    let qr = qr
-        .render::<qrcode::render::unicode::Dense1x2>()
-        .quiet_zone(true)
-        .build();
     let installer = pairing.code.installer();
     let paired = Paired {
         pairing,
@@ -34,9 +29,6 @@ pub(super) async fn pair(ctx: &Context) -> Result<i32> {
     };
     ctx.show(&paired, |paired| {
         let palette = Palette::stdout(false);
-        for line in qr.lines() {
-            outln!("{}", palette.paint(Style::Scannable, line));
-        }
         outln!("{}", palette.paint(Style::Heading, &code));
         outln!(
             "Run shoal hub join with this code on the machine to join, by {}; it admits one join.",

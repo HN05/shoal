@@ -1,5 +1,5 @@
 //! Pairing codes: what `shoal hub pair` prints, and `shoal hub join` or an
-//! app reads, in one text that the QR code carries too.
+//! app reads.
 use std::{fmt, str::FromStr};
 
 use anyhow::{Context as _, Result, ensure};

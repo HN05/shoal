@@ -5,7 +5,7 @@ use shoal_protocol::hub::pairing::PairingCode;
 #[derive(Debug, Subcommand)]
 #[command(defer = true)]
 pub enum HubCommand {
-    /// Print a code, with its QR code, that joins one machine or device to the hub.
+    /// Print a code that joins one machine or device to the hub.
     ///
     /// It runs on the hub, or on a machine that joined it. The code admits one join within
     /// ten minutes, and carries the hub's URL and its key's fingerprint.

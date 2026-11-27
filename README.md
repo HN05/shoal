@@ -430,7 +430,7 @@ url = "https://desk.example.ts.net"   # What a tunnel or proxy with TLS serves t
 ```
 
 ```sh
-shoal hub pair                       # On the hub: a code, with its QR code
+shoal hub pair                       # On the hub: a code
 shoal hub join '<code>'              # On the machine that joins
 shoal hub join --connect "ssh desk shoal daemon connect"   # Or over SSH, without a code or proxy
 shoal hub ls                         # Every machine and device, and whether it is connected
