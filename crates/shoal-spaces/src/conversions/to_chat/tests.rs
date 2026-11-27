@@ -388,11 +388,11 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
     };
     let (id, pending) = (
         base.id.clone(),
-        crate::conversions::Pending::Chat {
+        crate::conversions::Pending::Chat(crate::conversions::pending::ToChat {
             chat: Box::new(chat),
             held: false,
             carrying: Default::default(),
-        },
+        }),
     );
     (manager.store)
         .write(move |tx| crate::conversions::pending::record(tx, &id, &pending))
@@ -475,11 +475,11 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
     };
-    let pending = Pending::Chat {
+    let pending = Pending::Chat(crate::conversions::pending::ToChat {
         chat: Box::new(chat),
         held: false,
         carrying: Default::default(),
-    };
+    });
     let space = id.clone();
     (manager.store)
         .write(move |tx| pending::record(tx, &space, &pending))

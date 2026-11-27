@@ -76,13 +76,16 @@ async fn a_chat_becomes_a_workspace_under_its_id_number_name_and_parent() {
         .run(move |db| crate::conversions::pending(db, &id))
         .await
         .unwrap();
-    let Some(Pending::Workspace { execution, .. }) = pending else {
+    let Some(Pending::Workspace(converting)) = pending else {
         panic!("expected the chat's restart to wait: {pending:?}");
     };
     // The chat's agent hands its session over under the execution it runs as.
     let executions = manager.spaces.workspace_executions(&talk.id).await.unwrap();
     let agent = (executions.iter()).find(|recorded| recorded.agent.is_some());
-    assert_eq!(agent.map(|recorded| &recorded.id), Some(&execution));
+    assert_eq!(
+        agent.map(|recorded| &recorded.id),
+        Some(&converting.execution)
+    );
     // The space stays: its conversion is neither a removal nor a creation.
     let kinds = kinds(&manager, &talk.id).await;
     let converted = (kinds.iter())

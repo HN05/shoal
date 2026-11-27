@@ -469,11 +469,12 @@ async fn no_agent_starts_in_a_workspace_that_becomes_a_chat() {
         mode: crate::model::chat_mode(),
         narrowing: Default::default(),
     };
-    let pending = crate::daemon::conversions::Pending::Chat {
-        chat: Box::new(chat),
-        held: true,
-        carrying: Default::default(),
-    };
+    let pending =
+        crate::daemon::conversions::Pending::Chat(crate::daemon::conversions::pending::ToChat {
+            chat: Box::new(chat),
+            held: true,
+            carrying: Default::default(),
+        });
     let id = workspace.id.clone();
     (manager.store)
         .write(move |tx| crate::daemon::conversions::pending::record(tx, &id, &pending))

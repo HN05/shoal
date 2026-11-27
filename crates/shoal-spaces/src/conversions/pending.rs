@@ -18,46 +18,55 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "to", rename_all = "snake_case")]
 pub enum Pending {
-    /// A chat that became a workspace. The row the chat had gives its running
-    /// agent, and gives the chat back should the workspace's worktree fail.
-    /// The agent runs as `execution`, whose session files hold its session
-    /// and under which its last session in the workspace is kept.
-    Workspace {
-        mode: ModeName,
-        chat: ChatRow,
-        execution: ExecutionId,
-        /// The agent waits for this preparation to end, post-setup hook
-        /// included.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        preparation: Option<String>,
-        /// Kept beyond the operation's own record.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        prepared: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        hook_failure: Option<String>,
-        #[serde(default, skip_serializing_if = "Carrying::is_default")]
-        carrying: Carrying,
-    },
-    /// The agent's details outlive its execution, as when the agent exits
-    /// first. A stop that keeps the workspace's agents down until `shoal
-    /// resume` `held` it: the workspace still becomes the chat, which stays
-    /// stopped.
-    Chat {
-        chat: Box<ConvertedChat>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        held: bool,
-        #[serde(default, skip_serializing_if = "Carrying::is_default")]
-        carrying: Carrying,
-    },
-    /// Runs once the turn of the agent `execution` runs ends. A stop that
-    /// keeps that agent down until `shoal resume` `held` it: `taking` then
-    /// waits stopped too.
-    Agent {
-        execution: ExecutionId,
-        taking: Box<Taking>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        held: bool,
-    },
+    Workspace(ToWorkspace),
+    Chat(ToChat),
+    Agent(ToAgent),
+}
+
+/// A chat that became a workspace. The row the chat had gives its running
+/// agent, and gives the chat back should the workspace's worktree fail. The
+/// agent runs as `execution`, whose session files hold its session and
+/// under which its last session in the workspace is kept.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToWorkspace {
+    pub mode: ModeName,
+    pub chat: ChatRow,
+    pub execution: ExecutionId,
+    /// The agent waits for this preparation to end, post-setup hook
+    /// included.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preparation: Option<String>,
+    /// Kept beyond the operation's own record.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub prepared: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hook_failure: Option<String>,
+    #[serde(default, skip_serializing_if = "Carrying::is_default")]
+    pub carrying: Carrying,
+}
+
+/// The agent's details outlive its execution, as when the agent exits
+/// first. A stop that keeps the workspace's agents down until `shoal
+/// resume` `held` it: the workspace still becomes the chat, which stays
+/// stopped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToChat {
+    pub chat: Box<ConvertedChat>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
+    #[serde(default, skip_serializing_if = "Carrying::is_default")]
+    pub carrying: Carrying,
+}
+
+/// Runs once the turn of the agent `execution` runs ends. A stop that keeps
+/// that agent down until `shoal resume` `held` it: `taking` then waits
+/// stopped too.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToAgent {
+    pub execution: ExecutionId,
+    pub taking: Box<Taking>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub held: bool,
 }
 
 impl Pending {
@@ -65,8 +74,8 @@ impl Pending {
     /// the new workspace's post-setup hook failed.
     pub fn restarts_agent(&self) -> bool {
         match self {
-            Self::Workspace { hook_failure, .. } => hook_failure.is_none(),
-            Self::Chat { held, .. } | Self::Agent { held, .. } => !held,
+            Self::Workspace(to) => to.hook_failure.is_none(),
+            Self::Chat(ToChat { held, .. }) | Self::Agent(ToAgent { held, .. }) => !held,
         }
     }
 }
@@ -194,11 +203,11 @@ pub fn record_chat_conversion(
         ready && (running || carrying.taking.is_some()),
         "the workspace's agent was stopped meanwhile; it stays a workspace"
     );
-    let pending = Pending::Chat {
+    let pending = Pending::Chat(ToChat {
         chat: Box::new(chat),
         held: false,
         carrying,
-    };
+    });
     record(tx, id, &pending)
 }
 
@@ -212,11 +221,11 @@ pub fn record_agent_switch(
     let running = crate::executions::execution_state(tx, &execution)?
         == Some((id.to_owned(), crate::state::ExecutionState::Running));
     ensure!(running, "the agent was stopped meanwhile; convert it again");
-    let pending = Pending::Agent {
+    let pending = Pending::Agent(ToAgent {
         execution,
         taking: Box::new(taking),
         held: false,
-    };
+    });
     record(tx, id, &pending)
 }
 
@@ -227,10 +236,10 @@ pub fn record_stopped_switch(
     execution: ExecutionId,
     taking: Taking,
 ) -> Result<()> {
-    let pending = Pending::Agent {
+    let pending = Pending::Agent(ToAgent {
         execution,
         taking: Box::new(taking),
         held: false,
-    };
+    });
     record(tx, id, &pending)
 }

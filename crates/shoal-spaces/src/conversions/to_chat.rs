@@ -109,13 +109,13 @@ impl Spaces {
         let pending = self.store.run(move |db| super::pending(db, &id)).await?;
         let (kind, name) = (space.kind(), &space.name);
         match pending {
-            Some(super::Pending::Chat { .. }) => bail!(
+            Some(super::Pending::Chat(_)) => bail!(
                 "workspace {name} becomes a chat once its agent's turn ends; restore the agent in the chat then"
             ),
-            Some(super::Pending::Workspace { .. }) => bail!(
+            Some(super::Pending::Workspace(_)) => bail!(
                 "the agent of the chat that became workspace {name} moves there once its turn ends; start another agent there then"
             ),
-            Some(super::Pending::Agent { taking, .. }) => bail!(
+            Some(super::Pending::Agent(super::pending::ToAgent { taking, .. })) => bail!(
                 "the work of {kind} {name} goes over to {}; start another agent there once it has",
                 taking.agent
             ),

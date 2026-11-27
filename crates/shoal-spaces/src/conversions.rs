@@ -48,7 +48,7 @@ impl Converting {
         let switches = self.carrying.taking.is_some();
         let agent = (&self.mode, &self.chat.narrowing);
         let (chat, execution) = record::replace_chat(tx, &self.chat.id, agent, switches)?;
-        let pending = Pending::Workspace {
+        let pending = Pending::Workspace(pending::ToWorkspace {
             mode: self.mode.clone(),
             chat,
             execution,
@@ -56,7 +56,7 @@ impl Converting {
             prepared: false,
             hook_failure: None,
             carrying: self.carrying.clone(),
-        };
+        });
         pending::record(tx, &self.chat.id, &pending)
     }
 }

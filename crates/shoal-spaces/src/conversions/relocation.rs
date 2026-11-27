@@ -13,7 +13,7 @@ use anyhow::Result;
 use super::{
     Pending,
     handoff::{Leaving, Taking},
-    pending::{Carrying, ConvertedChat},
+    pending::{Carrying, ConvertedChat, ToAgent, ToChat, ToWorkspace},
     record::ChatRow,
 };
 use crate::protocol::operations::{Ended, Failure};
@@ -112,14 +112,14 @@ impl Spaces {
         // Attaches wait for the agent's next session while this moves it.
         let _moving = (pending.restarts_agent()).then(|| self.relocating.mark(id));
         let relocated = match pending.clone() {
-            Pending::Workspace {
+            Pending::Workspace(ToWorkspace {
                 mode,
                 chat,
                 execution,
                 hook_failure,
                 carrying,
                 ..
-            } => {
+            }) => {
                 let converted = Converted {
                     mode,
                     chat,
@@ -133,16 +133,16 @@ impl Spaces {
                     None => self.relocate_to_workspace(daemon, id, converted).await,
                 }
             }
-            Pending::Chat {
+            Pending::Chat(ToChat {
                 chat,
                 held,
                 carrying,
-            } => (self.relocate_to_chat(daemon, id, *chat, held, carrying)).await,
-            Pending::Agent {
+            }) => (self.relocate_to_chat(daemon, id, *chat, held, carrying)).await,
+            Pending::Agent(ToAgent {
                 execution,
                 taking,
                 held,
-            } => (self.switch_after_turn(daemon, id, &execution, *taking, held)).await,
+            }) => (self.switch_after_turn(daemon, id, &execution, *taking, held)).await,
         };
         if let Err(error) = relocated {
             self.report_failed_relocation(daemon, id, &pending, &error)
@@ -163,11 +163,11 @@ impl Spaces {
         pending: &Pending,
     ) -> Result<bool> {
         match pending {
-            Pending::Workspace {
+            Pending::Workspace(ToWorkspace {
                 preparation,
                 prepared,
                 ..
-            } => {
+            }) => {
                 // A setup that failed waits for its repair, which readies it.
                 let workspace = self.workspace_by_id(id).await?;
                 if workspace.state != WorkspaceState::Ready
@@ -179,10 +179,10 @@ impl Spaces {
                     .turn_ended(id, &|agent: &RunningAgent| agent.space_id == *id)
                     .await
             }
-            Pending::Chat { chat, .. } => {
+            Pending::Chat(ToChat { chat, .. }) => {
                 (daemon.turn_ended(id, &|agent: &RunningAgent| agent.ran_as(&chat.execution))).await
             }
-            Pending::Agent { execution, .. } => {
+            Pending::Agent(ToAgent { execution, .. }) => {
                 (daemon.turn_ended(id, &|agent: &RunningAgent| agent.ran_as(execution))).await
             }
         }
@@ -302,13 +302,13 @@ impl Spaces {
         }
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
-        let Some(Pending::Workspace {
+        let Some(Pending::Workspace(ToWorkspace {
             mode,
             chat,
             execution,
             carrying,
             ..
-        }) = pending
+        })) = pending
         else {
             return Ok(false);
         };
@@ -333,7 +333,7 @@ impl Spaces {
     pub async fn hand_over_before_removal(&self, daemon: &dyn Daemon, id: &SpaceId) -> Result<()> {
         let space = id.to_owned();
         let pending = self.store.run(move |db| super::pending(db, &space)).await?;
-        if let Some(Pending::Workspace { .. }) = pending {
+        if let Some(Pending::Workspace(_)) = pending {
             let stop = ConversionStop {
                 holds: false,
                 removes: true,
@@ -535,18 +535,18 @@ impl Spaces {
             Err(_) => return,
         };
         let message = match pending {
-            Pending::Workspace { .. } => format!(
+            Pending::Workspace(_) => format!(
                 "The agent of {name} did not restart in its new worktree: {error:#}; continue it with shoal resume {number}"
             ),
-            Pending::Chat { .. } if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
+            Pending::Chat(_) if self.chat_by_id(id).await.is_ok_and(|chat| chat.is_some()) => {
                 format!(
                     "{name} became a chat, whose agent did not restart: {error:#}; continue it with shoal resume {number}"
                 )
             }
-            Pending::Chat { .. } => format!(
+            Pending::Chat(_) => format!(
                 "{name} did not become a chat: {error:#}; it stays a workspace, whose stopped agent shoal resume {number} continues"
             ),
-            Pending::Agent { taking, .. } => format!(
+            Pending::Agent(ToAgent { taking, .. }) => format!(
                 "The work of {name} did not go over to {}: {error:#}; continue it with shoal resume {number}, or convert it again",
                 taking.agent
             ),

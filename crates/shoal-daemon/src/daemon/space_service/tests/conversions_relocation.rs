@@ -385,11 +385,11 @@ async fn record_chat_conversion(
 ) {
     let (id, pending) = (
         workspace.id.clone(),
-        crate::daemon::conversions::Pending::Chat {
+        crate::daemon::conversions::Pending::Chat(crate::daemon::conversions::pending::ToChat {
             chat: Box::new(chat),
             held: false,
             carrying: Default::default(),
-        },
+        }),
     );
     (manager.store)
         .write(move |tx| crate::daemon::conversions::pending::record(tx, &id, &pending))
@@ -887,11 +887,13 @@ async fn a_preparation_end_reported_before_its_record_is_kept() {
         .await
         .unwrap();
 
-    let Some(crate::daemon::conversions::Pending::Workspace {
-        prepared,
-        hook_failure,
-        ..
-    }) = pending
+    let Some(crate::daemon::conversions::Pending::Workspace(
+        crate::daemon::conversions::pending::ToWorkspace {
+            prepared,
+            hook_failure,
+            ..
+        },
+    )) = pending
     else {
         panic!("expected the conversion: {pending:?}");
     };

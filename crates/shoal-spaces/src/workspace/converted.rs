@@ -171,7 +171,7 @@ impl Spaces {
             .run(move |db| crate::conversions::pending(db, &id))
             .await;
         let row = match pending {
-            Ok(Some(crate::conversions::Pending::Workspace { chat: row, .. })) => row,
+            Ok(Some(crate::conversions::Pending::Workspace(to))) => to.chat,
             Ok(_) => return,
             Err(error) => {
                 crate::log!("chat {chat} not given back: {error:#}");
