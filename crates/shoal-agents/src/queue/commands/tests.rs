@@ -7,6 +7,7 @@ use shoal_protocol::{
     runs::{AdmissionFrame, AdmitAs, CommandKey, RunReport},
     space_names::SpaceSelector,
 };
+use shoal_store::test_support::seeds;
 use tokio::{io::BufReader, net::UnixStream, task::JoinHandle};
 
 use super::{CommandRequest, admit_command};
@@ -204,16 +205,11 @@ async fn a_stop_of_every_space_reaches_one_where_only_a_command_waits() {
 /// Record the running command `id` in `workspace`, whose wrapper is the
 /// process `pid`.
 async fn command_execution(fixture: &Fixture, workspace: &Workspace, id: &str, pid: u32) {
-    let wrapper = serde_json::json!({"pid": pid, "birth": "b"}).to_string();
-    let (id, space) = (id.to_owned(), workspace.id.clone());
+    let mut execution = shoal_protocol::test_support::execution(id, workspace.id.as_str());
+    let wrapper = serde_json::json!({"pid": pid, "birth": "b"});
+    execution.wrapper = Some(serde_json::from_value(wrapper).unwrap());
     (fixture.agents.store)
-        .write(move |tx| {
-            tx.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper) VALUES (?1,?2,'running',?3)",
-                rusqlite::params![id, space, wrapper],
-            )?;
-            Ok(())
-        })
+        .write(move |tx| seeds::execution(tx, &execution, None))
         .await
         .unwrap();
 }
