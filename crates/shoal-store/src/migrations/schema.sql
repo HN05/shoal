@@ -1029,7 +1029,6 @@ CREATE TABLE "thread_posts" (
     sender_id TEXT,
     sender_name TEXT,
     text TEXT NOT NULL,
-    files TEXT NOT NULL DEFAULT '[]',
     in_chat INTEGER NOT NULL DEFAULT 0 CHECK(in_chat IN (0,1)),
     forwards INTEGER NOT NULL DEFAULT 0 CHECK(forwards IN (0,1)),
     forwarded_to TEXT,
@@ -1166,6 +1165,13 @@ CREATE TABLE "access_requests" (
     CHECK((repository_id IS NULL) = (proposer_id IS NULL))
 );
 
+CREATE TABLE thread_post_files (
+    post_id INTEGER NOT NULL REFERENCES thread_posts(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    file_id INTEGER NOT NULL,
+    PRIMARY KEY(post_id, position)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1294,6 +1300,8 @@ CREATE INDEX access_request_decider ON access_requests(decider) WHERE decider IS
 
 CREATE INDEX access_request_proposer ON access_requests(proposer_id)
     WHERE proposer_id IS NOT NULL;
+
+CREATE INDEX thread_post_files_file ON thread_post_files(file_id);
 
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL

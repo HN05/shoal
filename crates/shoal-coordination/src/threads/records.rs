@@ -14,7 +14,7 @@ use shoal_protocol::{
 };
 
 use super::code::NewCode;
-use super::sent_files::{sent_files, sent_ids};
+use super::post_files;
 use crate::item_numbers::{self, ItemKind, ItemNumber};
 use crate::time::UnixTime;
 use shoal_protocol::files::SentFile;
@@ -91,17 +91,14 @@ fn thread(row: &rusqlite::Row<'_>) -> rusqlite::Result<Thread> {
     })
 }
 
-const POSTS: &str = concat!(
-    "SELECT p.id,p.thread_id,p.created_at,p.side,p.sender,p.sender_id,
+const POSTS: &str = "SELECT p.id,p.thread_id,p.created_at,p.side,p.sender,p.sender_id,
         COALESCE(s.name,p.sender_name) AS sender_name,
         COALESCE(s.number,p.sender_number) AS sender_number,p.text,
         p.ui,p.answer,p.in_chat,p.forwards,p.forwarded_to,
         COALESCE(f.name,p.forwarded_name) AS forwarded_name,
-        COALESCE(f.number,p.forwarded_number) AS forwarded_number,p.alert_id,",
-    sent_files!("p.files"),
-    " FROM thread_posts p LEFT JOIN spaces s ON s.id=p.sender_id
-        LEFT JOIN spaces f ON f.id=p.forwarded_to"
-);
+        COALESCE(f.number,p.forwarded_number) AS forwarded_number,p.alert_id
+    FROM thread_posts p LEFT JOIN spaces s ON s.id=p.sender_id
+        LEFT JOIN spaces f ON f.id=p.forwarded_to";
 
 fn post(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Post)> {
     let space = match row.get::<_, Option<SpaceId>>("sender_id")? {
@@ -132,7 +129,7 @@ fn post(row: &rusqlite::Row<'_>) -> rusqlite::Result<(i64, Post)> {
             ui: shoal_store::json_column(row, "ui")?,
             answer: shoal_store::json_column(row, "answer")?,
         },
-        files: (shoal_store::json_column(row, "files")?).unwrap_or_default(),
+        files: Vec::new(),
         code: Vec::new(),
         changes: Vec::new(),
         in_chat: row.get("in_chat")?,
@@ -149,19 +146,10 @@ pub(super) fn query(
     filter: &str,
     params: impl rusqlite::Params,
 ) -> Result<Vec<Thread>> {
-    let mut threads = db
-        .prepare(&format!("{THREADS} {filter} ORDER BY t.id"))?
-        .query_map(params, thread)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let mut threads = thread_rows(db, filter, params)?;
     let ids: Vec<i64> = threads.iter().map(|thread| thread.id).collect();
     let mut posts = posts_of(db, &ids)?;
-    let times: HashMap<i64, Vec<UnixTime>> = (posts.iter())
-        .map(|(thread, posts)| {
-            let speaking = posts.iter().filter(|post| post.speaks());
-            (*thread, speaking.map(|post| post.created_at).collect())
-        })
-        .collect();
-    let mut changes = crate::changes::records::entries(db, &ids, &times)?;
+    let mut changes = crate::changes::records::entries(db, &ids, &speaking_times(&posts))?;
     for thread in &mut threads {
         thread.posts = posts.remove(&thread.id).unwrap_or_default();
         thread.changes = changes.remove(&thread.id).unwrap_or_default();
@@ -169,25 +157,57 @@ pub(super) fn query(
     Ok(threads)
 }
 
+/// The rows of the threads `filter` keeps, with the parameters `params`,
+/// oldest first, without their posts and changes.
+fn thread_rows(
+    db: &Connection,
+    filter: &str,
+    params: impl rusqlite::Params,
+) -> Result<Vec<Thread>> {
+    Ok(db
+        .prepare(&format!("{THREADS} {filter} ORDER BY t.id"))?
+        .query_map(params, thread)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+/// When each thread's posts that speak were made, by thread, which its
+/// change entries fall between.
+fn speaking_times(posts: &HashMap<i64, Vec<Post>>) -> HashMap<i64, Vec<UnixTime>> {
+    (posts.iter())
+        .map(|(thread, posts)| {
+            let speaking = posts.iter().filter(|post| post.speaks());
+            (*thread, speaking.map(|post| post.created_at).collect())
+        })
+        .collect()
+}
+
 /// The posts of each of the threads `threads`, oldest first, with the
-/// code and changes each points at.
+/// files each sent and the code and changes it points at.
 fn posts_of(db: &Connection, threads: &[i64]) -> Result<HashMap<i64, Vec<Post>>> {
-    let found = db
-        .prepare(&format!(
-            "{POSTS} WHERE p.thread_id IN (SELECT value FROM json_each(?1)) ORDER BY p.id"
-        ))?
-        .query_map([serde_json::to_string(threads)?], post)?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let found = post_rows(db, threads)?;
     let post_ids: Vec<i64> = found.iter().map(|(_, post)| post.id).collect();
+    let mut files = post_files::of_posts(db, &post_ids)?;
     let mut code = super::code::records::of_posts(db, &post_ids)?;
     let mut changes = crate::changes::records::of_posts(db, &post_ids)?;
     let mut posts: HashMap<i64, Vec<Post>> = HashMap::new();
     for (thread, mut post) in found {
+        post.files = files.remove(&post.id).unwrap_or_default();
         post.code = code.remove(&post.id).unwrap_or_default();
         post.changes = changes.remove(&post.id).unwrap_or_default();
         posts.entry(thread).or_default().push(post);
     }
     Ok(posts)
+}
+
+/// The rows of the posts of the threads `threads`, oldest first, each with
+/// its thread's ID, without the files, code and changes they name.
+fn post_rows(db: &Connection, threads: &[i64]) -> Result<Vec<(i64, Post)>> {
+    Ok(db
+        .prepare(&format!(
+            "{POSTS} WHERE p.thread_id IN (SELECT value FROM json_each(?1)) ORDER BY p.id"
+        ))?
+        .query_map([serde_json::to_string(threads)?], post)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 /// The thread `number` names, while its space has that number.
@@ -209,8 +229,8 @@ pub(super) fn by_id(db: &Connection, id: i64) -> Result<Option<Thread>> {
 pub(super) fn posting_file(db: &Connection, file: i64) -> Result<Vec<Thread>> {
     let ids = db
         .prepare(
-            "SELECT DISTINCT p.thread_id FROM thread_posts p, json_each(p.files) j
-                WHERE j.value=?1",
+            "SELECT DISTINCT p.thread_id FROM thread_posts p
+                JOIN thread_post_files f ON f.post_id=p.id WHERE f.file_id=?1",
         )?
         .query_map([file], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<i64>>>()?;
@@ -436,15 +456,28 @@ pub(super) struct NewRecord<'a> {
     pub(super) forwards: Option<Option<&'a ThreadSpace>>,
 }
 
-/// Record `new`; the post's ID.
+/// Record `new` with the files it sent and the code it points at; the
+/// post's ID.
 pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i64> {
+    let post = insert_post_row(tx, new)?;
+    let files: Vec<i64> = new.files.iter().map(|file| file.id).collect();
+    post_files::set(tx, post, &files)?;
+    for code in new.code {
+        super::code::records::insert(tx, post, code)?;
+    }
+    Ok(post)
+}
+
+/// Record the row of `new`, without the files and code it names; the
+/// post's ID.
+fn insert_post_row(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i64> {
     let sender = new.author.space;
     let forwarded_to = new.forwards.flatten();
     tx.execute(
         "INSERT INTO thread_posts(thread_id,created_at,side,sender,sender_id,sender_name,
-                sender_number,text,ui,answer,files,in_chat,forwards,forwarded_to,forwarded_name,
+                sender_number,text,ui,answer,in_chat,forwards,forwarded_to,forwarded_name,
                 forwarded_number)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
         params![
             new.thread,
             crate::time::UnixTime::now(),
@@ -460,7 +493,6 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
             (new.post.answer.as_ref())
                 .map(serde_json::to_string)
                 .transpose()?,
-            sent_ids(new.files)?,
             new.in_chat,
             new.forwards.is_some(),
             forwarded_to.map(|space| &space.id),
@@ -468,11 +500,7 @@ pub(super) fn insert_post(tx: &Transaction<'_>, new: &NewRecord<'_>) -> Result<i
             forwarded_to.and_then(|space| space.number)
         ],
     )?;
-    let post = tx.last_insert_rowid();
-    for code in new.code {
-        super::code::records::insert(tx, post, code)?;
-    }
-    Ok(post)
+    Ok(tx.last_insert_rowid())
 }
 
 /// Replace the text of the post `post` with `text`.

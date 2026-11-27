@@ -10,7 +10,7 @@ use shoal_protocol::threads::{Side, Thread, ThreadSpace};
 
 use super::{
     delivery::{self, Delivered, Party, Texts},
-    records,
+    post_files, records,
 };
 use crate::item_numbers::ItemNumber;
 
@@ -77,18 +77,18 @@ fn repoint_files(
     to: &SpaceId,
     copies: &HashMap<i64, i64>,
 ) -> Result<()> {
-    let sent: Vec<(i64, String)> = tx
-        .prepare("SELECT id,files FROM thread_posts WHERE thread_id=?1 AND sender_id=?2")?
-        .query_map(params![id, from], |row| Ok((row.get(0)?, row.get(1)?)))?
+    let sent: Vec<i64> = tx
+        .prepare("SELECT id FROM thread_posts WHERE thread_id=?1 AND sender_id=?2")?
+        .query_map(params![id, from], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    for (post, files) in sent {
-        let files: Vec<i64> = serde_json::from_str(&files)?;
-        let files: Vec<i64> = (files.iter())
+    for post in sent {
+        let files: Vec<i64> = (post_files::ids(tx, post)?.iter())
             .filter_map(|file| copies.get(file).copied())
             .collect();
+        post_files::set(tx, post, &files)?;
         tx.execute(
-            "UPDATE thread_posts SET files=?2,sender_id=?3 WHERE id=?1",
-            params![post, serde_json::to_string(&files)?, to],
+            "UPDATE thread_posts SET sender_id=?2 WHERE id=?1",
+            params![post, to],
         )?;
     }
     Ok(())

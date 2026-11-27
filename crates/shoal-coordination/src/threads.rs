@@ -28,11 +28,11 @@ mod forwarding;
 mod moving;
 mod outcomes;
 mod parties;
+mod post_files;
 pub mod posting;
 mod reading;
 mod records;
 mod resolving;
-mod sent_files;
 
 pub use chat::{number_of, record_replies as record_chat_replies};
 pub use closing::{close, reopen};

@@ -247,6 +247,7 @@ mod hub_numbers;
 mod item_activity_states;
 mod journal_columns;
 mod journal_shapes;
+mod post_files;
 mod review_targets;
 mod schema;
 mod thread_outcomes;

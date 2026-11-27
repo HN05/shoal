@@ -290,5 +290,16 @@ pub fn issue_proposal(
     Ok(())
 }
 
+/// Record a file named `name` that the user attached to the space `space`
+/// with a thread's post, kept at `path`; its record's ID.
+pub fn space_file(db: &Connection, space: &SpaceId, name: &str, path: &Path) -> Result<i64> {
+    db.execute(
+        "INSERT INTO space_files(space_id,space,source,name,path,bytes,created_at,attached_by)
+            VALUES (?1,?1,'thread',?2,?3,0,1,'{\"kind\":\"user\"}')",
+        params![space, name, path.to_string_lossy()],
+    )?;
+    Ok(db.last_insert_rowid())
+}
+
 #[cfg(test)]
 mod tests;
