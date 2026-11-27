@@ -16,6 +16,7 @@ test-support = [
     "shoal-agents/test-support",
     "shoal-core/test-support",
     "shoal-daemon-base/test-support",
+    "shoal-forge/test-support",
     "shoal-protocol/test-support",
     "shoal-spaces/test-support",
     "shoal-store/test-support",

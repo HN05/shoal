@@ -54,13 +54,45 @@ pub(crate) async fn register_watch(manager: &Manager, id: &SpaceId, url: &str) {
 
 /// Have the space `id` watch a PR on which a comment then arrives, as a
 /// background poll finds it.
-pub(crate) async fn comment_on_watched_pr(manager: &Manager, id: &SpaceId) {
+pub async fn comment_on_watched_pr(manager: &Manager, id: &SpaceId) {
     let pr = item_url("pulls/1");
     register_watch(manager, id, &pr).await;
-    let observed = vec![(pr, snapshot("Please rebase"))];
-    manager
-        .links
-        .queue_background_updates(manager, id, observed, manager.links.poll_start())
+    poll_watched(manager, id, &pr, snapshot("Please rebase")).await;
+}
+
+/// Have the space `id` watch a PR that background polls first find clean,
+/// then conflicting with a new base, twice, as a forge confirms a conflict.
+pub async fn conflict_on_watched_pr(manager: &Manager, id: &SpaceId) {
+    let pr = item_url("pulls/1");
+    register_watch(manager, id, &pr).await;
+    for (base, conflict) in [('b', false), ('c', true), ('c', true)] {
+        poll_watched(manager, id, &pr, pr_at(base, conflict)).await;
+    }
+}
+
+/// An open PR at the base commit spelled by `base`, conflicting with it or
+/// not.
+fn pr_at(base: char, conflict: bool) -> Snapshot {
+    let (head, base) = ("a".repeat(40), base.to_string().repeat(40));
+    serde_json::from_value(json!({
+        "comments": {}, "checks": {}, "state": "open", "errors": {},
+        "head": head, "base": base, "conflict": conflict,
+        "conflict_at": {"head": head, "base": base},
+    }))
+    .unwrap()
+}
+
+/// Record `snapshot` of the PR at `url` as a background poll of the space
+/// `id` observes it.
+async fn poll_watched(manager: &Manager, id: &SpaceId, url: &str, snapshot: Snapshot) {
+    let observed = vec![(url.to_owned(), snapshot)];
+    let start = manager.links.poll_start();
+    (manager.links)
+        .record_background_activity(manager, id, observed.clone())
+        .await
+        .unwrap();
+    (manager.links)
+        .queue_background_updates(manager, id, observed, start)
         .await
         .unwrap();
 }

@@ -1115,6 +1115,142 @@ async fn a_waiting_agent_whose_terminal_closes_leaves_its_restore_to_the_queue()
     serving.abort();
 }
 
+/// An agent the default disposition of a terminate or hangup signal ends,
+/// as one that installs no handler for it.
+#[tokio::test]
+#[ignore = "isolated tracked wrapper launched by overload tests"]
+async fn tracked_agent_dying_child() {
+    if std::env::var_os("SHOAL_TEST_HELPER").is_none() {
+        return;
+    }
+    run_tracked_agent("touch started; while :; do sleep 1; done").await;
+}
+
+/// Launch the agent of `workspace` that a signal ends, idle once it runs,
+/// and return its wrapper and execution.
+async fn idle_dying_agent(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> (
+    tokio::task::JoinHandle<Result<i32>>,
+    crate::model::Execution,
+) {
+    let test = "execution::tests::overload::tracked_agent_dying_child";
+    let agent = launch_child(manager, workspace, test);
+    wait_started(manager, workspace).await;
+    report_session(manager, workspace, "signalled-session").await;
+    let execution = only_execution_record(manager, workspace).await;
+    manager
+        .agents
+        .set_agent_state(
+            manager,
+            &SpaceSelector::id(&workspace.id),
+            crate::state::AgentState::Idle,
+            Some(execution.id.clone()),
+            None,
+        )
+        .await
+        .unwrap();
+    (agent, execution)
+}
+
+async fn only_execution_record(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+) -> crate::model::Execution {
+    manager
+        .spaces
+        .inspect_workspace(manager, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .executions
+        .remove(0)
+}
+
+/// Send `signal` to the agent's own process group.
+fn signal_agent(execution: &crate::model::Execution, signal: i32) {
+    // SAFETY: the agent's own process group, which the test launched.
+    unsafe {
+        libc::kill(-(execution.group_id.unwrap() as i32), signal);
+    }
+}
+
+/// The idle agent of `execution` sleeps: its restore waits in the agent
+/// queue for an update, and a merge conflict on its PR starts it.
+async fn sleeps_until_an_update(
+    manager: &Manager,
+    workspace: &crate::model::Workspace,
+    execution: &crate::model::Execution,
+) {
+    let generation = manager.config_state.generation();
+    manager.config_state.publish_disk_reading(Some(generation));
+    let restore = bounded(async {
+        loop {
+            let entries = manager.agents.queue_entries(&*manager).await.unwrap();
+            if let Some(entry) = (entries.into_iter())
+                .find(|entry| entry.execution.as_ref() == Some(&execution.id))
+                .filter(|entry| entry.state == crate::state::QueueState::Queued)
+            {
+                return entry;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert!(restore.waits_for_update, "{restore:?}");
+    shoal_daemon::test_daemon::conflict_on_watched_pr(manager, &workspace.id).await;
+    starting_restore(manager, execution.id.as_str()).await;
+}
+
+/// A terminate signal from outside Shoal to an idle agent alone, as a
+/// terminal host's to its pane's foreground group, puts it to sleep.
+#[tokio::test]
+async fn an_idle_agent_a_signal_to_it_alone_ends_sleeps_until_an_update() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (agent, execution) = idle_dying_agent(&manager, &workspace).await;
+    signal_agent(&execution, libc::SIGTERM);
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 128 + libc::SIGTERM);
+    sleeps_until_an_update(&manager, &workspace, &execution).await;
+    serving.abort();
+}
+
+/// A terminate signal from outside Shoal to an idle agent and its wrapper
+/// together, as a systemd scope's stop sends it, puts it to sleep.
+#[tokio::test]
+async fn an_idle_agent_a_signal_to_it_and_its_wrapper_ends_sleeps_until_an_update() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (agent, execution) = idle_dying_agent(&manager, &workspace).await;
+    let wrapper = execution.wrapper.clone().unwrap();
+    crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
+    signal_agent(&execution, libc::SIGTERM);
+    bounded(agent).await.unwrap().unwrap();
+    sleeps_until_an_update(&manager, &workspace, &execution).await;
+    serving.abort();
+}
+
+/// A terminate signal from outside Shoal to the wrapper of an idle agent
+/// Shoal put to sleep leaves its restore to the agent queue, whose update
+/// wakes it.
+#[tokio::test]
+async fn an_asleep_agent_a_signal_to_its_waiting_wrapper_ends_sleeps_until_an_update() {
+    let (_root, manager, workspace, serving) = fixture().await;
+    let (agent, execution) = idle_dying_agent(&manager, &workspace).await;
+    let monitor = manager.gates.operation().await;
+    assert!(
+        manager
+            .agents
+            .stop_for_overload(&*manager, shoal_daemon::test_daemon::Pressure::Memory)
+            .await
+    );
+    drop(monitor);
+    wait_paused(&manager, &workspace).await;
+    let wrapper = execution.wrapper.clone().unwrap();
+    crate::process::identity::signal(&wrapper, libc::SIGTERM).unwrap();
+    bounded(agent).await.unwrap().unwrap();
+    sleeps_until_an_update(&manager, &workspace, &execution).await;
+    serving.abort();
+}
+
 /// Launch an agent with a background command outside its process group and
 /// return that command's identity once both run.
 async fn launch_with_background(

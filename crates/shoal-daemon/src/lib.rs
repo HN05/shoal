@@ -32,6 +32,9 @@ pub mod test_daemon {
     pub use crate::daemon::capacity::fake_disk_free;
     pub use crate::daemon::disk::Monitor as DiskMonitor;
     pub use crate::daemon::links::proposals::{link_item, link_space, store_issue_proposal};
+    pub use crate::daemon::links::wait::test_support::{
+        comment_on_watched_pr, conflict_on_watched_pr,
+    };
     pub use crate::daemon::overload::Pressure;
     pub use crate::daemon::queued_starts::fake::STARTED as STARTED_QUEUED;
     pub use crate::daemon::scope::{Access, Caller};
