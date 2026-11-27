@@ -634,7 +634,9 @@ fn recorded(
                 agent: None,
                 started_at: row.get("started_at")?,
                 tmp_dir,
-                completion: crate::spaces::done::rows::completion(row)?,
+                // An unreadable record fails only the cleanup that reads it,
+                // for that chat alone, rather than every listing of chats.
+                completion: crate::spaces::done::rows::completion(row).ok().flatten(),
             },
         })
     })?
