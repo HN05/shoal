@@ -1,6 +1,7 @@
 //! What a placement policy reads, as the hub builds it.
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
+use shoal_states::states;
 use shoal_time::UnixTime;
 
 use super::SkippedBy;
@@ -30,11 +31,25 @@ pub struct Request {
     pub mode: String,
     /// Whether that mode is `heavy`, holding a heavy slot.
     pub heavy: bool,
+    /// How long its work lasts, which decides the machines it may go to.
+    pub lifetime: Lifetime,
     /// The machine the start was made on.
     pub caller: MemberId,
     /// The machine of the space it goes below, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<MemberId>,
+}
+
+states! {
+    /// How long a start's work lasts.
+    Lifetime {
+        /// Work its user comes back to, such as an agent's workspace, which
+        /// needs a machine that stays reachable.
+        Lasting => "lasting",
+        /// Work nothing keeps once it ends, such as a `--disposable`
+        /// workspace, which any machine may run while it is connected.
+        Disposable => "disposable",
+    }
 }
 
 /// A connected machine as the hub last heard of it.

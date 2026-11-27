@@ -8,7 +8,7 @@ use crate::{
 };
 use shoal_protocol::hub::placement::{Decision, Unanswered};
 use shoal_protocol::protocol::{self as launches, Launched};
-use shoal_schedule::placement::{Reason, SkippedBy};
+use shoal_schedule::placement::{Reason, SkippedBy, snapshot::Lifetime};
 
 pub(in crate::cli::commands) fn report_started(ctx: &Context, launched: Launched) -> Result<i32> {
     let space = &launched.space;
@@ -89,6 +89,8 @@ fn reason(reason: Reason) -> String {
     };
     match reason {
         Reason::Local => "placement is local".into(),
+        Reason::Intermittent => "intermittent, takes disposable work".into(),
+        Reason::CallerHasRoom => "the machine it was made on has room".into(),
         Reason::HeavySlot { memory_free } => {
             format!("always_on, heavy slot free{}", memory(memory_free))
         }
@@ -97,7 +99,12 @@ fn reason(reason: Reason) -> String {
             format!("always_on, no heavy agents waiting{}", memory(memory_free))
         }
         Reason::HeavyWaiting { waiting } => format!("always_on, {waiting} heavy agents waiting"),
-        Reason::Caller => "no always_on machine has room".into(),
+        Reason::Caller {
+            lifetime: Lifetime::Lasting,
+        } => "no always_on machine has room".into(),
+        Reason::Caller {
+            lifetime: Lifetime::Disposable,
+        } => "no other machine has room".into(),
     }
 }
 

@@ -1,7 +1,7 @@
 use shoal_protocol::hub::placement::Unanswered;
 use shoal_schedule::placement::{
     Placed, Placement, Reason,
-    snapshot::{Capacity, Machine, Request, Snapshot},
+    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
 use super::among;
@@ -23,6 +23,7 @@ fn snapshot() -> Snapshot {
             agent: "claude".into(),
             mode: "worker".into(),
             heavy: true,
+            lifetime: Lifetime::Lasting,
             caller: "laptop".into(),
             parent: None,
         },

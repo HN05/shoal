@@ -8,13 +8,13 @@ use shoal_schedule::placement::snapshot::Request;
 
 use crate::{
     config::{Effective, modes::ModeName},
-    launches::heavy,
+    launches::{heavy, lifetime},
     model::{RemovedSpace, Space},
 };
 
 impl Spaces {
     /// The origin of its repository, the tool of the agent that continues
-    /// there, else its settings' default one, and its mode.
+    /// there, else its settings' default one, its mode and its lifetime.
     pub async fn package_start(
         &self,
         daemon: &dyn Daemon,
@@ -33,6 +33,7 @@ impl Spaces {
             base: None,
             agent: agent.name().to_owned(),
             heavy: heavy(&settings, &mode),
+            lifetime: lifetime(space.worktree().is_some_and(|worktree| worktree.disposable)),
             mode: mode.to_string(),
             // The hub, which places it, names its caller.
             caller: MemberId::from(String::new()),

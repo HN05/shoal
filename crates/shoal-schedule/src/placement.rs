@@ -8,7 +8,7 @@ mod balanced;
 pub mod snapshot;
 
 pub use balanced::Balanced;
-use snapshot::Snapshot;
+use snapshot::{Lifetime, Snapshot};
 
 states! {
     /// `[machine.hub] placement`: the policy that places a start which
@@ -49,12 +49,19 @@ pub struct Placed {
     pub reason: Reason,
 }
 
-/// Why a machine comes where it does in a placement.
+/// Why a machine comes where it does in a placement: under `balanced`, the
+/// first of its stages that prefers it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
 pub enum Reason {
     /// The policy keeps every start on the caller's machine.
     Local,
+    /// An `intermittent` machine with room for disposable work, which
+    /// leaves the `always_on` machines' room to lasting work.
+    Intermittent,
+    /// The caller's machine, beside the start's parent and unpushed work,
+    /// which has room for the start.
+    CallerHasRoom,
     /// An `always_on` machine whose admission lets a heavy agent in now,
     /// with `memory_free` bytes spare, none while it reads none.
     HeavySlot {
@@ -72,9 +79,9 @@ pub enum Reason {
     },
     /// An `always_on` machine where `waiting` heavy entries wait.
     HeavyWaiting { waiting: u32 },
-    /// The caller's machine, beside the start's parent and unpushed work,
-    /// once no `always_on` machine has room.
-    Caller,
+    /// The caller's machine, once no machine work of `lifetime` may go to
+    /// has room: an `always_on` one for lasting work, any for disposable.
+    Caller { lifetime: Lifetime },
 }
 
 /// A connected machine a start cannot go to, and why.

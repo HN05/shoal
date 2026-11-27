@@ -447,9 +447,9 @@ the service's stop timeout adds to the drain's, so a slow hub never cuts the
 daemon's drain short.
 
 The hub keeps each package that arrives whole, as it keeps any. It places the
-space among the other connected machines, its own standing in for the
-caller's. So `always_on` machines with room come first, and the hub takes the
-rest. It writes the placement back.
+space by its own profile, as it places a start, among the other connected
+machines, its own standing in for the caller's. So under `balanced` the hub
+takes what no other machine has room for. It writes the placement back.
 
 The shutting-down machine reads the placement and says it leaves the space
 there. Only then does the chosen machine import the package and queue its
@@ -579,13 +579,41 @@ link, since only a connected machine starts work.
 [configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 says.
 
-`balanced` sends lasting work to `always_on` machines with room. Otherwise it
-keeps the work on the caller's machine, beside its parent and unpushed work.
-An `always_on` caller with room keeps the start, beside its parent. It never
-clones a repository onto a machine; that stays with `--machine`. A heavy start
-goes where a heavy agent is admitted now. A light start goes where it takes
-the least from heavy agents, since dynamic admission gives them the same
-memory.
+`balanced` places by the task's profile. Its lifetime is `lasting` or
+`disposable`: a `--disposable` start is disposable, and any other start is
+lasting. Its weight is heavy or light, by its mode. Its requirements are its
+repository, by origin, and its agent tool. A hand-over, takeover or pause
+places a space by its own profile.
+
+`balanced` ranks the machines by stages, each a function that yields a key
+and a reason. A later stage only orders the machines an earlier one ranks
+equal, so adding a preference adds a stage in its place. Each machine's reason
+names the first stage that prefers it, so a start can say why it went there.
+The stages, in order:
+
+1. The hard rules. The machine must fit the start: not paused or away, with
+   its repository and agent tool. Lasting work goes only to an `always_on`
+   machine with room, since its user comes back to it. Disposable work goes to
+   any connected machine with room, since nothing keeps it. Otherwise the
+   start stays on the caller's machine.
+2. Disposable work prefers an `intermittent` machine. Only `always_on`
+   machines take lasting work, so they keep their room for it.
+3. The caller's machine comes first, beside the start's parent and unpushed
+   work. It follows the lifetime stage, so disposable work leaves an
+   `always_on` caller for an `intermittent` machine.
+4. A heavy start goes where a heavy agent is admitted now, with the most
+   spare memory. A light start goes where it takes the least from heavy
+   agents, since dynamic admission gives them the same memory: first to a
+   machine that runs no heavy agents, then to one where no heavy work waits,
+   by spare memory, then to the one where the least heavy work waits.
+
+`balanced` never clones a repository onto a machine; that stays with
+`--machine`.
+
+Three more stages are proposed. Before the lifetime stage, a machine whose
+exclusive work waits now ranks after those where none waits. Before room, a
+machine scarce in recent exclusive demand ranks later, and heavy work prefers
+fast machines while light work prefers slow ones.
 
 `external` lets an app on the hub's machine take the decision over, registered
 as the placer. A start waits for it only briefly, and otherwise places by

@@ -1,4 +1,4 @@
-use shoal_schedule::placement::{Placed, Placement, Reason};
+use shoal_schedule::placement::{Placed, Placement, Reason, snapshot::Lifetime};
 
 use super::*;
 use crate::{
@@ -17,6 +17,7 @@ fn start() -> Request {
         agent: "claude".into(),
         mode: "worker".into(),
         heavy: true,
+        lifetime: Lifetime::Lasting,
         caller: "laptop".into(),
         parent: None,
     }
@@ -78,7 +79,9 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
         let placement = Placement {
             ranked: vec![Placed {
                 machine: own.clone(),
-                reason: Reason::Caller,
+                reason: Reason::Caller {
+                    lifetime: Lifetime::Lasting,
+                },
             }],
             skipped: Vec::new(),
         };
@@ -139,7 +142,9 @@ async fn a_chat_in_a_workspace_s_worktree_follows_that_workspace() {
     let decision = Decision {
         machine: "desk".into(),
         name: "desk".into(),
-        reason: Reason::Caller,
+        reason: Reason::Caller {
+            lifetime: Lifetime::Lasting,
+        },
         policy: shoal_schedule::placement::Policy::Balanced,
         unanswered: None,
         skipped: Vec::new(),

@@ -1,14 +1,16 @@
-//! The `balanced` placement policy.
+//! The `balanced` placement policy. It ranks machines by stages, each a
+//! function that yields a key and, where it prefers the machine, a reason;
+//! `docs/design/hub.md#policies` says why they come in this order.
 use std::cmp::Reverse;
 
 use super::{
     Placed, Placement, Placer, Reason, Skipped,
-    snapshot::{Capacity, Machine, Request, Snapshot},
+    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
-/// The `balanced` policy. It ranks only the `always_on` machines with room
-/// and the caller's machine, so a start no machine has room for stays on
-/// the caller's.
+/// The `balanced` policy. It ranks only the machines with room the start's
+/// lifetime may go to and the caller's machine, so a start no such machine
+/// has room for stays on the caller's.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Balanced;
 
@@ -26,33 +28,91 @@ impl Placer for Balanced {
                 None => ranked.extend(rank(request, machine)),
             }
         }
-        ranked.sort_by_key(|(key, _)| *key);
+        ranked.sort_by(|(first, _), (second, _)| first.cmp(second));
         placement.ranked = ranked.into_iter().map(|(_, placed)| placed).collect();
         placement
     }
 }
 
-/// Where `machine` ranks, lowest first, with why: the `always_on` machines
-/// with room, the caller's first, then the caller's machine. None for any
-/// other machine.
-fn rank<'a>(request: &Request, machine: &'a Machine) -> Option<((u8, RoomKey, &'a str), Placed)> {
-    let caller = machine.id == request.caller;
-    let ((group, key), reason) = match room(request, machine) {
-        Some((key, reason)) => ((u8::from(!caller), key), reason),
-        None if caller => ((2, RoomKey::default()), Reason::Caller),
-        None => return None,
-    };
-    let placed = Placed {
-        machine: machine.id.clone(),
-        reason,
-    };
-    Some(((group, key, &machine.name), placed))
+/// Where a machine ranks, lowest first: each stage's key in the order the
+/// stages apply, then its name. A `bool` key is false where its stage
+/// prefers the machine.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Rank<'a> {
+    fit: Fit,
+    lifetime: bool,
+    caller: bool,
+    room: RoomKey,
+    name: &'a str,
 }
 
-/// How an `always_on` machine with room for `request` ranks among the
-/// others, lowest first, with why; none for any other machine.
+/// What a stage makes of a machine: its key, and the reason when it
+/// prefers the machine.
+type Stage<K> = (K, Option<Reason>);
+
+/// Where `machine` ranks, with the reason of the first stage that prefers
+/// it. None for a machine the hard rules keep the start from.
+fn rank<'a>(request: &Request, machine: &'a Machine) -> Option<(Rank<'a>, Placed)> {
+    let room = room(request, machine);
+    let fit = fit(request, machine, room.is_some())?;
+    let lifetime = lifetime(request, machine);
+    let caller = caller(request, machine);
+    let (room, room_reason) = room.unzip();
+    let rank = Rank {
+        fit: fit.0,
+        lifetime: lifetime.0,
+        caller: caller.0,
+        room: room.unwrap_or_default(),
+        name: &machine.name,
+    };
+    let reason = [fit.1, lifetime.1, caller.1, room_reason];
+    let placed = Placed {
+        machine: machine.id.clone(),
+        reason: reason.into_iter().flatten().next()?,
+    };
+    Some((rank, placed))
+}
+
+/// Whether a start may go to a machine by the hard rules: one with room it
+/// may go to before the caller's without.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Fit {
+    Room,
+    Caller,
+}
+
+/// The hard rules, past `Request::unfit`: lasting work goes only to an
+/// `always_on` machine with room, disposable work to any with room, and
+/// otherwise the start stays on the caller's machine. None for any other
+/// machine.
+fn fit(request: &Request, machine: &Machine, room: bool) -> Option<Stage<Fit>> {
+    let lifetime = request.lifetime;
+    let may_go = room && (machine.always_on || lifetime == Lifetime::Disposable);
+    match (may_go, machine.id == request.caller) {
+        (true, _) => Some((Fit::Room, None)),
+        (false, true) => Some((Fit::Caller, Some(Reason::Caller { lifetime }))),
+        (false, false) => None,
+    }
+}
+
+/// Disposable work prefers an `intermittent` machine, so the `always_on`
+/// machines keep their room for lasting work, which only they take.
+fn lifetime(request: &Request, machine: &Machine) -> Stage<bool> {
+    let preferred = request.lifetime == Lifetime::Disposable && !machine.always_on;
+    (!preferred, preferred.then_some(Reason::Intermittent))
+}
+
+/// The caller's machine comes first, beside the start's parent and
+/// unpushed work.
+fn caller(request: &Request, machine: &Machine) -> Stage<bool> {
+    let caller = machine.id == request.caller;
+    (!caller, caller.then_some(Reason::CallerHasRoom))
+}
+
+/// How a machine with room for `request` ranks among the others by its
+/// room, lowest first, with why; none for a machine without room.
 fn room(request: &Request, machine: &Machine) -> Option<(RoomKey, Reason)> {
-    let capacity = machine.capacity.as_ref().filter(|_| machine.always_on)?;
+    let capacity = machine.capacity.as_ref()?;
     match request.heavy {
         true => heavy_room(capacity),
         false => light_room(capacity),

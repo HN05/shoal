@@ -12,7 +12,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::placement::Decision;
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::Launched;
-use shoal_schedule::placement::snapshot::Request;
+use shoal_schedule::placement::snapshot::{Lifetime, Request};
 
 use crate::{
     config::{Effective, modes::Weight},
@@ -166,6 +166,7 @@ impl Spaces {
             base: launch.base.clone(),
             agent: agent.name().to_owned(),
             heavy: heavy(&settings, &shape.mode),
+            lifetime: lifetime(launch.disposable),
             mode: shape.mode.to_string(),
             caller: this.clone(),
             parent: self.parent_machine(daemon, launch, caller, this).await?,
@@ -255,6 +256,15 @@ pub fn placeable(launch: &Launch) -> bool {
         && launch.path.is_none()
         && launch.setup.is_none()
         && launch.blockers.is_empty()
+}
+
+/// Disposable for a workspace that `disposable` marks, whose every removal
+/// deletes it.
+pub fn lifetime(disposable: bool) -> Lifetime {
+    match disposable {
+        true => Lifetime::Disposable,
+        false => Lifetime::Lasting,
+    }
 }
 
 pub fn heavy(settings: &Effective, mode: &crate::config::modes::ModeName) -> bool {

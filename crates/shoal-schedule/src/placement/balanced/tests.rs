@@ -1,7 +1,7 @@
 use super::Balanced;
 use crate::placement::{
     Placer, Reason, Skipped, SkippedBy,
-    snapshot::{Capacity, Machine, Request, Snapshot},
+    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
 const ORIGIN: &str = "example.com/owner/repo";
@@ -13,6 +13,7 @@ fn request(heavy: bool) -> Request {
         agent: "claude".into(),
         mode: "worker".into(),
         heavy,
+        lifetime: Lifetime::Lasting,
         caller: "laptop".into(),
         parent: None,
     }
@@ -50,8 +51,24 @@ fn ranked(request: Request, machines: Vec<Machine>) -> Vec<(String, Reason)> {
         .collect()
 }
 
+fn disposable(heavy: bool) -> Request {
+    Request {
+        lifetime: Lifetime::Disposable,
+        ..request(heavy)
+    }
+}
+
 fn laptop() -> Machine {
     machine("laptop", false, capacity(1, 8, 0))
+}
+
+/// A machine whose admission starts nothing now.
+fn held(id: &str, always_on: bool) -> Machine {
+    let held = Capacity {
+        light_free: false,
+        ..capacity(0, 0, 0)
+    };
+    machine(id, always_on, held)
 }
 
 #[test]
@@ -88,19 +105,20 @@ fn a_light_start_goes_first_to_a_machine_that_runs_no_heavy_agents() {
 }
 
 #[test]
-fn a_start_stays_on_the_callers_machine_without_an_always_on_machine_with_room() {
-    let held = Capacity {
-        light_free: false,
-        ..capacity(0, 0, 0)
-    };
+fn a_lasting_start_stays_on_the_callers_machine_without_an_always_on_machine_with_room() {
     let machines = vec![
         machine("desk", false, capacity(4, 64, 0)),
         laptop(),
-        machine("server", true, held),
+        held("server", true),
     ];
-    let first = |heavy| ranked(request(heavy), machines.clone()).remove(0);
-    assert_eq!(first(true), ("laptop".into(), Reason::Caller));
-    assert_eq!(first(false), ("laptop".into(), Reason::Caller));
+    let caller = Reason::Caller {
+        lifetime: Lifetime::Lasting,
+    };
+    // An intermittent machine other than the caller's never takes lasting
+    // work, whatever its room.
+    let all = |heavy| ranked(request(heavy), machines.clone());
+    assert_eq!(all(true), [("laptop".into(), caller)]);
+    assert_eq!(all(false), [("laptop".into(), caller)]);
     // A caller skipped for its agent tool, which the hub may not know of,
     // leaves no machine to go to rather than one without room.
     let mut machines = machines.clone();
@@ -116,7 +134,68 @@ fn an_always_on_caller_with_room_keeps_its_start() {
         machine("home", true, capacity(1, 4, 0)),
         machine("large", true, capacity(1, 64, 0)),
     ];
-    assert_eq!(ranked(request, machines)[0].0, "home");
+    assert_eq!(
+        ranked(request, machines)[0],
+        ("home".into(), Reason::CallerHasRoom)
+    );
+}
+
+#[test]
+fn a_disposable_start_goes_to_an_intermittent_machine_with_room_before_an_always_on_one() {
+    let machines = vec![
+        held("laptop", false),
+        machine("server", true, capacity(4, 64, 0)),
+        machine("desk", false, capacity(1, 8, 0)),
+        held("tablet", false),
+    ];
+    let ranked = ranked(disposable(true), machines);
+    let order: Vec<&str> = ranked.iter().map(|(machine, _)| machine.as_str()).collect();
+    assert_eq!(order, ["desk", "server", "laptop"]);
+    assert_eq!(ranked[0].1, Reason::Intermittent);
+    assert_eq!(
+        ranked[1].1,
+        Reason::HeavySlot {
+            memory_free: Some(64)
+        }
+    );
+}
+
+#[test]
+fn a_disposable_start_leaves_an_always_on_caller_for_an_intermittent_machine() {
+    let mut request = disposable(false);
+    request.caller = "home".into();
+    let machines = vec![
+        machine("home", true, capacity(1, 64, 0)),
+        machine("desk", false, capacity(1, 8, 0)),
+    ];
+    let order: Vec<String> = (ranked(request, machines).into_iter())
+        .map(|(machine, _)| machine)
+        .collect();
+    assert_eq!(order, ["desk", "home"]);
+}
+
+#[test]
+fn a_disposable_start_stays_on_an_intermittent_caller_with_room() {
+    let machines = vec![
+        machine("desk", false, capacity(4, 64, 0)),
+        laptop(),
+        machine("server", true, capacity(4, 64, 0)),
+    ];
+    let order: Vec<String> = (ranked(disposable(true), machines).into_iter())
+        .map(|(machine, _)| machine)
+        .collect();
+    assert_eq!(order, ["laptop", "desk", "server"]);
+}
+
+#[test]
+fn a_disposable_start_stays_on_the_callers_machine_without_a_machine_with_room() {
+    let machines = vec![held("desk", false), held("server", true)];
+    let mut request = disposable(true);
+    request.caller = "desk".into();
+    let caller = Reason::Caller {
+        lifetime: Lifetime::Disposable,
+    };
+    assert_eq!(ranked(request, machines), [("desk".into(), caller)]);
 }
 
 #[test]
@@ -148,7 +227,10 @@ fn a_start_skips_machines_without_its_repository_or_agent_tool() {
         request: request(true),
         machines: vec![caller],
     };
-    assert_eq!(Balanced.place(&snapshot).ranked[0].reason, Reason::Caller);
+    let caller = Reason::Caller {
+        lifetime: Lifetime::Lasting,
+    };
+    assert_eq!(Balanced.place(&snapshot).ranked[0].reason, caller);
     // A chat without a repository needs none.
     let mut chat = request(true);
     chat.origin = None;

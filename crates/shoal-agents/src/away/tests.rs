@@ -8,7 +8,7 @@ use shoal_protocol::{
     model::{Space, Workspace},
     space_names::SpaceSelector,
 };
-use shoal_schedule::placement::{Policy, Reason};
+use shoal_schedule::placement::{Policy, Reason, snapshot::Lifetime};
 
 use crate::{stand_in::Fixture, state::AgentState};
 
@@ -36,7 +36,9 @@ fn went(workspace: &Workspace) -> (Space, Handed) {
     let decision = Decision {
         machine: "desktop".into(),
         name: "desktop".into(),
-        reason: Reason::Caller,
+        reason: Reason::Caller {
+            lifetime: Lifetime::Lasting,
+        },
         policy: Policy::Balanced,
         unanswered: None,
         skipped: Vec::new(),

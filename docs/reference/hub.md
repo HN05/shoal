@@ -518,7 +518,26 @@ its spaces, which `hub ls --json` shows as `capacity`:
 A start that finds the machine full meanwhile waits in its queue there.
 Placement never moves a space once it is created.
 
-`shoal start` names the machine with the policy's reason. It also names each
+`balanced` places a start by its lifetime, its weight and what it requires. A
+start with `--disposable` is disposable, and any other is lasting. It ranks
+the machines by these rules, each ordering only the machines the rules before
+it rank equal:
+
+1. The machine has the start's repository and agent tool, and its user has
+   neither walked away nor paused it. Lasting work goes only to an
+   `always_on` machine with room, and disposable work to any machine with
+   room. Without one, the start stays on your machine.
+2. Disposable work goes to an `intermittent` machine first, leaving the room
+   of `always_on` machines to lasting work.
+3. Your own machine comes first.
+4. A heavy start goes to the machine whose admission would start a heavy
+   agent now, with the most spare memory. A light start goes first to a
+   machine with `max_heavy_agents = 0`, then to one where no heavy work waits,
+   with the most spare memory, then to the one where the least heavy work
+   waits.
+
+`shoal start` names the machine with the policy's reason, which under
+`balanced` is the first rule that put it ahead. It also names each
 connected machine it skipped, for lacking the repository or the agent tool,
 or for a user who walked away or paused it. `--json` gives these as
 `placement`, in a chat's start and as a last document after a workspace's.
@@ -649,7 +668,8 @@ For each package that arrives whole, the hub chooses a machine among the other
 connected machines, by its
 [`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 policy. The hub's own machine stands in for the caller's. The hub chooses from
-the space's repository, its agent's tool and its mode.
+the space's repository, its agent's tool, its mode and whether the workspace
+is disposable.
 
 The shutting-down machine reads that choice and tells the hub it leaves the
 space there. The chosen machine then imports the package under the space's

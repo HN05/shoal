@@ -18,7 +18,7 @@ pub mod create;
 pub mod elsewhere;
 pub mod labels;
 pub mod placement;
-pub use placement::heavy;
+pub use placement::{heavy, lifetime};
 mod run;
 pub mod setup;
 mod shape;
