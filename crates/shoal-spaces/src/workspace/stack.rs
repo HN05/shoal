@@ -11,6 +11,7 @@ use crate::refusal::{Reason, Refusal};
 use anyhow::{Result, ensure};
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::state::ConversionTarget;
 
 use crate::{
     git,
@@ -254,9 +255,8 @@ pub(super) fn owner(
     Ok(db
         .query_row(
             "SELECT id FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1 AND branch=?2
-                AND id NOT IN (SELECT space_id FROM space_conversions
-                    WHERE json_extract(record,'$.to')='chat')",
-            params![repository_id, branch],
+                AND id NOT IN (SELECT space_id FROM space_conversions WHERE target=?3)",
+            params![repository_id, branch, ConversionTarget::Chat],
             |row| row.get(0),
         )
         .optional()?)
@@ -266,8 +266,8 @@ pub(super) fn owner(
 fn converting_to_chat(db: &Connection, id: &SpaceId) -> Result<bool> {
     store::exists(
         db,
-        "SELECT 1 FROM space_conversions WHERE space_id=?1 AND json_extract(record,'$.to')='chat'",
-        [id],
+        "SELECT 1 FROM space_conversions WHERE space_id=?1 AND target=?2",
+        params![id, ConversionTarget::Chat],
     )
 }
 

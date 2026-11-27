@@ -5,6 +5,7 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::model::{RefPart, SpaceKind, SpaceRef};
+use shoal_protocol::state::ConversionTarget;
 
 /// The workspaces whose agent the daemon tracks. An agent counts whether it
 /// reports turn states from hooks or not, as custom and Happy agents do not.
@@ -72,7 +73,8 @@ pub fn runs_agent(column: &str) -> String {
     format!(
         "({column} IN (SELECT value FROM json_each(?2))
             OR EXISTS (SELECT 1 FROM space_conversions WHERE space_conversions.space_id={column}
-                AND json_extract(space_conversions.record,'$.to')='workspace'))"
+                AND space_conversions.target='{}'))",
+        ConversionTarget::Workspace,
     )
 }
 

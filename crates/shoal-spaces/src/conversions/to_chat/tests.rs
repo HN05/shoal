@@ -490,7 +490,7 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     // A stop holds the chat it becomes for `shoal resume`.
     let space = id.clone();
     (manager.store)
-        .run(move |db| pending::hold(db, &space))
+        .write(move |tx| pending::hold(tx, &space))
         .await
         .unwrap();
     assert!(!moves().await.unwrap());

@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 
 use shoal_agents::daemon::{Records, Removals, SpaceStatus, Steps, Waiting};
 use shoal_ids::{execution_ids::ExecutionId, repository_ids::RepositoryId, space_ids::SpaceId};
-use shoal_protocol::{demos::Launch, scope_tokens::ScopeToken, space_names::SpaceSelector};
+use shoal_protocol::{
+    demos::Launch, scope_tokens::ScopeToken, space_names::SpaceSelector, state::ConversionTarget,
+};
 
 use shoal_links::wait::followed::watches_open_pr;
 use shoal_store::WORKSPACE_COLUMNS;
@@ -147,11 +149,8 @@ impl Records for AgentRecords {
 
     fn converting_to_workspaces(&self, db: &Connection) -> Result<HashSet<SpaceId>> {
         Ok(db
-            .prepare(
-                "SELECT space_id FROM space_conversions
-                 WHERE json_extract(record,'$.to')='workspace'",
-            )?
-            .query_map([], |row| row.get(0))?
+            .prepare("SELECT space_id FROM space_conversions WHERE target=?1")?
+            .query_map([ConversionTarget::Workspace], |row| row.get(0))?
             .collect::<rusqlite::Result<_>>()?)
     }
 

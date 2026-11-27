@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod conversion_columns;
 mod github_activity;
 mod item_activity_states;
 mod journal_shapes;
@@ -11,7 +12,7 @@ mod post_surfaces;
 mod review_targets;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 312;
+pub const SCHEMA_VERSION: i64 = 314;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -106,6 +107,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         312,
         include_str!("migrations/0312_item_activity_state_columns.sql"),
         Some(item_activity_states::move_states),
+    ),
+    (
+        313,
+        include_str!("migrations/0313_conversion_columns.sql"),
+        None,
+    ),
+    (
+        314,
+        include_str!("migrations/0314_conversion_records.sql"),
+        Some(conversion_columns::move_into_columns),
     ),
 ];
 

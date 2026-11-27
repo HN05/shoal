@@ -296,11 +296,6 @@ CREATE TABLE "owned_places" (
             PRIMARY KEY (host, server, place)
         );
 
-CREATE TABLE space_conversions (
-    space_id TEXT PRIMARY KEY,
-    record TEXT NOT NULL
-);
-
 CREATE TABLE "workspace_renames" (
     workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
     branch TEXT NOT NULL
@@ -1121,17 +1116,6 @@ CREATE TABLE agent_handoffs (
     record TEXT NOT NULL
 );
 
-CREATE TABLE "run_usage" (
-    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    kind TEXT NOT NULL CHECK(kind IN ('ci_job','command','seed_build')),
-    key TEXT NOT NULL,
-    ended_at INTEGER NOT NULL,
-    peak_memory INTEGER NOT NULL,
-    duration INTEGER,
-    whole INTEGER NOT NULL CHECK(whole IN (0,1)),
-    oom_killed INTEGER NOT NULL CHECK(oom_killed IN (0,1))
-);
-
 CREATE TABLE "space_events" (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -1143,10 +1127,28 @@ CREATE TABLE "space_events" (
     record TEXT NOT NULL
 );
 
+CREATE TABLE "run_usage" (
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK(kind IN ('ci_job','command','seed_build')),
+    key TEXT NOT NULL,
+    ended_at INTEGER NOT NULL,
+    peak_memory INTEGER NOT NULL,
+    duration INTEGER,
+    whole INTEGER NOT NULL CHECK(whole IN (0,1)),
+    oom_killed INTEGER NOT NULL CHECK(oom_killed IN (0,1))
+);
+
 CREATE TABLE applied_reports (
     id TEXT PRIMARY KEY,
     applied_at INTEGER NOT NULL DEFAULT (unixepoch())
 ) WITHOUT ROWID;
+
+CREATE TABLE "space_conversions" (
+    space_id TEXT PRIMARY KEY,
+    target TEXT NOT NULL,
+    preparation TEXT,
+    record TEXT NOT NULL
+);
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
@@ -1262,13 +1264,13 @@ CREATE UNIQUE INDEX reviews_pending ON reviews(workspace_id, opener, COALESCE(op
 
 CREATE INDEX agent_handoffs_space ON agent_handoffs(space_id, session);
 
-CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
-
 CREATE INDEX space_events_space ON space_events(space_id, bulk, id);
 
 CREATE INDEX space_events_kind ON space_events(space_id, kind, id);
 
 CREATE INDEX space_events_child ON space_events(child_id) WHERE child_id IS NOT NULL;
+
+CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL

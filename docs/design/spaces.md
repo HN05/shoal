@@ -676,7 +676,9 @@ the workspace's record.
 
 A conversion moves its agent only once its turn ends, so the command that asked
 for it finishes. The daemon records the pending conversion, which survives a
-restart.
+restart. Its row keeps what queries filter on, the kind of space it makes and
+the preparation the agent waits for, in columns, and the rest in a record that
+only Rust reads.
 
 One task watches agent states. It stops the agent and starts it again in the
 new place from a fork of its session, as `start --fork` and a copy's restore

@@ -153,7 +153,7 @@ impl Spaces {
             (started.operation.clone()).context("the conversion's preparation waits")?;
         let id = started.workspace.id.clone();
         self.store
-            .run(move |db| super::pending::record_preparation(db, &id, &operation))
+            .write(move |tx| super::pending::record_preparation(tx, &id, &operation))
             .await?;
         Ok(started)
     }

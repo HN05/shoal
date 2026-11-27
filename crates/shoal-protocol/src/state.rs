@@ -82,6 +82,14 @@ impl QueueKind {
         matches!(self, Self::Launch | Self::Restore)
     }
 }
+states!(ConversionTarget {
+    /// A chat becomes a workspace.
+    Workspace => "workspace",
+    /// A workspace becomes a chat.
+    Chat => "chat",
+    /// Another agent tool takes the space's work over.
+    Agent => "agent",
+});
 states!(BlockerKind {
     /// A space, by ID.
     Space => "space",

@@ -1,7 +1,7 @@
 //! The record of a conversion whose agent has yet to start in the new
 //! place.
-use anyhow::{Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use anyhow::{Context as _, Result, ensure};
+use rusqlite::{Connection, Transaction, params};
 use serde::{Deserialize, Serialize};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
@@ -12,11 +12,11 @@ use crate::{
     agent::Agent,
     config::{modes::ModeName, permissions::PermissionsConfig},
     sessions::Origin,
+    state::ConversionTarget,
 };
 
 /// The agent still runs where the space was, until its turn ends.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "to", rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum Pending {
     Workspace(ToWorkspace),
     Chat(ToChat),
@@ -33,8 +33,8 @@ pub struct ToWorkspace {
     pub chat: ChatRow,
     pub execution: ExecutionId,
     /// The agent waits for this preparation to end, post-setup hook
-    /// included.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// included. Its own column holds it.
+    #[serde(skip)]
     pub preparation: Option<String>,
     /// Kept beyond the operation's own record.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -78,6 +78,35 @@ impl Pending {
             Self::Chat(ToChat { held, .. }) | Self::Agent(ToAgent { held, .. }) => !held,
         }
     }
+
+    /// Its row's columns: the kind of conversion, the preparation the agent
+    /// waits for and the record of the rest.
+    fn columns(&self) -> Result<(ConversionTarget, Option<&str>, String)> {
+        Ok(match self {
+            Self::Workspace(to) => (
+                ConversionTarget::Workspace,
+                to.preparation.as_deref(),
+                serde_json::to_string(to)?,
+            ),
+            Self::Chat(to) => (ConversionTarget::Chat, None, serde_json::to_string(to)?),
+            Self::Agent(to) => (ConversionTarget::Agent, None, serde_json::to_string(to)?),
+        })
+    }
+
+    fn from_columns(
+        target: ConversionTarget,
+        preparation: Option<String>,
+        record: &str,
+    ) -> Result<Self> {
+        Ok(match target {
+            ConversionTarget::Workspace => Self::Workspace(ToWorkspace {
+                preparation,
+                ..serde_json::from_str(record)?
+            }),
+            ConversionTarget::Chat => Self::Chat(serde_json::from_str(record)?),
+            ConversionTarget::Agent => Self::Agent(serde_json::from_str(record)?),
+        })
+    }
 }
 
 /// Besides its mode: with the model asked of it, from a fork of its session,
@@ -108,76 +137,110 @@ pub struct ConvertedChat {
 }
 
 pub fn record(tx: &Transaction<'_>, id: &SpaceId, pending: &Pending) -> Result<()> {
+    let (target, preparation, record) = pending.columns()?;
     tx.execute(
-        "INSERT INTO space_conversions(space_id,record) VALUES (?1,?2)",
-        params![id, serde_json::to_string(pending)?],
+        "INSERT INTO space_conversions(space_id,target,preparation,record)
+         VALUES (?1,?2,?3,?4)",
+        params![id, target, preparation, record],
     )?;
     Ok(())
+}
+
+/// Writes `id`'s conversion back when `edit` changed it.
+fn change(
+    tx: &Transaction<'_>,
+    id: &SpaceId,
+    edit: impl FnOnce(&mut Pending) -> bool,
+) -> Result<()> {
+    let Some(mut pending) = pending(tx, id)? else {
+        return Ok(());
+    };
+    if !edit(&mut pending) {
+        return Ok(());
+    }
+    let (target, preparation, record) = pending.columns()?;
+    tx.execute(
+        "UPDATE space_conversions SET target=?2,preparation=?3,record=?4 WHERE space_id=?1",
+        params![id, target, preparation, record],
+    )?;
+    Ok(())
+}
+
+const COLUMNS: &str = "space_id,target,preparation,record";
+
+fn row(row: &rusqlite::Row<'_>) -> Result<(SpaceId, Pending)> {
+    let id: SpaceId = row.get(0)?;
+    let record: String = row.get(3)?;
+    let pending = Pending::from_columns(row.get(1)?, row.get(2)?, &record)
+        .with_context(|| format!("space_conversions row {id}"))?;
+    Ok((id, pending))
 }
 
 /// One whose agent has yet to start in the new place.
 pub fn pending(db: &Connection, id: &SpaceId) -> Result<Option<Pending>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM space_conversions WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
+    let mut statement = db.prepare(&format!(
+        "SELECT {COLUMNS} FROM space_conversions WHERE space_id=?1"
+    ))?;
+    let mut rows = statement.query([id])?;
+    rows.next()?.map(|found| Ok(row(found)?.1)).transpose()
 }
 
 /// Those whose agent has yet to start in the new place.
 pub fn all_pending(db: &Connection) -> Result<Vec<(SpaceId, Pending)>> {
-    db.prepare("SELECT space_id,record FROM space_conversions")?
-        .query_map([], |row| Ok((row.get(0)?, row.get::<_, String>(1)?)))?
-        .map(|row| {
-            let (id, record) = row?;
-            Ok((id, serde_json::from_str(&record)?))
-        })
-        .collect()
+    let mut statement = db.prepare(&format!("SELECT {COLUMNS} FROM space_conversions"))?;
+    let mut rows = statement.query([])?;
+    let mut all = Vec::new();
+    while let Some(found) = rows.next()? {
+        all.push(row(found)?);
+    }
+    Ok(all)
 }
 
 /// The agent's restart in the workspace waits for its end.
-pub fn record_preparation(db: &Connection, id: &SpaceId, operation: &str) -> Result<()> {
-    db.execute(
-        "UPDATE space_conversions SET record=json_set(record,'$.preparation',?2)
-         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'",
-        params![id, operation],
-    )?;
-    Ok(())
+pub fn record_preparation(tx: &Transaction<'_>, id: &SpaceId, operation: &str) -> Result<()> {
+    change(tx, id, |pending| match pending {
+        Pending::Workspace(to) => {
+            to.preparation = Some(operation.to_owned());
+            true
+        }
+        Pending::Chat(_) | Pending::Agent(_) => false,
+    })
 }
 
 /// Records why its post-setup hook failed, when it did. An end reported
 /// before the conversion recorded its preparation, which starts first,
 /// records that preparation too.
 pub fn record_prepared(
-    db: &Connection,
+    tx: &Transaction<'_>,
     id: &SpaceId,
     operation: &str,
     hook_failure: Option<&str>,
 ) -> Result<()> {
-    db.execute(
-        "UPDATE space_conversions
-         SET record=json_set(record,'$.preparation',?2,'$.prepared',json('true'),
-            '$.hook_failure',?3)
-         WHERE space_id=?1 AND json_extract(record,'$.to')='workspace'
-            AND COALESCE(json_extract(record,'$.preparation'),?2)=?2",
-        params![id, operation, hook_failure],
-    )?;
-    Ok(())
+    change(tx, id, |pending| match pending {
+        Pending::Workspace(to)
+            if to
+                .preparation
+                .as_deref()
+                .is_none_or(|recorded| recorded == operation) =>
+        {
+            to.preparation = Some(operation.to_owned());
+            to.prepared = true;
+            to.hook_failure = hook_failure.map(str::to_owned);
+            true
+        }
+        Pending::Workspace(_) | Pending::Chat(_) | Pending::Agent(_) => false,
+    })
 }
 
 /// The agent that carries on stays stopped once the conversion is made.
-pub fn hold(db: &Connection, id: &SpaceId) -> Result<()> {
-    db.execute(
-        "UPDATE space_conversions SET record=json_set(record,'$.held',json('true'))
-         WHERE space_id=?1 AND json_extract(record,'$.to') IN ('chat','agent')",
-        [id],
-    )?;
-    Ok(())
+pub fn hold(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
+    change(tx, id, |pending| match pending {
+        Pending::Chat(ToChat { held, .. }) | Pending::Agent(ToAgent { held, .. }) => {
+            *held = true;
+            true
+        }
+        Pending::Workspace(_) => false,
+    })
 }
 
 /// Runs once its agent started in the new place.
@@ -243,3 +306,6 @@ pub fn record_stopped_switch(
     });
     record(tx, id, &pending)
 }
+
+#[cfg(test)]
+mod tests;

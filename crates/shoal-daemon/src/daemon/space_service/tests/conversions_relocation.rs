@@ -488,7 +488,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     LISTED.notified().await;
     let id = workspace.id.clone();
     (manager.store)
-        .run(move |db| crate::daemon::conversions::pending::hold(db, &id))
+        .write(move |tx| crate::daemon::conversions::pending::hold(tx, &id))
         .await
         .unwrap();
     release.send(()).unwrap();
@@ -743,7 +743,9 @@ async fn record_preparation(
         .unwrap();
     let (id, recorded) = (workspace.id.clone(), operation.clone());
     (manager.store)
-        .run(move |db| crate::daemon::conversions::pending::record_preparation(db, &id, &recorded))
+        .write(move |tx| {
+            crate::daemon::conversions::pending::record_preparation(tx, &id, &recorded)
+        })
         .await
         .unwrap();
     let worker = crate::daemon::operations::fake::take(&operation);
@@ -842,10 +844,10 @@ async fn a_failed_hook_outlasts_its_operations_record() {
     // a restart, whose end the conversion kept.
     let id = workspace.id.clone();
     (manager.store)
-        .run(move |db| {
-            crate::daemon::conversions::pending::record_preparation(db, &id, "gone")?;
+        .write(move |tx| {
+            crate::daemon::conversions::pending::record_preparation(tx, &id, "gone")?;
             crate::daemon::conversions::pending::record_prepared(
-                db,
+                tx,
                 &id,
                 "gone",
                 Some("hook exited 1"),
@@ -878,11 +880,11 @@ async fn a_preparation_end_reported_before_its_record_is_kept() {
     let id = workspace.id.clone();
 
     let pending = (manager.store)
-        .run(move |db| {
+        .write(move |tx| {
             use crate::daemon::conversions::pending;
-            pending::record_prepared(db, &id, "early", Some("hook exited 1"))?;
-            pending::record_preparation(db, &id, "early")?;
-            crate::daemon::conversions::pending(db, &id)
+            pending::record_prepared(tx, &id, "early", Some("hook exited 1"))?;
+            pending::record_preparation(tx, &id, "early")?;
+            crate::daemon::conversions::pending(tx, &id)
         })
         .await
         .unwrap();

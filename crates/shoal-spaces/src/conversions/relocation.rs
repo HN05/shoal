@@ -205,8 +205,8 @@ impl Spaces {
             _ => None,
         };
         let (space, operation) = (id.to_owned(), operation.to_owned());
-        let kept = (self.store).run(move |db| {
-            super::pending::record_prepared(db, &space, &operation, hook_failure.as_deref())
+        let kept = (self.store).write(move |tx| {
+            super::pending::record_prepared(tx, &space, &operation, hook_failure.as_deref())
         });
         // Under the hand-overs, so no relocation acts on the end it misses.
         if let Err(error) = self.conversion_handovers.hold(kept).await {
@@ -349,7 +349,7 @@ impl Spaces {
     async fn hold_converting_agent(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         (self.store)
-            .run(move |db| super::pending::hold(db, &id))
+            .write(move |tx| super::pending::hold(tx, &id))
             .await
     }
 
