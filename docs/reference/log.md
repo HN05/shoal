@@ -32,8 +32,10 @@ A space's log shows these events of the space:
 - its creation, with its base and parent, and its renames;
 - the start of its removal, the removal with its cause, a removal that failed
   or stopped with the reason, and a workspace's restore;
-- its agent's starts, stops and exits. A start names its launch's source, such
-  as `manual` for `shoal start`'s. An exit gives the exit code;
+- its agent's starts, stops and exits. Each names the agent's `mode`, null for
+  an agent whose execution was gone when Shoal began recording it. A start
+  names its launch's source, such as `manual` for `shoal start`'s. An exit
+  gives the exit code;
 - its ready marks, its completion, and the withdrawal of each;
 - the issues, PRs and CI runs it links and unlinks, and the changes Shoal makes
   to them;

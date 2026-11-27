@@ -4,6 +4,7 @@
 use anyhow::{Context, Result, ensure};
 use rusqlite::Connection;
 
+mod agent_modes;
 mod alert_attachments;
 mod approval_columns;
 mod conversion_columns;
@@ -176,7 +177,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         325,
         include_str!("migrations/0325_agent_events_by_time.sql"),
-        None,
+        Some(agent_modes::record_modes),
     ),
 ];
 

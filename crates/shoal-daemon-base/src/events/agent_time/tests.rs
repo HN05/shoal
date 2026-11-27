@@ -1,6 +1,7 @@
 use super::*;
+use crate::events::{AgentEvent, insert_agent};
 use crate::store::Store;
-use std::time::Duration;
+use shoal_store::test_support::seeds;
 
 /// A store in a temporary state directory.
 async fn store() -> (tempfile::TempDir, Store) {
@@ -12,62 +13,85 @@ async fn store() -> (tempfile::TempDir, Store) {
     (temp, store)
 }
 
-/// Journal the agent event `kind` of `space` in `repository`, running in
-/// `mode`, at the second `at`.
-fn journal(db: &Connection, space: &str, repository: &str, kind: &str, mode: &str, at: i64) {
+/// Record that the agent of `execution` in the space `space`, of `mode`,
+/// started or ended as `kind` says, at the second `at`.
+fn journal(db: &Connection, space: &str, kind: EventKind, execution: &str, mode: &str, at: i64) {
+    let agent = AgentEvent {
+        source: None,
+        name: "claude".into(),
+        execution_id: Some(execution.into()),
+        mode: Some(mode.into()),
+        exit_code: None,
+        oom_kills: 0,
+    };
+    insert_agent(db, &SpaceId::from(space), kind, agent).unwrap();
     db.execute(
-        "INSERT INTO space_events(created_at,space_id,repository_id,kind,bulk,record)
-            VALUES (?5,?1,?2,?3,0,json_object('kind',?3,'space_id',?1,
-                'agent',json_object('name','claude','mode',NULLIF(?4,''))))",
-        params![space, repository, kind, mode, at],
+        "UPDATE space_events SET created_at=?1 WHERE id=last_insert_rowid()",
+        [at],
     )
     .unwrap();
 }
 
 /// How long `time` says agents of `repository` ran in `mode`.
-fn ran(time: &AgentTime, repository: &str, mode: Option<&str>) -> Option<u64> {
-    let key = (RepositoryId::from(repository), mode.map(ModeName::from));
+fn ran(time: &AgentTime, repository: &str, mode: &str) -> Option<u64> {
+    let key = (RepositoryId::from(repository), Some(ModeName::from(mode)));
     time.get(&key).map(Duration::as_secs)
 }
 
+/// How long agents ran between the seconds 1000 and 2000, of the agent
+/// events `journaled` records in the workspaces `a` and `b` of `repo` and
+/// `c` of `other`.
 async fn running(journaled: impl FnOnce(&Connection) + Send + 'static) -> AgentTime {
     let (_temp, store) = store().await;
     store
         .run(move |db| {
+            seeds::ready_workspace(db, "repo", "a", "a")?;
+            seeds::ready_workspace(db, "repo", "b", "b")?;
+            seeds::ready_workspace(db, "other", "c", "c")?;
             journaled(db);
-            running_since(
-                db,
-                UnixTime::from_seconds(1000),
-                UnixTime::from_seconds(2000),
-            )
+            let (since, now) = (UnixTime::from_seconds(1000), UnixTime::from_seconds(2000));
+            running_since(db, since, now)
         })
         .await
         .unwrap()
 }
 
 #[tokio::test]
-async fn an_agent_runs_from_its_start_to_its_space_s_next_end_or_now() {
+async fn an_agent_runs_from_its_start_to_its_end_or_now() {
+    use EventKind::{AgentExited, AgentStarted, AgentStopped};
     let time = running(|db| {
-        journal(db, "a", "repo", "agent_started", "worker", 1100);
-        journal(db, "a", "repo", "agent_stopped", "worker", 1300);
-        journal(db, "b", "repo", "agent_started", "worker", 1500);
-        journal(db, "b", "repo", "agent_exited", "worker", 1600);
-        journal(db, "c", "repo", "agent_started", "chat", 1900);
-        journal(db, "d", "other", "agent_started", "", 1950);
+        journal(db, "a", AgentStarted, "e1", "worker", 1100);
+        journal(db, "a", AgentStopped, "e1", "worker", 1300);
+        journal(db, "a", AgentStarted, "e2", "chat", 1900);
+        journal(db, "b", AgentStarted, "e3", "worker", 1500);
+        journal(db, "b", AgentExited, "e3", "worker", 1600);
+        journal(db, "c", AgentStarted, "e4", "worker", 1950);
     })
     .await;
-    assert_eq!(ran(&time, "repo", Some("worker")), Some(300));
-    assert_eq!(ran(&time, "repo", Some("chat")), Some(100));
-    assert_eq!(ran(&time, "other", None), Some(50));
+    assert_eq!(ran(&time, "repo", "worker"), Some(300));
+    assert_eq!(ran(&time, "repo", "chat"), Some(100));
+    assert_eq!(ran(&time, "other", "worker"), Some(50));
 }
 
 #[tokio::test]
-async fn an_end_without_a_start_in_the_time_read_ran_from_its_beginning() {
+async fn an_agent_started_before_the_time_read_counts_from_its_beginning() {
+    use EventKind::{AgentStarted, AgentStopped};
     let time = running(|db| {
-        journal(db, "a", "repo", "agent_started", "worker", 900);
-        journal(db, "a", "repo", "agent_stopped", "worker", 1200);
-        journal(db, "a", "repo", "agent_exited", "worker", 1250);
+        journal(db, "a", AgentStarted, "e1", "worker", 900);
+        journal(db, "a", AgentStopped, "e1", "worker", 1200);
     })
     .await;
-    assert_eq!(ran(&time, "repo", Some("worker")), Some(200));
+    assert_eq!(ran(&time, "repo", "worker"), Some(200));
+}
+
+#[tokio::test]
+async fn a_launch_that_ended_before_its_agent_started_ran_for_no_time() {
+    use EventKind::{AgentExited, AgentStarted, AgentStopped};
+    let time = running(|db| {
+        journal(db, "a", AgentStarted, "e1", "worker", 500);
+        journal(db, "a", AgentStopped, "e1", "worker", 600);
+        journal(db, "a", AgentExited, "e2", "worker", 1500);
+    })
+    .await;
+    assert_eq!(ran(&time, "repo", "worker"), None);
 }

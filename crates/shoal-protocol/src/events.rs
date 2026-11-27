@@ -547,8 +547,8 @@ pub struct AgentEvent {
     /// The execution that runs it; null for a chat's agent.
     pub execution_id: Option<ExecutionId>,
     /// The mode it runs in, which tells a heavy agent from a light one;
-    /// absent from events recorded before Shoal kept it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// null for an agent whose execution was gone when Shoal began keeping
+    /// it.
     pub mode: Option<crate::config::modes::ModeName>,
     /// The code an agent exited with; null when its wrapper disconnected
     /// without reporting one, and for a start or stop.
