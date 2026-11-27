@@ -20,6 +20,7 @@ use crate::{
 };
 use shoal_forge::test_support::Server;
 use shoal_runner::daemon::Records as _;
+use shoal_store::test_support::seeds;
 
 /// A Forgejo whose waiting jobs are `jobs`, each in the run its `run_id`
 /// names: run 1 for PR 12, run 2 on branch `topic`.
@@ -196,11 +197,13 @@ async fn a_job_ranks_with_its_workspace_ahead_of_that_workspaces_restore() {
         .run(move |db| {
             let (repository, topic, other) = &ids;
             for (id, workspace) in [("first", other), ("restore", topic)] {
-                db.execute(
-                    "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,space_id,execution_id)
-                     VALUES (?1,'restore',?2,?1,'claude','queued',0,?3,?1)",
-                    params![id, repository, workspace],
-                )?;
+                let entry = seeds::QueueEntry {
+                    repository: Some(repository.clone()),
+                    space: Some(workspace.clone()),
+                    execution: Some(id.into()),
+                    ..seeds::QueueEntry::new(id, QueueKind::Restore, QueueState::Queued)
+                };
+                seeds::queue_entry(db, &entry)?;
             }
             Ok(())
         })

@@ -38,3 +38,36 @@ fn seeded_spaces_read_back_as_their_records() -> Result<()> {
     assert_eq!(serde_json::to_value(read)?, serde_json::to_value(&run)?);
     Ok(())
 }
+
+#[test]
+fn seeded_queue_entries_of_each_recorded_kind_meet_the_schema() -> Result<()> {
+    let db = migrated()?;
+    let workspace = ready_workspace(&db, "repo", "work", "feature")?;
+    let job = serde_json::from_value(serde_json::json!({
+        "job": {"handle": "h", "id": 1, "run": 1, "name": "rust", "labels": ["shoal"]},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "workflow": null, "commit": "abc", "trigger": "other"},
+    }))?;
+    let entries = [
+        QueueEntry::new("launch", QueueKind::Launch, QueueState::Queued),
+        QueueEntry {
+            space: Some(workspace.id.clone()),
+            execution: Some("stopped".into()),
+            automatic: true,
+            ..QueueEntry::new("restore", QueueKind::Restore, QueueState::Queued)
+        },
+        QueueEntry {
+            repository: Some("repo".into()),
+            job: Some(job),
+            ..QueueEntry::new("job", QueueKind::Job, QueueState::Starting)
+        },
+    ];
+    for entry in &entries {
+        queue_entry(&db, entry)?;
+    }
+    let recorded: Vec<String> = db
+        .prepare("SELECT kind FROM agent_queue ORDER BY seq")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(recorded, ["launch", "restore", "job"]);
+    Ok(())
+}

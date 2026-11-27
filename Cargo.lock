@@ -2925,7 +2925,6 @@ dependencies = [
  "shoal-store",
  "tempfile",
  "tokio",
- "uuid",
 ]
 
 [[package]]

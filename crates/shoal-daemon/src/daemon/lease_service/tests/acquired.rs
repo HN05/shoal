@@ -11,10 +11,16 @@ use crate::daemon::{
     scope::Caller,
     test_support::{agent_process, configure, manager, repository},
 };
-use crate::{model::Workspace, refusal::Reason, time::UnixTime};
+use crate::{
+    model::Workspace,
+    refusal::Reason,
+    state::{QueueKind, QueueState},
+    time::UnixTime,
+};
 use shoal_protocol::acquirers::Acquirer;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::{resources::ResourceRequest, space_names::SpaceSelector};
+use shoal_store::test_support::seeds;
 
 /// A ready workspace in a daemon whose global config is `config`.
 pub(super) struct Fixture {
@@ -117,14 +123,15 @@ impl Fixture {
     /// [`Self::sleep`], as though its harness stopped at `since`.
     pub(super) async fn sleep_since(&self, execution: &ExecutionId, since: UnixTime) {
         let (restored, space) = (execution.clone(), self.workspace.id.clone());
-        let queued = self.manager.store.run(move |db| {
-            db.execute(
-                "INSERT INTO agent_queue(id,kind,name,agent,execution_id,state,created_at,space_id,automatic)
-                 VALUES ('restore','restore','worker','claude',?1,'queued',?2,?3,1)",
-                rusqlite::params![restored, since, space],
-            )?;
-            Ok(())
-        });
+        let entry = seeds::QueueEntry {
+            space: Some(space),
+            execution: Some(restored),
+            name: "worker".into(),
+            automatic: true,
+            created_at: since,
+            ..seeds::QueueEntry::new("restore", QueueKind::Restore, QueueState::Queued)
+        };
+        let queued = (self.manager.store).run(move |db| seeds::queue_entry(db, &entry));
         queued.await.unwrap();
         (self.manager.agents)
             .end_test_execution(&*self.manager, execution.clone())
@@ -264,20 +271,20 @@ async fn an_asleep_agent_keeps_its_leases_until_its_restore_is_cancelled() {
 
     // Its restore starts it again, as a new execution.
     let (restored, _) = fixture.agent().await;
-    let started = fixture.manager.store.run(|db| {
-        db.execute("DELETE FROM agent_queue WHERE id='restore'", [])?;
-        Ok(())
-    });
+    let started = fixture
+        .manager
+        .agents
+        .delete_waiting_entry("restore".into());
     started.await.unwrap();
     fixture.sweep().await;
     assert_eq!(fixture.permits().await, kept);
 
     // It sleeps again, and its restore is cancelled.
     fixture.sleep(&restored).await;
-    let cancelled = fixture.manager.store.run(|db| {
-        db.execute("DELETE FROM agent_queue WHERE id='restore'", [])?;
-        Ok(())
-    });
+    let cancelled = fixture
+        .manager
+        .agents
+        .delete_waiting_entry("restore".into());
     cancelled.await.unwrap();
     fixture.sweep().await;
     assert_eq!(fixture.permits().await, []);

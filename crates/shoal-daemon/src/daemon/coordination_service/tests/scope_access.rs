@@ -1,5 +1,4 @@
 use crate::daemon::scope::Access;
-use rusqlite::params;
 use serde_json::json;
 use shoal_protocol::progress::Blocker;
 
@@ -9,7 +8,9 @@ use crate::daemon::{
     test_support::{chat, manager, repository, workspace_below},
 };
 use crate::model::{QueueRequest, Repository, Workspace};
+use crate::state::{QueueKind, QueueState};
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
+use shoal_store::test_support::seeds;
 
 fn caller(space: &SpaceId) -> Caller {
     Caller {
@@ -45,16 +46,18 @@ async fn job(manager: &Manager, repository: &Repository, name: &str, for_spaces:
         },
         "space_ids": for_spaces,
     });
-    let (repository, name) = (repository.id.clone(), name.to_owned());
+    let entry = seeds::QueueEntry {
+        repository: Some(repository.id.clone()),
+        name: name.to_owned(),
+        job: Some(serde_json::from_value(job).unwrap()),
+        ..seeds::QueueEntry::new(
+            QueueEntryId::generate().as_str(),
+            QueueKind::Job,
+            QueueState::Starting,
+        )
+    };
     (manager.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
-                 VALUES (?1,'job',?2,?3,'','starting',0,?4)",
-                params![QueueEntryId::generate(), repository, name, job.to_string()],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::queue_entry(db, &entry))
         .await
         .unwrap();
 }

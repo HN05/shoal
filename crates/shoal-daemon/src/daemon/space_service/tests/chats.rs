@@ -8,6 +8,8 @@ use crate::model::WorkspaceRef;
 use crate::model::EventCause;
 use crate::paths::StateFiles;
 use crate::removal::{InspectionPolicy, UnsavedWork};
+use crate::state::{QueueKind, QueueState};
+use crate::time::UnixTime;
 use crate::{
     daemon::{
         events::{EventItem, EventKind},
@@ -17,6 +19,7 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_refs::BranchName;
+use shoal_store::test_support::seeds;
 
 /// Chat creations and renames, and workspace parent changes, in journal
 /// order.
@@ -490,12 +493,15 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,execution_id,state,created_at,space_id)
-                    VALUES ('restore','restore',?2,'talk','claude','stopped','queued',1,?1)",
-                rusqlite::params![id, repository],
-            )?;
-            Ok(())
+            let entry = seeds::QueueEntry {
+                repository: Some(repository),
+                space: Some(id),
+                execution: Some("stopped".into()),
+                name: "talk".into(),
+                created_at: UnixTime::from_seconds(1),
+                ..seeds::QueueEntry::new("restore", QueueKind::Restore, QueueState::Queued)
+            };
+            seeds::queue_entry(db, &entry)
         })
         .await
         .unwrap();
@@ -520,11 +526,8 @@ async fn a_removed_chat_takes_its_executions_restores_and_recovery_records() {
     let left = manager
         .store
         .run(|db| {
-            Ok(db.query_row(
-                "SELECT (SELECT COUNT(*) FROM executions) + (SELECT COUNT(*) FROM agent_queue)",
-                [],
-                |row| row.get::<_, i64>(0),
-            )?)
+            let executions = shoal_store::all_executions(db)?.len();
+            Ok(executions + shoal_store::test_support::queue::entry_count(db)?)
         })
         .await
         .unwrap();

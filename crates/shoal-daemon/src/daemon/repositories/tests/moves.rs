@@ -1,10 +1,9 @@
 use anyhow::{Context, Result};
-use rusqlite::params;
 use std::path::{Path, PathBuf};
 
 use crate::daemon::manager::Manager;
 use crate::daemon::{
-    executions::ExecutionKind, links::proposals::tests as proposals, test_support,
+    agent_queue, executions::ExecutionKind, links::proposals::tests as proposals, test_support,
     workspace_files::Attacher,
 };
 use crate::model::{Repository, Workspace};
@@ -16,6 +15,7 @@ use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::assignments::Done;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_repositories::spotlight::Layout;
+use shoal_store::test_support::seeds;
 use std::fs;
 use std::sync::Arc;
 
@@ -671,16 +671,18 @@ async fn a_queued_or_running_review_holds_back_the_move() -> Result<()> {
 #[tokio::test]
 async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() -> Result<()> {
     let (_temp, manager, repo, _workspace, _root) = cloned().await?;
+    let job: crate::model::QueuedJob = serde_json::from_value(serde_json::json!({
+        "job": {"handle": "h", "id": 4, "run": 1, "name": "rust", "labels": ["shoal"]},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "workflow": null, "commit": "abc", "trigger": "other"},
+    }))?;
     let queue = |state: QueueState| {
-        let id = repo.id.clone();
-        manager.store.run(move |db| {
-            db.execute(
-                "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
-                 VALUES (?1,?2,?3,'ci-rust-4','',?4,0,'{}')",
-                params![uuid::Uuid::new_v4().to_string(), QueueKind::Job, id, state],
-            )?;
-            Ok(())
-        })
+        let entry = seeds::QueueEntry {
+            repository: Some(repo.id.clone()),
+            name: "ci-rust-4".into(),
+            job: Some(job.clone()),
+            ..seeds::QueueEntry::new(state.as_str(), QueueKind::Job, state)
+        };
+        manager.store.run(move |db| seeds::queue_entry(db, &entry))
     };
     queue(QueueState::Starting).await?;
     assert!(
@@ -694,10 +696,7 @@ async fn a_waiting_ci_job_lets_the_move_go_and_a_starting_one_holds_it_back() ->
 
     manager
         .store
-        .run(|db| {
-            db.execute("DELETE FROM agent_queue", [])?;
-            Ok(())
-        })
+        .run(|db| agent_queue::jobs::remove(db, &QueueState::Starting.as_str().into()))
         .await?;
     queue(QueueState::Queued).await?;
     manager

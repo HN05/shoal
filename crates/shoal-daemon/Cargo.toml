@@ -53,7 +53,6 @@ shoal-spaces.workspace = true
 shoal-store.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "io-util", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] }
-uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dev-dependencies]
 shoal-agents = { workspace = true, features = ["test-support"] }

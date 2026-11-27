@@ -107,10 +107,7 @@ impl Forge {
     async fn started_run(&self, launched: &Launched) -> Option<String> {
         let entry = launched.entry.as_ref().unwrap().id.clone();
         let plan: String = (self.manager.store)
-            .run(move |db| {
-                let read = "SELECT plan FROM agent_queue WHERE id=?1";
-                Ok(db.query_row(read, [&entry], |row| row.get(0))?)
-            })
+            .run(move |db| shoal_store::test_support::queue::launch_plan(db, entry.as_str()))
             .await
             .unwrap();
         let start = QueuedStart::of(&plan).unwrap();

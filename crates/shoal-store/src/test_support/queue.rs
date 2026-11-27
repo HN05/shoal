@@ -14,3 +14,18 @@ pub fn chat_launch_plans(db: &Connection) -> Result<Vec<String>> {
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
+
+/// The plan of the launch `id`, while it waits or starts.
+pub fn launch_plan(db: &Connection, id: &str) -> Result<String> {
+    Ok(
+        db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
+            row.get(0)
+        })?,
+    )
+}
+
+/// How many entries the queue records.
+pub fn entry_count(db: &Connection) -> Result<usize> {
+    let count: i64 = db.query_row("SELECT COUNT(*) FROM agent_queue", [], |row| row.get(0))?;
+    Ok(usize::try_from(count)?)
+}

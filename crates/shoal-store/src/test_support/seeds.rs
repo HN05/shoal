@@ -5,12 +5,18 @@ use std::path::Path;
 
 use anyhow::{Result, bail};
 use rusqlite::{Connection, params};
-use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_ids::{
+    execution_ids::ExecutionId,
+    queue_entry_ids::QueueEntryId,
+    repository_ids::RepositoryId,
+    space_ids::{SpaceId, SpaceNumber},
+};
 use shoal_protocol::{
-    model::{Chat, Checkout, Execution, Head, Repository, Space, SpaceKind, Workspace},
+    model::{Chat, Checkout, Execution, Head, QueuedJob, Repository, Space, SpaceKind, Workspace},
     scope_tokens::ScopeToken,
-    state::ExecutionState,
+    state::{ExecutionState, QueueKind, QueueState},
     test_support,
+    time::UnixTime,
 };
 
 use crate::{json_text, narrowing_column};
@@ -169,6 +175,72 @@ pub fn bare_execution(
     let mut recorded = test_support::execution(id, space.as_str());
     recorded.state = state;
     execution(db, &recorded, None)
+}
+
+/// An entry of the agent queue a test records.
+pub struct QueueEntry {
+    pub id: QueueEntryId,
+    pub kind: QueueKind,
+    pub state: QueueState,
+    pub repository: Option<RepositoryId>,
+    pub space: Option<SpaceId>,
+    /// The execution a restore brings back.
+    pub execution: Option<ExecutionId>,
+    pub name: String,
+    pub job: Option<QueuedJob>,
+    /// Whether Shoal queued the restore on its own.
+    pub automatic: bool,
+    pub created_at: UnixTime,
+}
+
+impl QueueEntry {
+    /// The entry `id` of `kind` in `state`, named after its ID, of no
+    /// repository, space, execution or job, queued by the user at the
+    /// epoch.
+    pub fn new(id: &str, kind: QueueKind, state: QueueState) -> Self {
+        Self {
+            id: id.into(),
+            kind,
+            state,
+            repository: None,
+            space: None,
+            execution: None,
+            name: id.to_owned(),
+            job: None,
+            automatic: false,
+            created_at: UnixTime::EPOCH,
+        }
+    }
+}
+
+/// Record `entry`, whose launch plans nothing and whose launch or restore
+/// starts Claude Code, as a job's starts no agent.
+pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
+    let (agent, plan) = match entry.kind {
+        QueueKind::Launch => ("claude", Some("{}")),
+        QueueKind::Restore => ("claude", None),
+        QueueKind::Job => ("", None),
+        QueueKind::Command | QueueKind::SeedBuild => bail!("the queue keeps these in memory"),
+    };
+    db.execute(
+        "INSERT INTO agent_queue(id,kind,state,repository_id,space_id,execution_id,name,job,
+            automatic,created_at,agent,plan,env) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12)",
+        params![
+            entry.id,
+            entry.kind,
+            entry.state,
+            entry.repository,
+            entry.space,
+            entry.execution,
+            entry.name,
+            json_text(entry.job.as_ref())?,
+            entry.automatic,
+            entry.created_at,
+            agent,
+            plan,
+        ],
+    )?;
+    Ok(())
 }
 
 /// Record the space `child` below `parent`.
