@@ -61,3 +61,14 @@ fn the_delay_doubles_then_settles_at_its_longest() {
     assert_eq!(delays[1], delays[0] * 2);
     assert_eq!(delay(u32::MAX), Some(LONGEST_DELAY));
 }
+
+#[tokio::test]
+async fn a_kill_withdraws_the_healthy_readings_taken_before_it() {
+    let fixture = Fixture::new().await;
+    let workspace = fixture.workspace("killed").await;
+    let recovery = fixture.agents.overload_recovery();
+    recovery.publish(Some(recovery.epoch()));
+    assert!(recovery.published().is_some());
+    killed(&fixture, &workspace.id, "killed").await;
+    assert_eq!(recovery.published(), None);
+}

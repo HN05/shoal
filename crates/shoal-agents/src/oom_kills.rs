@@ -25,8 +25,10 @@ const LONGEST_DELAY: Duration = Duration::from_secs(2 * 60 * 60);
 impl Agents {
     /// Count the OOM kill that ended the agent of `execution` in `space_id`,
     /// and keep in its recovery record how many kills ended it in a row and
-    /// when its restore may start. A failure leaves the restore unheld.
+    /// when its restore may start. A failure leaves the restore unheld. The
+    /// kill withdraws healthy readings taken before it, as a stop does.
     pub async fn record_oom_kill(&self, space_id: &SpaceId, execution: &ExecutionId) {
+        self.overload_recovery.reset();
         let id = space_id.clone();
         let saved = match self.store.write(move |tx| count_kill(tx, &id)).await {
             Ok(kills) => {
