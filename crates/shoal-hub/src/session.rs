@@ -58,6 +58,9 @@ impl Calls {
             Some(pending) => pending.insert(id, replied),
             None => return Err(Unsent(format!("the link to {} closed", self.peer)).into()),
         };
+        // Forgets the call however its wait ends, also when its caller
+        // drops it, as a caller's own timeout does.
+        let _waiting = Waiting { calls: self, id };
         let sent_and_replied = async {
             let sent = crate::pieces::send(&self.sender, &Frame::Call { id, call }, false).await;
             sent.map_err(|error| Unsent(format!("{error:#}")))?;
@@ -65,10 +68,7 @@ impl Calls {
         };
         let reply = match tokio::time::timeout(limit, sent_and_replied).await {
             Ok(Ok(reply)) => Ok(reply),
-            Ok(Err(unsent)) => {
-                self.forget(id);
-                return Err(unsent.into());
-            }
+            Ok(Err(unsent)) => return Err(unsent.into()),
             Err(timeout) => Err(timeout),
         };
         let peer = &self.peer;
@@ -79,7 +79,6 @@ impl Calls {
                 Err(Unanswered(format!("the link to {peer} closed before it answered")).into())
             }
             Err(_) => {
-                self.forget(id);
                 let waited = limit.as_secs();
                 Err(Unanswered(format!("{peer} did not answer within {waited}s")).into())
             }
@@ -140,6 +139,18 @@ impl Calls {
     fn close(&self) {
         self.pending.lock().unwrap().take();
         self.streams.end();
+    }
+}
+
+/// A call waiting for its reply, which [`Calls::forget`]s it once dropped.
+struct Waiting<'a> {
+    calls: &'a Calls,
+    id: u64,
+}
+
+impl Drop for Waiting<'_> {
+    fn drop(&mut self) {
+        self.calls.forget(self.id);
     }
 }
 
