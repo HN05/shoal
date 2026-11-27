@@ -1,8 +1,9 @@
 //! The store side of a conversion: changing a space's kind and swapping its
 //! kind's row.
-use anyhow::{Context as _, Result};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use anyhow::{Context as _, Result, bail};
+use rusqlite::{Connection, OptionalExtension, Transaction, params, types::Value as SqlValue};
 use serde::{Deserialize, Serialize};
+use serde_json::Map;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -175,23 +176,36 @@ fn forget_completion(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 }
 
 fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
-    let pairs: Vec<String> = (CHAT_COLUMNS.iter().chain(SPACE_COLUMNS))
-        .map(|column| format!("'{column}',{column}"))
+    Ok(ChatRow {
+        scope_token: tokens::agent_token(db, id)?,
+        space_completion: kept_completion(db, id)?,
+        columns: chat_columns(db, id)?,
+    })
+}
+
+/// The chat's columns, by name.
+fn chat_columns(db: &Connection, id: &SpaceId) -> Result<Map<String, serde_json::Value>> {
+    let names: Vec<&str> = (CHAT_COLUMNS.iter().chain(SPACE_COLUMNS))
+        .copied()
         .collect();
-    let row: String = db
+    let values: Vec<SqlValue> = db
         .query_row(
             &format!(
-                "SELECT json_object({}) FROM spaces JOIN chats USING(id) WHERE id=?1",
-                pairs.join(",")
+                "SELECT {} FROM spaces JOIN chats USING(id) WHERE id=?1",
+                names.join(",")
             ),
             [id],
-            |row| row.get(0),
+            |row| (0..names.len()).map(|column| row.get(column)).collect(),
         )
         .optional()?
         .with_context(|| format!("no chat {id}"))?;
-    let mut row: ChatRow = serde_json::from_str(&row)?;
-    row.scope_token = tokens::agent_token(db, id)?;
-    row.space_completion = db
+    (names.into_iter().zip(values))
+        .map(|(name, value)| Ok((name.to_owned(), json_value(value)?)))
+        .collect()
+}
+
+fn kept_completion(db: &Connection, id: &SpaceId) -> Result<Option<KeptCompletion>> {
+    Ok(db
         .query_row(
             "SELECT record,cause FROM space_completion WHERE space_id=?1",
             [id],
@@ -202,22 +216,11 @@ fn chat_row(db: &Connection, id: &SpaceId) -> Result<ChatRow> {
                 })
             },
         )
-        .optional()?;
-    Ok(row)
+        .optional()?)
 }
 
 fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {
-    let values: Vec<String> = (CHAT_COLUMNS.iter())
-        .map(|column| format!("json_extract(?1,'$.{column}')"))
-        .collect();
-    tx.execute(
-        &format!(
-            "INSERT INTO chats({}) VALUES ({})",
-            CHAT_COLUMNS.join(","),
-            values.join(",")
-        ),
-        [serde_json::to_string(row)?],
-    )?;
+    insert_chat(tx, row)?;
     let narrowing = row.agent()?.narrowing()?;
     spaces::convert(tx, id, SpaceKind::Chat, &row.mode()?, &narrowing)?;
     tokens::clear(tx, id)?;
@@ -225,6 +228,45 @@ fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Resu
         Some(token) => tokens::record_agent(tx, id, token),
         None => Ok(()),
     }
+}
+
+/// Inserts the chat's row with the values `row` kept, null where it kept
+/// none.
+fn insert_chat(tx: &Transaction<'_>, row: &ChatRow) -> Result<()> {
+    let values: Vec<SqlValue> = (CHAT_COLUMNS.iter())
+        .map(|column| sql_value(row.columns.get(*column)))
+        .collect::<Result<_>>()?;
+    let placeholders: Vec<String> = (1..=values.len()).map(|n| format!("?{n}")).collect();
+    tx.execute(
+        &format!(
+            "INSERT INTO chats({}) VALUES ({})",
+            CHAT_COLUMNS.join(","),
+            placeholders.join(",")
+        ),
+        rusqlite::params_from_iter(values),
+    )?;
+    Ok(())
+}
+
+fn json_value(value: SqlValue) -> Result<serde_json::Value> {
+    Ok(match value {
+        SqlValue::Null => serde_json::Value::Null,
+        SqlValue::Integer(number) => number.into(),
+        SqlValue::Text(text) => text.into(),
+        SqlValue::Real(_) | SqlValue::Blob(_) => bail!("a chat's column holds {value:?}"),
+    })
+}
+
+fn sql_value(value: Option<&serde_json::Value>) -> Result<SqlValue> {
+    Ok(match value {
+        None | Some(serde_json::Value::Null) => SqlValue::Null,
+        Some(serde_json::Value::String(text)) => SqlValue::Text(text.clone()),
+        Some(serde_json::Value::Number(number)) => match number.as_i64() {
+            Some(number) => SqlValue::Integer(number),
+            None => bail!("a chat's row keeps {number} for a column"),
+        },
+        Some(other) => bail!("a chat's row keeps {other} for a column"),
+    })
 }
 
 #[cfg(test)]

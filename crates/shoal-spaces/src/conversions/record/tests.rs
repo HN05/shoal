@@ -55,3 +55,36 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
     // A request for the worktree's port goes with it.
     assert_eq!(kept, [owned("action"), owned("thread")]);
 }
+
+#[tokio::test]
+async fn a_chat_s_row_kept_by_a_conversion_inserts_it_again_as_it_was() {
+    let manager = Fixture::new().await;
+    let (kept, before, after) = (manager.store)
+        .write(|tx| {
+            let chat =
+                shoal_protocol::test_support::chat("c", None, "chat", std::path::Path::new("/"));
+            seeds::chat(tx, &chat)?;
+            let id = "c".into();
+            type Columns = (String, Option<String>, Option<String>);
+            let read = |tx: &rusqlite::Transaction<'_>| -> rusqlite::Result<Columns> {
+                tx.query_row(
+                    "SELECT id,workspace_id,root_dir FROM chats WHERE id='c'",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+            };
+            let before = read(tx)?;
+            let kept = super::chat_row(tx, &id)?;
+            tx.execute("DELETE FROM chats WHERE id='c'", [])?;
+            super::insert_chat(tx, &kept)?;
+            Ok((serde_json::to_value(&kept)?, before, read(tx)?))
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(after, before);
+    assert_eq!(kept["name"], "c");
+    assert_eq!(kept["number"], 1);
+    assert_eq!(kept["mode"], "chat");
+    assert_eq!(kept["root_dir"], serde_json::Value::Null);
+}
