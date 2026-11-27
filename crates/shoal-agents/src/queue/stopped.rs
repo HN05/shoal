@@ -606,7 +606,7 @@ impl Agents {
         env: &BTreeMap<String, String>,
     ) -> Result<()> {
         let path = recovery::record_path(&self.paths, &space.id, execution);
-        if let Some(record) = recovery::Record::load(&path).ok().flatten() {
+        if let Some(record) = self.counted_record(&space.id, execution, &path).await {
             let asleep = Some(asleep(&record));
             let restore = Restore::new(space.clone(), execution, &record.agent, env, asleep)?;
             let queued = (self.store).write(move |tx| insert(tx, &restore));
@@ -616,6 +616,23 @@ impl Agents {
             }
         }
         recovery::forget_restore_request(&self.paths, &space.id, execution)
+    }
+
+    /// The record at `path` of the agent stopped as `execution` in the space
+    /// `id`, with an OOM kill it marks counted, as the wrapper's pause report
+    /// counts it unless it was lost.
+    async fn counted_record(
+        &self,
+        id: &SpaceId,
+        execution: &ExecutionId,
+        path: &std::path::Path,
+    ) -> Option<recovery::Record> {
+        let record = recovery::Record::load(path).ok().flatten()?;
+        if record.oom_kills == 0 {
+            return Some(record);
+        }
+        self.record_oom_kill(id, execution).await;
+        recovery::Record::load(path).ok().flatten()
     }
 
     /// Hand the restores whose waiting wrapper is gone to the daemon, which

@@ -72,3 +72,24 @@ async fn a_kill_withdraws_the_healthy_readings_taken_before_it() {
     killed(&fixture, &workspace.id, "killed").await;
     assert_eq!(recovery.published(), None);
 }
+
+/// The pause report and the queueing of the restore both count a kill, so
+/// it counts once whichever arrives.
+#[tokio::test]
+async fn a_kill_counts_once_however_often_it_is_reported() {
+    let fixture = Fixture::new().await;
+    let workspace = fixture.workspace("killed").await;
+    killed(&fixture, &workspace.id, "first").await;
+    let second = killed(&fixture, &workspace.id, "second").await;
+    let execution = ExecutionId::from("second");
+    fixture
+        .agents
+        .record_oom_kill(&workspace.id, &execution)
+        .await;
+    let paths = &fixture.agents.paths;
+    let again = Record::load(&record_path(paths, &workspace.id, &execution))
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.oom_kills, 2);
+    assert_eq!(again.oom_kills, second.oom_kills);
+}

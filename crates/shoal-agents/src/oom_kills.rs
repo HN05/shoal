@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension as _};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
@@ -24,14 +24,21 @@ const LONGEST_DELAY: Duration = Duration::from_secs(2 * 60 * 60);
 
 impl Agents {
     /// Count the OOM kill that ended the agent of `execution` in `space_id`,
-    /// and keep in its recovery record how many kills ended it in a row and
-    /// when its restore may start. A failure leaves the restore unheld. The
-    /// kill withdraws healthy readings taken before it, as a stop does.
+    /// once whichever reports it, and keep in its recovery record how many
+    /// kills ended it in a row and when its restore may start. A failure
+    /// leaves the restore unheld. The kill withdraws healthy readings taken
+    /// before it, as a stop does.
     pub async fn record_oom_kill(&self, space_id: &SpaceId, execution: &ExecutionId) {
-        self.overload_recovery.reset();
-        let id = space_id.clone();
-        let saved = match self.store.write(move |tx| count_kill(tx, &id)).await {
-            Ok(kills) => {
+        let (id, killed) = (space_id.clone(), execution.clone());
+        let saved = match self
+            .store
+            .write(move |tx| count_kill(tx, &id, &killed))
+            .await
+        {
+            Ok(Counted { kills, new }) => {
+                if new {
+                    self.overload_recovery.reset();
+                }
                 let after = delay(kills).map(|delay| UnixTime::now() + delay);
                 recovery::save_oom_kills(&self.paths, space_id, execution, kills, after)
             }
@@ -43,16 +50,32 @@ impl Agents {
     }
 }
 
-/// Count a further OOM kill of the agent of the space `id`, returning how
-/// many ended it in a row.
-fn count_kill(db: &Connection, id: &SpaceId) -> Result<u32> {
-    Ok(db.query_row(
-        "INSERT INTO space_oom_kills(space_id,kills) VALUES (?1,1)
-         ON CONFLICT(space_id) DO UPDATE SET kills=kills+1
+/// The OOM kills that ended a space's agent in a row.
+struct Counted {
+    kills: u32,
+    /// Whether this count added the kill, rather than found it counted.
+    new: bool,
+}
+
+/// Count the OOM kill that ended the agent `execution` ran in the space
+/// `id`, unless it is counted already, as the latest.
+fn count_kill(db: &Connection, id: &SpaceId, execution: &ExecutionId) -> Result<Counted> {
+    let counted: Option<String> = db
+        .query_row(
+            "SELECT execution_id FROM space_oom_kills WHERE space_id=?1",
+            [id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let new = counted.as_deref() != Some(execution.as_str());
+    let kills = db.query_row(
+        "INSERT INTO space_oom_kills(space_id,kills,execution_id) VALUES (?1,1,?2)
+         ON CONFLICT(space_id) DO UPDATE SET kills=kills+?3, execution_id=excluded.execution_id
          RETURNING kills",
-        [id],
+        rusqlite::params![id, execution, new],
         |row| row.get(0),
-    )?)
+    )?;
+    Ok(Counted { kills, new })
 }
 
 /// Forget the OOM kills of the space `id` once its agent finishes a turn,

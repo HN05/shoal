@@ -272,6 +272,9 @@ async fn a_daemon_restart_returns_an_admitted_restore_to_its_place(record: &str)
     let loaded = fixture.workspace("loaded").await;
     signal_stop(&fixture, &loaded.id, "loaded-agent");
     stop(&fixture, &loaded.id, "loaded-agent", record);
+    // Queueing an OOM restore counts its kill, which withdraws the readings
+    // taken before it.
+    dispatch(&fixture).await;
     publish_recovery(&fixture);
     dispatch(&fixture).await;
     let admitted = entry(&fixture, "loaded-agent").await;
@@ -762,4 +765,36 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
         .collect();
     targets.sort();
     assert_eq!(targets, ["queued", "requested", "running"]);
+}
+
+/// An OOM kill whose pause report the daemon never got counts as its
+/// restore is queued, from the mark its wrapper left in the record.
+#[tokio::test]
+async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
+    let fixture = Fixture::new().await;
+    let workspace = fixture.workspace("killed").await;
+    let killed = r#"{"agent":"claude","mode":"worker","stage":"stopped","oom_kills":1}"#;
+    signal_stop(&fixture, &workspace.id, "first-agent");
+    stop(&fixture, &workspace.id, "first-agent", killed);
+    (fixture.agents)
+        .record_oom_kill(&workspace.id, &"first-agent".into())
+        .await;
+    std::fs::remove_file(record_path(
+        &fixture.agents.paths,
+        &workspace.id,
+        &"first-agent".into(),
+    ))
+    .unwrap();
+    signal_stop(&fixture, &workspace.id, "second-agent");
+    stop(&fixture, &workspace.id, "second-agent", killed);
+
+    dispatch(&fixture).await;
+
+    let id = workspace.id.clone();
+    let asleep = (fixture.agents.store)
+        .run(move |db| crate::queue::asleep::current(db, &id))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(asleep.reason.contains('2'), "{}", asleep.reason);
 }

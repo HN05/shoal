@@ -1177,7 +1177,8 @@ CREATE TABLE "simulator_clean_requests" (
 
 CREATE TABLE space_oom_kills (
     space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
-    kills INTEGER NOT NULL CHECK(kills > 0)
+    kills INTEGER NOT NULL CHECK(kills > 0),
+    execution_id TEXT NOT NULL
 ) WITHOUT ROWID;
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
