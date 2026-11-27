@@ -368,6 +368,18 @@ impl Effective {
         Ok(())
     }
 
+    /// Whether `agent` restores without the user choosing its session, from
+    /// its `session` when known: through its `resume_command`, or its tool's
+    /// resume arguments.
+    pub fn restores_unattended(
+        &self,
+        agent: &Agent,
+        session: Option<&shoal_ids::agent_session_ids::AgentSessionId>,
+    ) -> bool {
+        self.resume_commands.contains_key(agent.name())
+            || self.launch(agent).arguments.resume_args(session).is_some()
+    }
+
     /// Whether `agent`'s own `[agents]` entry turns it off with `enabled =
     /// false`.
     pub fn turned_off(&self, agent: &Agent) -> bool {

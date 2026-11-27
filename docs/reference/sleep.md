@@ -15,6 +15,8 @@ for arrives. These stops put an agent to sleep:
 - a blocked space,
 - a [signal Shoal did not send](load.md#signals-to-an-agent), such as one
   that closed its terminal or SIGKILL from the OOM killer,
+- its [machine going down](load.md#a-machine-that-went-down), as when it
+  crashes or loses power,
 - [making room](#making-room) for queued work.
 
 An agent that `shoal stop` stopped, or that quit on its own, is stopped

@@ -542,7 +542,16 @@ unless a shutdown's stop already did. It records `daemon_stopped` instead of
 On a machine joined to a hub, the stop then [hands its spaces over](hub.md#hand-over-at-shutdown), and
 the alert names where each went.
 
+### A machine that went down
+
+An agent whose machine crashed, lost power or never woke from a suspend comes
+back as after a system shutdown. As the daemon starts on the next boot, it
+saves each such agent with a restore that waits in the agent queue, and records
+its `agent_stopped` entry with the machine going down as its cause.
+
 ### What comes back
+
+After a shutdown, a signal or a machine that went down:
 
 - An agent that was idle comes back only when an update arrives for it, unless
   processes it started outside its process group were still running.

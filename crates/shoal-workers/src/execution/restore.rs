@@ -186,7 +186,7 @@ pub async fn resolve<'a>(
         .launch(&name)
         .arguments
         .resume_args(restored.session);
-    let automatic = configured.is_some() || resume_args.is_some();
+    let automatic = settings.restores_unattended(&name, restored.session);
     let message = match resumed_prompt(ending, handoff) {
         Some(message) => Some(message),
         // A configured command runs without the hooks that deliver them.

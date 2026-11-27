@@ -273,9 +273,15 @@ select disconnected survivors.
 
 An unknown execution whose wrapper, and child when recorded, ran in an earlier
 boot needs no evidence. Restarting the machine ended its processes, while its
-recorded process group may now name another's. The daemon forgets it and keeps
-its record, or else the session its agent reported, as a last session. The
-daemon records each execution's agent name for this.
+recorded process group may now name another's. The daemon forgets it.
+
+A machine that crashed, lost power or never woke from a suspend ended its
+agents without the user, so they come back as after a system shutdown, through
+the same save. The daemon saves each agent that saved no record, with the
+session and turn it last reported, and a restore request for the agent queue.
+A record a stop left `stopping` gets the same request, so a crash in the middle
+of a shutdown comes back too. A record its wrapper finished saving keeps the
+restore it chose. The daemon records each execution's agent name for this.
 
 ### Executions that never started
 

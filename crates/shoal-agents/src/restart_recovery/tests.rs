@@ -4,7 +4,7 @@ use shoal_store::test_support::seeds;
 use std::fs;
 
 use super::*;
-use crate::execution::recovery::LastSessionExt;
+use crate::execution::recovery::{LastSession, LastSessionExt};
 use crate::model::Workspace;
 use crate::process::identity::{Identity, IdentityExt};
 use crate::stand_in::Fixture;
@@ -148,46 +148,41 @@ async fn reconcile_once(fixture: &Fixture) -> Pending {
 }
 
 /// Restarting the machine ended every process of an earlier boot, though
-/// their recorded process group IDs may name processes of this one. An
-/// agent that saved no record leaves its session for `shoal resume`.
+/// their recorded process group IDs may name processes of this one. Each
+/// agent is saved for the agent queue, as a system shutdown saves it.
 #[tokio::test]
-async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_saved() {
-    use crate::execution::recovery::{LastSession, save_session};
+async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agents_for_the_queue() {
+    use crate::execution::recovery::{restore_requests, save_session};
     let locked = locked().await;
     let (paths, workspace) = (&locked.fixture.agents.paths, &locked.workspace);
     let (_alive, live) = sleeper();
     let earlier = live.recorded_in("an-earlier-boot");
     let stopping = Some(Stage::Stopping);
     interrupted(&locked, "rebooted", &earlier, Some(&earlier), stopping).await;
+    // Claude Code resumes its latest session without a picker.
+    let rebooted = record_path(paths, &workspace.id, &"rebooted".into());
+    let saved = fs::read_to_string(&rebooted).unwrap();
+    fs::write(&rebooted, saved.replace("\"fixture\"", "\"claude\"")).unwrap();
     interrupted(&locked, "unrecorded", &earlier, None, None).await;
-    // A pass interrupted after keeping its session, which is gone.
-    interrupted(&locked, "kept", &earlier, None, None).await;
-    let kept_session = LastSession {
-        narrowing: Default::default(),
-        mode: "worker".into(),
-        model: Default::default(),
-        turn: None,
-        execution: "kept".into(),
-        agent: "fixture".into(),
-        session: Some("kept-session".into()),
-        moved: false,
-        copied: None,
-        converted: false,
-        handoff: None,
-        origin: None,
-        stop: None,
-    };
-    kept_session.write(paths, &workspace.id).unwrap();
+    // Its tool has no resume arguments, so its restore needs a picker.
+    interrupted(&locked, "picked", &earlier, None, None).await;
+    // A wrapper that finished saving chose its agent's restore itself.
+    let stopped = Some(Stage::Stopped);
+    interrupted(&locked, "stopped", &earlier, None, stopped).await;
     // A recorded child keeps an execution of this boot that saved nothing.
     let wrapper = exited().await;
     interrupted(&locked, "this-boot", &wrapper, Some(&wrapper), None).await;
-    for id in ["unrecorded", "kept", "this-boot"] {
+    for id in ["unrecorded", "picked", "this-boot"] {
         fs::remove_file(record_path(paths, &workspace.id, &id.into())).unwrap();
     }
     (locked.fixture.agents.store)
         .run(|db| {
             db.execute(
-                "UPDATE executions SET agent='fixture' WHERE id IN ('unrecorded','kept')",
+                "UPDATE executions SET agent='claude' WHERE id='unrecorded'",
+                [],
+            )?;
+            db.execute(
+                "UPDATE executions SET agent='fixture' WHERE id='picked'",
                 [],
             )?;
             Ok(())
@@ -202,7 +197,7 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         &"rebooted-session".into(),
     )
     .unwrap();
-    // The reboot ended its agent mid-turn, which its last session keeps.
+    // The reboot ended its agent mid-turn, which its record keeps.
     let selector = SpaceSelector::id(&workspace.id);
     let fixture = &locked.fixture;
     let working = AgentState::Working;
@@ -227,27 +222,36 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
         rebooted.stop_reason.as_deref(),
         Some("test memory pressure")
     );
-    let last = LastSession::all(&locked.fixture.agents.paths, &locked.workspace.id).unwrap();
+    let saved = record(&locked, "unrecorded").unwrap();
+    assert_eq!(saved.stop_reason.as_deref(), Some("its machine went down"));
+    assert_eq!(saved.session, Some("rebooted-session".into()));
+    assert_eq!(saved.turn, Some(AgentState::Working));
+    assert_eq!(saved.stage, Some(Stage::Stopped));
+    assert!(record(&locked, "picked").is_some());
+    let paths = &locked.fixture.agents.paths;
+    let requested: Vec<String> = (restore_requests(paths, &locked.workspace.id).unwrap())
+        .into_iter()
+        .map(|(id, _)| id.into())
+        .collect();
+    assert_eq!(requested, ["rebooted", "unrecorded"]);
+    let id = locked.workspace.id.clone();
+    let stopped = (locked.fixture.agents.store)
+        .run(move |db| {
+            let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
+            shoal_daemon_base::events::newest_of(db, &id, &kinds)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let cause = stopped.event.agent().and_then(|agent| agent.cause);
     assert_eq!(
-        last,
-        [
-            kept_session,
-            LastSession {
-                narrowing: Default::default(),
-                mode: "worker".into(),
-                model: Default::default(),
-                turn: Some(AgentState::Working),
-                execution: "unrecorded".into(),
-                agent: "fixture".into(),
-                session: Some("rebooted-session".into()),
-                moved: false,
-                copied: None,
-                converted: false,
-                handoff: None,
-                origin: None,
-                stop: None,
-            }
-        ]
+        cause,
+        Some(shoal_protocol::stop_causes::StopCause::MachineDown)
+    );
+    assert!(
+        LastSession::all(paths, &locked.workspace.id)
+            .unwrap()
+            .is_empty()
     );
     assert!(blocked(&locked.fixture).is_empty());
 }
