@@ -54,18 +54,23 @@ impl Recovery {
         }
     }
 
-    /// Save the stopped agent; `restorer` brings it back besides `shoal
-    /// resume`.
+    /// Save the agent stopped as `ended` says; `restorer` brings it back
+    /// besides `shoal resume`.
     pub fn save(
         &self,
         paths: &Paths,
         space_id: &SpaceId,
         id: &ExecutionId,
-        reason: Option<&str>,
+        ended: Ended<'_>,
         place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.tracked(), reason, Stage::Stopped, place);
+        let record = ended.of(Record::new(
+            &self.tracked(),
+            ended.reason,
+            Stage::Stopped,
+            place,
+        ));
         save_restorable(paths, space_id, id, record, restorer)
     }
 
@@ -76,12 +81,31 @@ impl Recovery {
         paths: &Paths,
         space_id: &SpaceId,
         id: &ExecutionId,
-        reason: Option<&str>,
+        ended: Ended<'_>,
         place: Option<Origin>,
         restorer: Restorer,
     ) -> Result<PathBuf> {
-        let record = Record::new(&self.tracked(), reason, Stage::Stopping, place);
-        save_restorable(paths, space_id, id, record, restorer)
+        let record = Record::new(&self.tracked(), ended.reason, Stage::Stopping, place);
+        save_restorable(paths, space_id, id, ended.of(record), restorer)
+    }
+}
+
+/// Why a wrapper's agent stopped, as its recovery record keeps it.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ended<'a> {
+    /// The reason `shoal resume` and the restored agent are told.
+    pub reason: Option<&'a str>,
+    /// What ended it, when the wrapper ended it unasked.
+    pub cause: Option<shoal_protocol::stop_causes::StopCause>,
+}
+
+impl Ended<'_> {
+    /// `record`, keeping what ended its agent.
+    fn of(self, record: Record) -> Record {
+        Record {
+            cause: self.cause,
+            ..record
+        }
     }
 }
 
@@ -194,6 +218,7 @@ impl RecordExt for Record {
             for_load: false,
             oom_kills: 0,
             restores_after: None,
+            cause: None,
         }
     }
 
@@ -355,6 +380,7 @@ pub(super) fn write_record(
             record.oom_kills = saved.oom_kills;
             record.restores_after = saved.restores_after;
         }
+        record.cause = record.cause.or(saved.cause);
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }

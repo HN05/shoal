@@ -43,6 +43,11 @@ stops the agent. It stops it as `shoal stop` does and leaves it for
 A record names the stop's stage. The daemon saves `stopping` before it
 delivers a stop, and the wrapper saves `stopped` after it ends the agent.
 
+A wrapper that ended its agent unasked, as a signal or the OOM killer has it,
+names the cause in the record it first saves. The daemon then logs the stop
+and counts an OOM kill as it queues the restore, even when the wrapper's report
+never reached it.
+
 A saved record stands for unfinished work until a restore uses it or the user
 discards it. Records persist across daemon restarts, so manual recovery does
 too.

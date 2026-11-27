@@ -105,5 +105,6 @@ fn the_record_of_an_agent_the_oom_killer_ended_says_so_without_the_daemon() {
     let killed = Halt::Killed { oom: true };
     let path = save_paused_agent(&paths, &plan, &mode, &recovery, &killed, Restorer::User).unwrap();
     let record = recovery::Record::load(&path).unwrap().unwrap();
-    assert_eq!(record.oom_kills, 1);
+    assert_eq!(record.cause, Some(StopCause::OomKill));
+    assert!(record.oom_killed());
 }

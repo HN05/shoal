@@ -204,22 +204,14 @@ fn save_paused_agent(
     stop: &Halt,
     restorer: Restorer,
 ) -> Result<PathBuf> {
-    let (space_id, id) = (&plan.space.id, &plan.id);
-    let path = recovery.save(
+    recovery.save(
         paths,
-        space_id,
-        id,
-        stop.saved_reason(),
+        &plan.space.id,
+        &plan.id,
+        stop.ended(),
         agent_place(mode),
         restorer,
-    )?;
-    // The record itself says the OOM killer ended the agent, so its restore
-    // waits for memory even when the daemon never hears of the kill. The
-    // daemon raises the count to the kills in a row once it does.
-    if matches!(stop, Halt::Killed { oom: true }) {
-        recovery::save_oom_kills(paths, space_id, id, 1, None)?;
-    }
-    Ok(path)
+    )
 }
 
 /// Save the recovery record of an agent before `stop`, the end of its session
@@ -240,7 +232,7 @@ pub(super) fn save_ending_agent(
         paths,
         &plan.space.id,
         &plan.id,
-        stop.saved_reason(),
+        stop.ended(),
         agent_place(mode),
         restorer(recovery, stop, recovery.automatic && stop.recovers()),
     );
@@ -363,6 +355,17 @@ impl Halt {
             Self::Ended { signal, .. } => Some(ended_reason(*signal)),
             Self::Killed { oom } => Some(killed_reason(*oom)),
             Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
+        }
+    }
+
+    /// Why the agent stopped, as its recovery record keeps it. The record
+    /// itself names the cause of an end the daemon did not ask for, so the
+    /// stop is known, an OOM kill's restore waiting for memory, even when the
+    /// daemon never hears of it.
+    fn ended(&self) -> recovery::RecordedEnd<'_> {
+        recovery::RecordedEnd {
+            reason: self.saved_reason(),
+            cause: self.cause(),
         }
     }
 

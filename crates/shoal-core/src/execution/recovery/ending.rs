@@ -18,7 +18,7 @@ impl StopExt for Stop {
         Self {
             reason: record.stop_reason.clone(),
             at: saved_at(path),
-            oom_killed: record.oom_kills > 0,
+            oom_killed: record.oom_killed(),
         }
     }
 

@@ -52,7 +52,7 @@ fn pressure_handoffs_are_private() {
             &paths,
             &SpaceId::from("workspace"),
             &ExecutionId::from("execution"),
-            None,
+            RecordedEnd::default(),
             Some(herdr_pane("w1:p2")),
             Restorer::User,
         )
@@ -95,7 +95,17 @@ fn the_wrappers_save_keeps_a_load_stops_mark() {
         proxy: None,
     };
     recovery
-        .save(&paths, &space, &execution, reason, None, Restorer::User)
+        .save(
+            &paths,
+            &space,
+            &execution,
+            RecordedEnd {
+                reason,
+                cause: None,
+            },
+            None,
+            Restorer::User,
+        )
         .unwrap();
     assert!(Record::load(&path).unwrap().unwrap().for_load);
 }
@@ -187,7 +197,7 @@ fn a_restored_workspace_saves_the_removed_ones_stopped_agents() {
             &paths,
             &SpaceId::from("removed"),
             &ExecutionId::from("execution"),
-            None,
+            RecordedEnd::default(),
             None,
             Restorer::Wrapper(wrapper),
         )
@@ -284,7 +294,7 @@ fn only_agents_outside_a_waiting_wrapper_receive_the_stopped_commands() {
                 &paths,
                 &SpaceId::from("workspace"),
                 execution,
-                None,
+                RecordedEnd::default(),
                 None,
                 restorer,
             )
@@ -372,7 +382,7 @@ fn the_first_saved_turn_stays_through_later_saves() {
             &paths,
             &SpaceId::from("workspace"),
             &ExecutionId::from("execution"),
-            None,
+            RecordedEnd::default(),
             None,
             Restorer::User,
         )
@@ -402,7 +412,10 @@ fn a_restore_request_sits_beside_the_record_until_forgotten() {
             &paths,
             &SpaceId::from("workspace"),
             &ExecutionId::from("execution"),
-            Some("its terminal closed"),
+            RecordedEnd {
+                reason: Some("its terminal closed"),
+                cause: None,
+            },
             None,
             Restorer::Queue(env.clone()),
         )

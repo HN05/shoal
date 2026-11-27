@@ -306,7 +306,8 @@ async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
 
 #[tokio::test]
 async fn a_daemon_restart_returns_an_admitted_oom_restore_to_its_place() {
-    let killed = r#"{"agent":"claude","mode":"worker","stage":"stopped","oom_kills":1}"#;
+    let killed =
+        r#"{"agent":"claude","mode":"worker","stage":"stopped","cause":{"kind":"oom_kill"}}"#;
     a_daemon_restart_returns_an_admitted_restore_to_its_place(killed).await;
 }
 
@@ -774,7 +775,8 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
 async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
     let fixture = Fixture::new().await;
     let workspace = fixture.workspace("killed").await;
-    let killed = r#"{"agent":"claude","mode":"worker","stage":"stopped","oom_kills":1}"#;
+    let killed =
+        r#"{"agent":"claude","mode":"worker","stage":"stopped","cause":{"kind":"oom_kill"}}"#;
     signal_stop(&fixture, &workspace.id, "first-agent");
     stop(&fixture, &workspace.id, "first-agent", killed);
     (fixture.agents)
@@ -827,4 +829,34 @@ async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
         agent.cause,
         Some(shoal_protocol::stop_causes::StopCause::OomKill)
     );
+}
+
+/// A signal stop whose pause report the daemon never got logs its cause as
+/// its restore is queued, from the cause its wrapper saved in the record.
+#[tokio::test]
+async fn a_signal_stop_whose_report_was_lost_logs_its_cause_as_its_restore_is_queued() {
+    use shoal_protocol::stop_causes::{EndSignal, SignalTarget, StopCause};
+    let fixture = Fixture::new().await;
+    let workspace = fixture.workspace("signalled").await;
+    let ended = r#"{"agent":"claude","mode":"worker","stage":"stopped",
+        "cause":{"kind":"signal","signal":"SIGTERM","reached":"wrapper"}}"#;
+    signal_stop(&fixture, &workspace.id, "signalled-agent");
+    stop(&fixture, &workspace.id, "signalled-agent", ended);
+
+    dispatch(&fixture).await;
+
+    let id = workspace.id.clone();
+    let stopped = (fixture.agents.store)
+        .run(move |db| {
+            let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
+            shoal_daemon_base::events::newest_of(db, &id, &kinds)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let cause = StopCause::Signal {
+        signal: EndSignal::Terminate,
+        reached: SignalTarget::Wrapper,
+    };
+    assert_eq!(stopped.event.agent().unwrap().cause, Some(cause));
 }

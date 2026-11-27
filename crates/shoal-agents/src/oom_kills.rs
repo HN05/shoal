@@ -7,7 +7,6 @@ use anyhow::Result;
 use rusqlite::{Connection, OptionalExtension as _};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
-use shoal_protocol::stop_causes::StopCause;
 
 use crate::Agents;
 use crate::execution::recovery;
@@ -48,32 +47,6 @@ impl Agents {
         if let Err(error) = saved {
             crate::log!("OOM kill of execution {execution} not counted: {error:#}");
         }
-    }
-}
-
-impl Agents {
-    /// Count the OOM kill its wrapper marked in the record of `agent`, which
-    /// `execution` ran in `space_id`, as its pause report does, and log the
-    /// stop the report would have logged. A kill the report counted already
-    /// counts and logs once.
-    pub async fn recover_oom_kill(
-        &self,
-        space_id: &SpaceId,
-        execution: &ExecutionId,
-        agent: crate::agent::Agent,
-    ) {
-        let stopped = shoal_daemon_base::events::AgentEvent {
-            mode: None,
-            name: agent,
-            execution_id: Some(execution.clone()),
-            exit_code: None,
-            oom_kills: 0,
-            cause: Some(StopCause::OomKill),
-            source: None,
-        };
-        let kind = shoal_daemon_base::events::EventKind::AgentStopped;
-        shoal_daemon_base::events::record_agent(&self.store, space_id, kind, stopped).await;
-        self.record_oom_kill(space_id, execution).await;
     }
 }
 

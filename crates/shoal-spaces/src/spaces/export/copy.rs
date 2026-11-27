@@ -146,6 +146,7 @@ fn running_record(execution: &Execution, carried: recovery::carried::Carried) ->
             for_load: false,
             oom_kills: 0,
             restores_after: None,
+            cause: None,
             model: execution.model.clone(),
             mode: execution
                 .mode

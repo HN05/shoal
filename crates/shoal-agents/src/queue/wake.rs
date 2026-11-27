@@ -117,7 +117,7 @@ impl Stopped {
             {
                 Self::Blocked
             }
-            Some(record) if record.oom_kills > 0 => Self::OomKilled {
+            Some(record) if record.oom_killed() => Self::OomKilled {
                 between_turns: record.between_turns(),
                 restores_after: record.restores_after,
             },
