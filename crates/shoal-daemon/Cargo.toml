@@ -18,6 +18,7 @@ test-support = [
     "shoal-daemon-base/test-support",
     "shoal-protocol/test-support",
     "shoal-spaces/test-support",
+    "shoal-store/test-support",
 ]
 
 [dependencies]

@@ -220,6 +220,35 @@ pub fn queues_launch_in(tx: &rusqlite::Transaction<'_>, workspace: &SpaceId) -> 
     )
 }
 
+/// Whether a launch or a restore of the space `id`'s agent waits or starts
+/// in the queue.
+pub fn queues_agent_of(db: &rusqlite::Connection, id: &SpaceId) -> Result<bool> {
+    shoal_store::exists(
+        db,
+        "SELECT 1 FROM agent_queue WHERE kind IN (?2,?3) AND ?1 IN (space_id,opens_workspace_id)",
+        params![id, QueueKind::Launch, QueueKind::Restore],
+    )
+}
+
+/// Whether the queue holds an entry of `repository`, waiting or starting.
+pub fn queues_in(db: &rusqlite::Connection, repository: &RepositoryId) -> Result<bool> {
+    shoal_store::exists(
+        db,
+        "SELECT 1 FROM agent_queue WHERE repository_id=?1",
+        [repository],
+    )
+}
+
+/// Whether the queue holds an entry of `repository` besides its waiting
+/// CI jobs, which hold nothing in its directory yet.
+pub fn queues_work_in(db: &rusqlite::Connection, repository: &RepositoryId) -> Result<bool> {
+    shoal_store::exists(
+        db,
+        "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND NOT (kind=?2 AND state=?3)",
+        params![repository, QueueKind::Job, QueueState::Queued],
+    )
+}
+
 /// Whether a queued launch waits to open `workspace`.
 pub fn launch_waits_to_open(db: &rusqlite::Connection, workspace: &SpaceId) -> Result<bool> {
     shoal_store::exists(

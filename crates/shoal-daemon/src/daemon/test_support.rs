@@ -527,16 +527,8 @@ pub fn ended(pid: u32) -> bool {
     expect(dead_code, reason = "the launch tests in `shoal-client` read it")
 )]
 pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations::QueuedLaunch> {
-    let plans: Vec<String> = (manager.store)
-        .run(|db| {
-            Ok(db
-                .prepare(
-                    "SELECT q.plan FROM agent_queue q JOIN spaces s ON s.id=q.space_id
-                     WHERE q.kind='launch' AND s.kind='chat' ORDER BY q.seq",
-                )?
-                .query_map([], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?)
-        })
+    let plans = (manager.store)
+        .run(|db| shoal_store::test_support::queue::chat_launch_plans(db))
         .await
         .unwrap();
     (plans.iter())

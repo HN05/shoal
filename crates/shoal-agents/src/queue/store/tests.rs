@@ -47,3 +47,41 @@ async fn the_waiting_launches_are_read_with_their_issues_labels() {
     };
     assert_eq!(read.await.unwrap(), [launch]);
 }
+
+#[tokio::test]
+async fn a_launch_queues_the_agent_of_the_workspace_it_opens_alone() {
+    let fixture = Fixture::new().await;
+    let other = fixture.workspace("other").await;
+    let launched = crate::queue::tests::add(&fixture, "launched").await;
+    let launched = launched.entry.unwrap().space().unwrap().clone();
+
+    let queues = fixture
+        .agents
+        .store
+        .run(move |db| Ok([launched, other.id].map(|space| queues_agent_of(db, &space).unwrap())));
+    assert_eq!(queues.await.unwrap(), [true, false]);
+}
+
+#[tokio::test]
+async fn a_waiting_job_queues_in_its_repository_without_holding_work_there() {
+    let fixture = Fixture::new().await;
+    let repo = fixture.repository().await.id;
+    let other = fixture.repository_named("other").await.id;
+    let job = serde_json::from_value(serde_json::json!({
+        "job": {"handle": "h", "id": 1, "run": 1, "name": "rust", "labels": ["shoal"]},
+        "run": {"url": "https://forge.example/team/repo/actions/runs/1", "workflow": "ci.yml", "commit": "abc", "trigger": "other"},
+    }))
+    .unwrap();
+    let read = fixture.agents.store.run(move |db| {
+        crate::queue::jobs::queue(db, &repo, &job)?;
+        let read = |repository| {
+            Ok::<_, anyhow::Error>((queues_in(db, repository)?, queues_work_in(db, repository)?))
+        };
+        let waiting = [read(&repo)?, read(&other)?];
+        db.execute("UPDATE agent_queue SET state=?1", [QueueState::Starting])?;
+        Ok((waiting, read(&repo)?))
+    });
+    let (waiting, admitted) = read.await.unwrap();
+    assert_eq!(waiting, [(true, false), (false, false)]);
+    assert_eq!(admitted, (true, true));
+}

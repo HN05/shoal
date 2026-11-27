@@ -9,12 +9,13 @@ use shoal_repositories::daemon::{Activity, Records};
 
 use crate::{
     daemon::{
+        agent_queue,
         lease_service::DaemonRecords,
         resources::{self, Scope},
         store,
     },
     model::Workspace,
-    state::{QueueKind, QueueState, WorkspaceState},
+    state::WorkspaceState,
 };
 
 /// The records of the daemon's other subsystems, as the repositories read
@@ -50,13 +51,9 @@ impl Records for RepositoryRecords {
             "SELECT 1 FROM spaces WHERE repository_id=?1 AND kind='chat'",
             [id],
         )?;
-        // A job waiting for the runner holds nothing in the directory, and
-        // claiming it creates its workspace under the Git gate a move holds.
-        let launches = store::exists(
-            db,
-            "SELECT 1 FROM agent_queue WHERE repository_id=?1 AND NOT (kind=?2 AND state=?3)",
-            params![id, QueueKind::Job, QueueState::Queued],
-        )?;
+        // Claiming a waiting job creates its workspace under the Git gate a
+        // move holds.
+        let launches = agent_queue::store::queues_work_in(db, id)?;
         let workspace_states = db
             .prepare(
                 "SELECT id,state FROM spaces JOIN workspaces USING(id) WHERE repository_id=?1",
@@ -131,10 +128,15 @@ impl Records for RepositoryRecords {
 /// issue proposal, a kept branch, a job waiting to rerun, or an unexpired
 /// checkpoint, removal record or removed space's files.
 fn recorded_use(db: &Connection, id: &RepositoryId) -> Result<bool> {
+    Ok(agent_queue::store::queues_in(db, id)? || recorded_use_outside_queue(db, id)?)
+}
+
+/// Whether the repository `id` has a record of [`recorded_use`] outside the
+/// agent queue.
+fn recorded_use_outside_queue(db: &Connection, id: &RepositoryId) -> Result<bool> {
     store::exists(
         db,
         "SELECT 1 FROM spaces WHERE repository_id=?1
-        UNION ALL SELECT 1 FROM agent_queue WHERE repository_id=?1
         UNION ALL SELECT 1 FROM access_requests WHERE repository_id=?1 AND active=1
         UNION ALL SELECT 1 FROM kept_branches WHERE repository_id=?1
         UNION ALL SELECT 1 FROM ci_job_reruns WHERE repository_id=?1

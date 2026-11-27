@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use crate::Store;
 
 pub mod queries;
+pub mod queue;
 pub mod rows;
 pub mod seeds;
 
