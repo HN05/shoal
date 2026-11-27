@@ -85,7 +85,11 @@ impl Recovery {
     }
 }
 
-/// Save `record` with what `restorer` needs to bring its agent back.
+/// Save `record` with what `restorer` needs to bring its agent back. The
+/// restore request goes first: a request whose record is missing is only
+/// forgotten, while a record saved without its request would leave the
+/// agent for `shoal resume`, and a save that failed between the two is
+/// made again once the record is missing.
 fn save_restorable(
     paths: &Paths,
     space_id: &SpaceId,
@@ -96,11 +100,10 @@ fn save_restorable(
     if let Restorer::Wrapper(wrapper) = &restorer {
         record.waiting = Some(wrapper.clone());
     }
-    let path = write_record(paths, space_id, id, record)?;
     if let Restorer::Queue(env) = &restorer {
         request_restore(paths, space_id, id, env)?;
     }
-    Ok(path)
+    write_record(paths, space_id, id, record)
 }
 
 /// Save `record`, an agent stopped as `id` without a wrapper, such as a

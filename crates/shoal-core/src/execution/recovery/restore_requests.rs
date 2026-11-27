@@ -22,6 +22,7 @@ pub fn request_restore(
     id: &ExecutionId,
     env: &BTreeMap<String, String>,
 ) -> Result<()> {
+    std::fs::create_dir_all(paths.space_state(space_id))?;
     crate::fsutil::atomic::replace_atomically(
         &request_path(paths, space_id, id),
         &serde_json::to_vec(env)?,

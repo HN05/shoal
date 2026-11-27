@@ -164,6 +164,8 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     let saved = fs::read_to_string(&rebooted).unwrap();
     fs::write(&rebooted, saved.replace("\"fixture\"", "\"claude\"")).unwrap();
     interrupted(&locked, "unrecorded", &earlier, None, None).await;
+    // A save the previous pass left after its restore request.
+    interrupted(&locked, "half-saved", &earlier, None, None).await;
     // Its tool has no resume arguments, so its restore needs a picker.
     interrupted(&locked, "picked", &earlier, None, None).await;
     // A wrapper that finished saving chose its agent's restore itself.
@@ -172,13 +174,13 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     // A recorded child keeps an execution of this boot that saved nothing.
     let wrapper = exited().await;
     interrupted(&locked, "this-boot", &wrapper, Some(&wrapper), None).await;
-    for id in ["unrecorded", "picked", "this-boot"] {
+    for id in ["unrecorded", "half-saved", "picked", "this-boot"] {
         fs::remove_file(record_path(paths, &workspace.id, &id.into())).unwrap();
     }
     (locked.fixture.agents.store)
         .run(|db| {
             db.execute(
-                "UPDATE executions SET agent='claude' WHERE id='unrecorded'",
+                "UPDATE executions SET agent='claude' WHERE id IN ('unrecorded','half-saved')",
                 [],
             )?;
             db.execute(
@@ -188,6 +190,9 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
             Ok(())
         })
         .await
+        .unwrap();
+    let env = std::collections::BTreeMap::new();
+    crate::execution::recovery::request_restore(paths, &workspace.id, &"half-saved".into(), &env)
         .unwrap();
     let unrecorded = ExecutionId::from("unrecorded");
     save_session(
@@ -228,12 +233,13 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     assert_eq!(saved.turn, Some(AgentState::Working));
     assert_eq!(saved.stage, Some(Stage::Stopped));
     assert!(record(&locked, "picked").is_some());
+    assert!(record(&locked, "half-saved").is_some());
     let paths = &locked.fixture.agents.paths;
     let requested: Vec<String> = (restore_requests(paths, &locked.workspace.id).unwrap())
         .into_iter()
         .map(|(id, _)| id.into())
         .collect();
-    assert_eq!(requested, ["rebooted", "unrecorded"]);
+    assert_eq!(requested, ["half-saved", "rebooted", "unrecorded"]);
     let id = locked.workspace.id.clone();
     let stopped = (locked.fixture.agents.store)
         .run(move |db| {
