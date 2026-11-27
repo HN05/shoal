@@ -51,7 +51,7 @@ pub(in crate::cli::commands) async fn send(
         return report_detached(ctx, launched, (wait, agent)).await;
     };
     if launched.machine.is_some() {
-        return attach_elsewhere(ctx, launched, (wait, agent)).await;
+        return attach_elsewhere(ctx, launched).await;
     }
     let placement = launched.placement.take();
     with_placement(ctx, placement, run_here(ctx, launched, attach, agent)).await
@@ -79,16 +79,9 @@ async fn run_here(
     }
 }
 
-/// A terminal attaches to the agent the other machine started detached, as
-/// `--machine` with `--here` does. Another caller leaves it running there.
-async fn attach_elsewhere(
-    ctx: &Context,
-    mut launched: Launched,
-    (wait, agent): (bool, Option<crate::agent::Agent>),
-) -> Result<i32> {
-    if !ctx.on_terminal() {
-        return report_detached(ctx, launched, (wait, agent)).await;
-    }
+/// The terminal attaches to the agent the other machine started detached, as
+/// `--machine` with `--here` does. Only a terminal's launch goes there.
+async fn attach_elsewhere(ctx: &Context, mut launched: Launched) -> Result<i32> {
     let placement = launched.placement.take();
     with_placement(ctx, placement, super::shown::attach_launched(ctx, launched)).await
 }

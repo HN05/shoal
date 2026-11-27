@@ -495,8 +495,8 @@ A start without `--machine` goes where the hub's
 [`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
 policy puts it. The start then continues there as a start with `--machine`
 and the same options does. That includes a start whose agent would run in
-your terminal, or in a place beside it: the agent starts on that machine and
-your terminal attaches to it, as `--here` with `--machine` does.
+your terminal, or in a place beside it: the agent starts on that machine at
+once and your terminal attaches to it, as `--here` with `--machine` does.
 
 A start stays on your machine when it needs your machine:
 
@@ -506,7 +506,8 @@ A start stays on your machine when it needs your machine:
 - your machine lacks its repository, or the repository has no origin;
 - its agent runs its own way, outside Shoal's terminal hosts, which your
   terminal cannot attach to on another machine;
-- a space's process runs its agent with `--here`.
+- it runs its agent with `--here` without a terminal, which waits for the
+  agent's exit, or from a space's process.
 
 The hub places a start from what each connected machine last reported with
 its spaces, which `hub ls --json` shows as `capacity`:

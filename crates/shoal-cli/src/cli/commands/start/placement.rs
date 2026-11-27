@@ -73,7 +73,7 @@ pub(in crate::cli::commands) fn in_caller(
     options: &StartOptions,
 ) {
     launch.here = true;
-    launch.own_way = own_way(agent, settings);
+    launch.needs_this_machine = !ctx.on_terminal() || own_way(agent, settings);
     let setting = settings.focus(&mode(launch));
     let waits_for_user = ctx.on_terminal() && waits(launch, issue_linked);
     let now = starts_now(launch, setting, options, waits_for_user);
@@ -93,8 +93,8 @@ fn starts_now(
     options.focus || (launch.blockers.is_empty() && waits_for_user && setting != Some(false))
 }
 
-/// Whether `agent` runs its own way in this caller, which a scoped caller's
-/// queue starts instead.
+/// Whether `agent` runs its own way in this caller, outside Shoal's terminal
+/// hosts, which a scoped caller's queue starts instead.
 fn own_way(agent: Option<&crate::agent::Agent>, settings: &Effective) -> bool {
     !crate::env::is_scoped()
         && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings))

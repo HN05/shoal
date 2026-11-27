@@ -5,8 +5,13 @@ use serde_json::Value;
 use shoal_client::{
     connection::Connector,
     hub::{Placing, answer_placement},
+    launches,
 };
-use shoal_protocol::paths::Paths;
+use shoal_protocol::{
+    agent::Agent,
+    launches::{Launch, StartTarget},
+    paths::Paths,
+};
 use shoal_schedule::placement::Placement;
 
 use super::{
@@ -84,12 +89,6 @@ fn placed(machines: &Machines, args: &[&str]) -> Value {
     let token = scope_of(&machines.hub, &machines.coordinator);
     let mut command = machines.hub.command();
     command.env("SHOAL_SCOPE_TOKEN", &token);
-    placed_by(machines, command, args)
-}
-
-/// Where the hub placed the start that `command` makes with `args`, as it
-/// printed it.
-fn placed_by(machines: &Machines, mut command: std::process::Command, args: &[&str]) -> Value {
     let repo = machines.hub.repo.to_str().unwrap();
     command
         .args(["start", repo, "--agent", "pi", "--json"])
@@ -122,16 +121,24 @@ fn a_heavy_start_goes_to_an_always_on_machine_with_a_free_heavy_slot() {
 }
 
 #[test]
-fn a_start_whose_agent_would_run_in_the_users_process_goes_to_an_always_on_machine() {
+fn a_start_whose_agent_would_run_in_the_users_terminal_goes_to_an_always_on_machine() {
     let machines = machines("machine.max_heavy_agents = 2\n");
-    // Without a terminal to attach, the start leaves its agent running there.
-    let user = machines.hub.command();
-    let placement = placed_by(&machines, user, &["--branch", "child", "--here"]);
-    assert_eq!(
-        placement["machine"],
-        machines.server_id.as_str(),
-        "{placement}"
-    );
+    // As the user's terminal sends it, which then attaches to its agent.
+    let launch = Launch {
+        target: Some(StartTarget::Repository(
+            machines.hub.repo.to_str().unwrap().into(),
+        )),
+        branch: Some("child".into()),
+        agent: Some(Agent::unchecked("pi".into())),
+        here: true,
+        ..Launch::default()
+    };
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let launched = runtime.block_on(launches::launch(&app(&machines), launch));
+    let launched = launched.unwrap();
+    let placement = launched.placement.expect("the start was placed");
+    assert_eq!(placement.machine.to_string(), machines.server_id);
+    assert!(launched.machine.is_some(), "{:?}", launched.start);
     created_on_server(&machines, "child");
 }
 

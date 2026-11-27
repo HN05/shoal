@@ -1,10 +1,10 @@
 //! Placing a launch that names no machine on a machine of the hub. A launch
-//! stays here when it needs this machine (an agent that runs its own way in
-//! the caller, or a space's process that runs it, an existing workspace,
-//! one it would reopen, a copy, a fork, a worktree path, a repository
-//! setup, blockers, or a repository this machine has not registered or that
-//! has no origin, since placement never clones one), and when the hub
-//! cannot be asked. See `docs/design/hub.md`.
+//! stays here when it needs this machine (an agent its caller runs that
+//! cannot be attached to from here, an existing workspace, one it would
+//! reopen, a copy, a fork, a worktree path, a repository setup, blockers,
+//! or a repository this machine has not registered or that has no origin,
+//! since placement never clones one), and when the hub cannot be asked. See
+//! `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -135,8 +135,10 @@ impl Spaces {
         if let Some(decision) = elsewhere {
             launch.machine = Some(decision.machine.to_string());
             // That machine starts the agent detached, and a caller that
-            // would have run it attaches to it there.
-            launch.here = false;
+            // would have run it attaches to it there. The attach waits only
+            // for an agent that starts, so it starts at once, as one
+            // `--machine` with `--here` names does.
+            launch.now |= std::mem::take(&mut launch.here);
         }
         Ok(decision)
     }
@@ -248,12 +250,13 @@ impl Spaces {
 
 /// It names no machine and needs nothing of this machine's, as blockers,
 /// which wait on its spaces and queue entries, do. Nor does a caller that
-/// runs its agent here: the user attaches to one on another machine, which
-/// a space's process cannot, nor anyone to one that runs its own way.
+/// runs its agent here: the user's terminal attaches to one on another
+/// machine, which a space's process cannot.
 pub fn placeable(launch: &Launch, caller: Option<&Caller>) -> bool {
     launch.machine.is_none()
         && launch.forwarded.is_none()
-        && !(launch.here && (launch.own_way || caller.is_some()))
+        && !launch.needs_this_machine
+        && !(launch.here && caller.is_some())
         && launch.in_workspace.is_none()
         && launch.copy.is_none()
         && launch.carried_copy.is_none()

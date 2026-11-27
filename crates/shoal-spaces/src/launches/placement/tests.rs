@@ -22,11 +22,11 @@ fn the_users_start_is_placed_whether_its_agent_runs_detached_or_in_its_terminal(
 
 #[test]
 fn a_start_whose_caller_cannot_attach_elsewhere_stays_here() {
-    let own_way = Launch {
-        own_way: true,
+    let needs_this_machine = Launch {
+        needs_this_machine: true,
         ..here()
     };
-    assert!(!placeable(&own_way, None));
+    assert!(!placeable(&needs_this_machine, None));
     let process = Caller::of_space("s1".into());
     assert!(!placeable(&here(), Some(&process)));
     // A space's process starts detached children anywhere.

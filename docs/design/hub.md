@@ -558,11 +558,13 @@ after it is created. Rebalancing running work is a [move](moves.md).
 
 A start whose agent would run in the caller's terminal is placed too, since
 the terminal attaches to an agent on any machine of the hub. The machine it
-goes to starts the agent detached, and the caller attaches to it as
-`shoal attach` does. The launch records whether the caller's agent runs its own
-way, outside Shoal's terminal hosts, apart from whether it runs in the caller.
-Such an agent stays, since nothing attaches to it from another machine. So
-does one a space's process runs, since `shoal attach` refuses that process.
+goes to starts the agent detached and at once, and the caller attaches to it
+as `shoal attach` does. Two such agents need the caller's machine, which the
+launch records apart from whether its agent runs in the caller: one that runs
+its own way, outside Shoal's terminal hosts, which nothing attaches to from
+another machine, and one a caller without a terminal waits for. Those starts
+stay, and so does one whose agent a space's process runs, since
+`shoal attach` refuses that process.
 
 Placement is a policy in `shoal-schedule`, beside the queue's scheduler, under
 the same rule. It reads only a snapshot of the start and of each connected
