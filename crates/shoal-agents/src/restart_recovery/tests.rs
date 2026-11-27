@@ -222,6 +222,24 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_keeping_what_they_
     };
     reconcile_once(&locked.fixture).await;
     assert_eq!(kept(&locked).await, ["this-boot"]);
+    // The journal ends the agents whose wrappers could not report it.
+    let space = locked.workspace.id.clone();
+    let exits = (locked.fixture.agents.store)
+        .run(move |db| {
+            let kinds = [shoal_daemon_base::events::EventKind::AgentExited];
+            shoal_daemon_base::events::newest_of(db, &space, &kinds)
+        })
+        .await
+        .unwrap();
+    let exited = exits.and_then(|exit| exit.event.agent().cloned());
+    let exited = exited.and_then(|agent| agent.execution_id);
+    assert!(
+        matches!(
+            exited.as_ref().map(|id| id.as_str()),
+            Some("unrecorded" | "kept")
+        ),
+        "{exited:?}"
+    );
     let rebooted = record(&locked, "rebooted").unwrap();
     assert_eq!(
         rebooted.stop_reason.as_deref(),

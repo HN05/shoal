@@ -102,7 +102,8 @@ pub struct Capacity {
     /// reads none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_free: Option<u64>,
-    /// The heavy agents waiting in its queue.
+    /// The heavy agents waiting in its queue for room, without asleep
+    /// agents, which wait for an update.
     pub heavy_waiting: u32,
     /// Whether its user walked away, so it admits nothing new.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -136,7 +137,7 @@ pub struct Demand {
     /// its heavy agents' running time and its CI jobs' and commands'
     /// durations, in seconds.
     pub busy_seconds: u64,
-    /// Its heavy agents waiting in the machine's queue.
+    /// Its heavy agents waiting in the machine's queue for room.
     pub heavy_waiting: u32,
 }
 

@@ -33,26 +33,20 @@ struct Row {
 
 /// How long the agents of each repository's spaces ran from `since` until
 /// `now`, by mode. A start runs until the end of its execution's agent,
-/// or until `now` without one, and counts from `since` when it came
-/// before. An end counts only after its execution's start, so a launch
-/// that failed before its agent started counts nothing. An agent that ran
-/// through all of the time read records no event there and counts
-/// nothing, which Shoal's stops of idle agents keep rare.
+/// and counts from `since` when it came before. An end counts only after
+/// its execution's start, so a launch that failed before its agent
+/// started counts nothing. A start without an end runs until `now` only
+/// while the store keeps its execution, so one whose end went unrecorded
+/// counts nothing.
 pub fn running_since(db: &Connection, since: UnixTime, now: UnixTime) -> Result<AgentTime> {
-    let mut running: HashMap<SpaceId, Row> = HashMap::new();
-    let mut read = HashSet::new();
+    let rows = rows(db, since)?;
+    let mut running = running_at(db, since, rows.iter().map(|row| &row.space))?;
     let mut time = AgentTime::new();
     let mut add = |start: Row, to: UnixTime| {
         let from = start.at.max(since);
         *time.entry((start.repository, start.mode)).or_default() += to.duration_since(from);
     };
-    for row in rows(db, since)? {
-        if read.insert(row.space.clone())
-            && !row.started
-            && let Some(start) = started_before(db, &row.space, since)?
-        {
-            running.insert(row.space.clone(), start);
-        }
+    for row in rows {
         if row.started {
             running.insert(row.space.clone(), row);
         } else if let Entry::Occupied(start) = running.entry(row.space.clone())
@@ -62,9 +56,40 @@ pub fn running_since(db: &Connection, since: UnixTime, now: UnixTime) -> Result<
         }
     }
     for start in running.into_values() {
-        add(start, now);
+        if runs(db, start.execution.as_ref())? {
+            add(start, now);
+        }
     }
     Ok(time)
+}
+
+/// The agents that ran as `since` began, by space, among the spaces that
+/// exist now, where an agent may still run, and the spaces of `read`.
+fn running_at<'a>(
+    db: &Connection,
+    since: UnixTime,
+    read: impl Iterator<Item = &'a SpaceId>,
+) -> Result<HashMap<SpaceId, Row>> {
+    let mut spaces: HashSet<SpaceId> = (db.prepare("SELECT id FROM spaces")?)
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    spaces.extend(read.cloned());
+    let mut running = HashMap::new();
+    for space in spaces {
+        if let Some(start) = started_before(db, &space, since)? {
+            running.insert(space, start);
+        }
+    }
+    Ok(running)
+}
+
+/// Whether the store still keeps the execution `id`, which it forgets once
+/// its agent ended.
+fn runs(db: &Connection, id: Option<&ExecutionId>) -> Result<bool> {
+    let Some(id) = id else {
+        return Ok(false);
+    };
+    Ok(shoal_store::find_execution(db, id)?.is_some())
 }
 
 /// The agent events of spaces in a repository since `since`, oldest first.

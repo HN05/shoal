@@ -60,14 +60,16 @@ impl Agents {
     }
 }
 
-/// The entries among `queued` that start a heavy agent, which `light`
-/// tells from the light ones.
+/// The entries among `queued` that wait to start a heavy agent, which
+/// `light` tells from the light ones. An asleep agent's restore, which
+/// Shoal queued on its own, waits for an update rather than for room.
 pub(super) fn heavy_entries<'a>(
     queued: &'a [QueuedRow],
     light: &'a Light,
 ) -> impl Iterator<Item = &'a QueuedRow> {
     (queued.iter())
         .filter(|row| row.kind != QueueKind::Job)
+        .filter(|row| !(row.kind == QueueKind::Restore && row.automatic))
         .filter(|row| {
             !light.entry(
                 row.execution.as_ref(),
@@ -128,3 +130,6 @@ fn memory_free(sample: HostSample, room: Room) -> Option<u64> {
         },
     }
 }
+
+#[cfg(test)]
+mod tests;
