@@ -26,7 +26,6 @@ use crate::state::QueueKind;
 use crate::state::QueueState;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
-use shoal_protocol::stop_causes::StopCause;
 
 /// The space a stopped agent restores in.
 #[derive(Clone)]
@@ -607,7 +606,7 @@ impl Agents {
         env: &BTreeMap<String, String>,
     ) -> Result<()> {
         let path = recovery::record_path(&self.paths, &space.id, execution);
-        if let Some(record) = self.recovered_record(&space.id, execution, &path).await {
+        if let Some(record) = recovery::Record::load(&path).ok().flatten() {
             let asleep = Some(asleep(&record));
             let restore = Restore::new(space.clone(), execution, &record.agent, env, asleep)?;
             let queued = (self.store).write(move |tx| insert(tx, &restore));
@@ -617,51 +616,6 @@ impl Agents {
             }
         }
         recovery::forget_restore_request(&self.paths, &space.id, execution)
-    }
-
-    /// The record at `path` of the agent stopped as `execution` in the space
-    /// `id`, once the stop its wrapper recorded the cause of is logged and,
-    /// for an OOM kill, counted, as the wrapper's pause report does unless it
-    /// was lost.
-    async fn recovered_record(
-        &self,
-        id: &SpaceId,
-        execution: &ExecutionId,
-        path: &std::path::Path,
-    ) -> Option<recovery::Record> {
-        let record = recovery::Record::load(path).ok().flatten()?;
-        let Some(cause) = record.cause else {
-            return Some(record);
-        };
-        self.log_recorded_stop(id, execution, record.agent.clone(), cause)
-            .await;
-        if cause != StopCause::OomKill {
-            return Some(record);
-        }
-        self.record_oom_kill(id, execution).await;
-        recovery::Record::load(path).ok().flatten()
-    }
-
-    /// Log that `agent`, which `execution` ran in the space `id`, stopped for
-    /// `cause`, unless its pause report logged it already.
-    async fn log_recorded_stop(
-        &self,
-        id: &SpaceId,
-        execution: &ExecutionId,
-        agent: crate::agent::Agent,
-        cause: StopCause,
-    ) {
-        let stopped = shoal_daemon_base::events::AgentEvent {
-            mode: None,
-            name: agent,
-            execution_id: Some(execution.clone()),
-            exit_code: None,
-            oom_kills: 0,
-            cause: Some(cause),
-            source: None,
-        };
-        let kind = shoal_daemon_base::events::EventKind::AgentStopped;
-        shoal_daemon_base::events::record_agent(&self.store, id, kind, stopped).await;
     }
 
     /// Hand the restores whose waiting wrapper is gone to the daemon, which

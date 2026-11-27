@@ -44,6 +44,7 @@ pub mod program_status;
 pub mod proxy_retries;
 pub mod queue;
 pub mod queued_starts;
+pub mod recorded_stops;
 pub mod restart_recovery;
 pub mod restarts;
 pub mod resumes;

@@ -900,6 +900,7 @@ impl Agents {
         let issue = self.execution_completion_issue(daemon, &id, scan).await?;
         let complete = issue.is_none();
         self.keep_stopped_turn(&id, None).await;
+        self.settle_recorded_stop(&id).await;
         // Before its record goes, so a demo that replaces it waits for them.
         if complete {
             daemon.release_execution_leases(&id).await;
@@ -1149,6 +1150,7 @@ impl Agents {
         let _spawning = spawning.lock().await;
         daemon.retire_execution_viewer(id).await?;
         self.keep_stopped_turn(id, None).await;
+        self.settle_recorded_stop(id).await;
         daemon.release_execution_leases(id).await;
         let demo = self.delete_execution_record(daemon, id).await?;
         self.close_demo_session(daemon, demo).await;
