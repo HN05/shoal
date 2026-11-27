@@ -27,11 +27,11 @@ pub struct Request {
     /// The ref a new branch starts from.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
-    /// The agent tool it starts.
-    pub agent: String,
-    /// The mode its agent starts in.
-    pub mode: String,
-    /// Whether that mode is `heavy`, holding a heavy slot.
+    /// The agent it starts; none for a CI job, which starts none.
+    #[serde(flatten)]
+    pub agent: Option<AgentStart>,
+    /// Whether it holds a heavy slot: its agent's mode is `heavy`, or it
+    /// is a CI job, which is never light.
     pub heavy: bool,
     /// How long its work lasts, which decides the machines it may go to.
     pub lifetime: Lifetime,
@@ -40,6 +40,15 @@ pub struct Request {
     /// The machine of the space it goes below, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<MemberId>,
+}
+
+/// The agent a start starts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentStart {
+    /// Its tool.
+    pub agent: String,
+    /// The mode it starts in.
+    pub mode: String,
 }
 
 states! {
@@ -210,7 +219,9 @@ impl Request {
             Some(SkippedBy::Away)
         } else if !caller && !machine.has_repository(self.origin.as_deref()) {
             Some(SkippedBy::NoRepository)
-        } else if !machine.launches(self.origin.as_deref(), &self.agent) {
+        } else if (self.agent.as_ref())
+            .is_some_and(|start| !machine.launches(self.origin.as_deref(), &start.agent))
+        {
             Some(SkippedBy::NoAgent)
         } else {
             None

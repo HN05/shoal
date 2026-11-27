@@ -8,7 +8,7 @@ use shoal_protocol::hub::{
 };
 use shoal_schedule::placement::{
     Balanced, Placed, Placement, Placer, Reason,
-    snapshot::{Capacity, Demand, Lifetime, Machine, Registered, Request, Snapshot},
+    snapshot::{AgentStart, Capacity, Demand, Lifetime, Machine, Registered, Request, Snapshot},
     speeds::Medians,
 };
 
@@ -34,8 +34,10 @@ fn snapshot() -> Snapshot {
         request: Request {
             origin: Some(ORIGIN.into()),
             base: None,
-            agent: "claude".into(),
-            mode: "worker".into(),
+            agent: Some(AgentStart {
+                agent: "claude".into(),
+                mode: "worker".into(),
+            }),
             heavy: true,
             lifetime: Lifetime::Lasting,
             caller: "laptop".into(),

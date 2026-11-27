@@ -12,7 +12,7 @@ use shoal_ids::member_ids::MemberId;
 use shoal_protocol::hub::placement::Decision;
 use shoal_protocol::launches::Launch;
 use shoal_protocol::protocol::Launched;
-use shoal_schedule::placement::snapshot::{Lifetime, Request};
+use shoal_schedule::placement::snapshot::{AgentStart, Lifetime, Request};
 
 use crate::{
     config::{Effective, modes::Weight},
@@ -169,10 +169,12 @@ impl Spaces {
         Ok(Some(Request {
             origin,
             base: launch.base.clone(),
-            agent: agent.name().to_owned(),
+            agent: Some(AgentStart {
+                agent: agent.name().to_owned(),
+                mode: shape.mode.to_string(),
+            }),
             heavy: heavy(&settings, &shape.mode),
             lifetime: lifetime(launch.disposable),
-            mode: shape.mode.to_string(),
             caller: this.clone(),
             parent: self.parent_machine(daemon, launch, caller, this).await?,
         }))

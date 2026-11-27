@@ -341,9 +341,12 @@ fn machine_name(members: &[Member], id: &MemberId) -> String {
 /// machine it skips, naming the machines among `members`.
 fn logged(request: &Request, placement: &Placement, policy: Policy, members: &[Member]) -> String {
     let name = |id: &MemberId| machine_name(members, id);
+    let work = match &request.agent {
+        Some(start) => format!("a start of agent {}", start.agent),
+        None => "a CI job".to_owned(),
+    };
     let start = format!(
-        "a start of agent {} in {}",
-        request.agent,
+        "{work} in {}",
         request.origin.as_deref().unwrap_or("no repository")
     );
     let chosen = match placement.chosen() {

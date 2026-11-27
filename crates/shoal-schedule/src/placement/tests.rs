@@ -1,5 +1,5 @@
 use super::{Local, Placer, Reason, SkippedBy};
-use crate::placement::snapshot::{Capacity, Lifetime, Machine, Request, Snapshot};
+use crate::placement::snapshot::{AgentStart, Capacity, Lifetime, Machine, Request, Snapshot};
 
 /// A chat start on the hub that launches `agents`.
 fn snapshot(agents: &[&str]) -> Snapshot {
@@ -7,8 +7,10 @@ fn snapshot(agents: &[&str]) -> Snapshot {
         request: Request {
             origin: None,
             base: None,
-            agent: "claude".into(),
-            mode: "chat".into(),
+            agent: Some(AgentStart {
+                agent: "claude".into(),
+                mode: "chat".into(),
+            }),
             heavy: false,
             lifetime: Lifetime::Lasting,
             caller: "hub".into(),

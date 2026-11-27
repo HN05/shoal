@@ -4,7 +4,7 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result};
 use shoal_ids::member_ids::MemberId;
-use shoal_schedule::placement::snapshot::Request;
+use shoal_schedule::placement::snapshot::{AgentStart, Request};
 
 use crate::{
     config::{Effective, modes::ModeName},
@@ -31,10 +31,12 @@ impl Spaces {
         Ok(Request {
             origin,
             base: None,
-            agent: agent.name().to_owned(),
+            agent: Some(AgentStart {
+                agent: agent.name().to_owned(),
+                mode: mode.to_string(),
+            }),
             heavy: heavy(&settings, &mode),
             lifetime: lifetime(space.worktree().is_some_and(|worktree| worktree.disposable)),
-            mode: mode.to_string(),
             // The hub, which places it, names its caller.
             caller: MemberId::from(String::new()),
             parent: None,

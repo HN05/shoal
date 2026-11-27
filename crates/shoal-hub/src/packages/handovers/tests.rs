@@ -1,4 +1,7 @@
-use shoal_schedule::placement::{Placed, Placement, Reason, snapshot::Lifetime};
+use shoal_schedule::placement::{
+    Placed, Placement, Reason,
+    snapshot::{AgentStart, Lifetime},
+};
 
 use super::*;
 use crate::{
@@ -14,8 +17,10 @@ fn start() -> Request {
     Request {
         origin: None,
         base: None,
-        agent: "claude".into(),
-        mode: "worker".into(),
+        agent: Some(AgentStart {
+            agent: "claude".into(),
+            mode: "worker".into(),
+        }),
         heavy: true,
         lifetime: Lifetime::Lasting,
         caller: "laptop".into(),

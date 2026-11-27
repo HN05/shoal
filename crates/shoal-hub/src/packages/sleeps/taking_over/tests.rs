@@ -1,6 +1,6 @@
 use serde_json::json;
 use shoal_protocol::hub::link::Call;
-use shoal_schedule::placement::snapshot::Lifetime;
+use shoal_schedule::placement::snapshot::{AgentStart, Lifetime};
 
 use super::*;
 
@@ -24,10 +24,12 @@ fn start(mode: &str) -> Request {
     Request {
         origin: None,
         base: None,
-        agent: "claude".into(),
+        agent: Some(AgentStart {
+            agent: "claude".into(),
+            mode: mode.into(),
+        }),
         heavy: true,
         lifetime: Lifetime::Lasting,
-        mode: mode.into(),
         caller: MemberId::from(String::new()),
         parent: None,
     }

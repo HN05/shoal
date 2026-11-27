@@ -1,7 +1,7 @@
 use shoal_protocol::hub::placement::Unanswered;
 use shoal_schedule::placement::{
     Placed, Placement, Reason,
-    snapshot::{Lifetime, Request, Snapshot},
+    snapshot::{AgentStart, Lifetime, Request, Snapshot},
 };
 
 use super::{Placers, WAIT};
@@ -11,8 +11,10 @@ fn snapshot() -> Snapshot {
         request: Request {
             origin: None,
             base: None,
-            agent: "claude".into(),
-            mode: "chat".into(),
+            agent: Some(AgentStart {
+                agent: "claude".into(),
+                mode: "chat".into(),
+            }),
             heavy: false,
             lifetime: Lifetime::Lasting,
             caller: "laptop".into(),

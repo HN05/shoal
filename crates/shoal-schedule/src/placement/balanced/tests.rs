@@ -2,8 +2,8 @@ use super::Balanced;
 use crate::placement::{
     Placer, Reason, Skipped, SkippedBy,
     snapshot::{
-        Capacity, DEMAND_WINDOW, Demand, Exclusive, Lifetime, Machine, Registered, Request,
-        Snapshot,
+        AgentStart, Capacity, DEMAND_WINDOW, Demand, Exclusive, Lifetime, Machine, Registered,
+        Request, Snapshot,
     },
 };
 
@@ -13,8 +13,10 @@ fn request(heavy: bool) -> Request {
     Request {
         origin: Some(ORIGIN.into()),
         base: None,
-        agent: "claude".into(),
-        mode: "worker".into(),
+        agent: Some(AgentStart {
+            agent: "claude".into(),
+            mode: "worker".into(),
+        }),
         heavy,
         lifetime: Lifetime::Lasting,
         caller: "laptop".into(),
@@ -319,7 +321,7 @@ fn a_machine_launches_the_agents_of_each_repository_by_its_settings() {
     (server.capacity.as_mut().into_iter())
         .for_each(|capacity| capacity.repositories = vec![registered(&["claude", "reviewer"])]);
     let mut start = request(true);
-    start.agent = "reviewer".into();
+    (start.agent.iter_mut()).for_each(|start| start.agent = "reviewer".into());
     let machines = vec![laptop(), server];
     assert_eq!(ranked(start.clone(), machines.clone())[0].0, "server");
     // Outside the repository, its config defines no such agent.
