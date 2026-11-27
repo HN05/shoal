@@ -19,7 +19,7 @@ fn a_chat_row_keeps_its_scope_token_typed_and_out_of_its_debug() {
 #[tokio::test]
 async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_actions() {
     let manager = Fixture::new().await;
-    let chat = crate::conversions::record::ConvertedChat {
+    let chat = crate::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,

@@ -71,7 +71,7 @@ impl Spaces {
         let execution = (self.save_taking(daemon, id, leaving, taking, &listed)).await?;
         let space = id.to_owned();
         (self.store)
-            .write(move |tx| super::record::forget(tx, &space))
+            .write(move |tx| super::pending::forget(tx, &space))
             .await?;
         if held {
             return Ok(());

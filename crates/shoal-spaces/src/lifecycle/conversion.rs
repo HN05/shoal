@@ -6,7 +6,7 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use crate::{
     removal::RemovalResult,
-    {approvals::ApprovalRequest, conversions::record::ConvertedChat},
+    {approvals::ApprovalRequest, conversions::pending::ConvertedChat},
 };
 use anyhow::Result;
 use shoal_ids::space_ids::SpaceId;

@@ -19,7 +19,7 @@ async fn a_converted_workspace_keeps_its_record_beside_the_chat_it_became() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let converted = crate::conversions::record::ConvertedChat {
+    let converted = crate::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,

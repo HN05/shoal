@@ -129,7 +129,7 @@ pub enum Removal<'a> {
     /// branch, its record under the chat's kind and the spaces below it
     /// stay. The user's holds refuse it.
     Converted {
-        chat: &'a crate::conversions::record::ConvertedChat,
+        chat: &'a crate::conversions::pending::ConvertedChat,
     },
 }
 

@@ -13,7 +13,8 @@ use anyhow::Result;
 use super::{
     Pending,
     handoff::{Leaving, Taking},
-    record::{Carrying, ChatRow, ConvertedChat},
+    pending::{Carrying, ConvertedChat},
+    record::ChatRow,
 };
 use crate::protocol::operations::{Ended, Failure};
 use crate::{
@@ -80,7 +81,7 @@ impl Spaces {
     /// and the relocation reads the conversion as that stop left it, or
     /// after the new agent runs, which it stops.
     pub async fn relocate_finished_turns(&self, daemon: &dyn Daemon) -> Result<()> {
-        let pending = self.store.run(|db| super::record::all_pending(db)).await?;
+        let pending = self.store.run(|db| super::pending::all_pending(db)).await?;
         #[cfg(any(test, feature = "test-support"))]
         LISTED.notify_one();
         for id in pending.into_iter().map(|(id, _)| id) {
@@ -205,7 +206,7 @@ impl Spaces {
         };
         let (space, operation) = (id.to_owned(), operation.to_owned());
         let kept = (self.store).run(move |db| {
-            super::record::record_prepared(db, &space, &operation, hook_failure.as_deref())
+            super::pending::record_prepared(db, &space, &operation, hook_failure.as_deref())
         });
         // Under the hand-overs, so no relocation acts on the end it misses.
         if let Err(error) = self.conversion_handovers.hold(kept).await {
@@ -348,7 +349,7 @@ impl Spaces {
     async fn hold_converting_agent(&self, id: &SpaceId) -> Result<()> {
         let id = id.to_owned();
         (self.store)
-            .run(move |db| super::record::hold(db, &id))
+            .run(move |db| super::pending::hold(db, &id))
             .await
     }
 
@@ -519,7 +520,7 @@ impl Spaces {
         let space = id.to_owned();
         if let Err(error) = self
             .store
-            .run(move |db| super::record::forget(db, &space))
+            .run(move |db| super::pending::forget(db, &space))
             .await
         {
             log!("conversion of {id} not forgotten: {error:#}");

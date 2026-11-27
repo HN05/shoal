@@ -1,7 +1,7 @@
 use crate::execution::recovery::LastSessionExt;
 use crate::stand_in::Fixture;
 use crate::{
-    conversions::record::ConvertedChat,
+    conversions::pending::ConvertedChat,
     model::{HoldPlacer, Repository},
 };
 use shoal_core::test_support::{git, repository};
@@ -312,7 +312,7 @@ async fn a_conversion_of_a_workspace_whose_agent_stopped_is_not_recorded() {
 
     let refused = (manager.store)
         .write(move |tx| {
-            crate::conversions::record::record_chat_conversion(tx, &id, chat, Default::default())
+            crate::conversions::pending::record_chat_conversion(tx, &id, chat, Default::default())
         })
         .await
         .unwrap_err();
@@ -395,7 +395,7 @@ async fn nothing_builds_on_a_workspace_that_becomes_a_chat() {
         },
     );
     (manager.store)
-        .write(move |tx| crate::conversions::record::record(tx, &id, &pending))
+        .write(move |tx| crate::conversions::pending::record(tx, &id, &pending))
         .await
         .unwrap();
 
@@ -459,7 +459,7 @@ async fn a_failed_conversion_leaves_the_workspace_its_record_and_checkpoints() {
 
 #[tokio::test]
 async fn only_a_conversion_that_restarts_its_agent_moves_it() {
-    use crate::conversions::{Pending, record};
+    use crate::conversions::{Pending, pending};
     let manager = Fixture::new().await;
     let repo = registered(manager.root.path(), &manager).await;
     let workspace = manager
@@ -482,7 +482,7 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     };
     let space = id.clone();
     (manager.store)
-        .write(move |tx| record::record(tx, &space, &pending))
+        .write(move |tx| pending::record(tx, &space, &pending))
         .await
         .unwrap();
     assert!(moves().await.unwrap());
@@ -490,7 +490,7 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     // A stop holds the chat it becomes for `shoal resume`.
     let space = id.clone();
     (manager.store)
-        .run(move |db| record::hold(db, &space))
+        .run(move |db| pending::hold(db, &space))
         .await
         .unwrap();
     assert!(!moves().await.unwrap());
@@ -498,7 +498,7 @@ async fn only_a_conversion_that_restarts_its_agent_moves_it() {
     // A relocation moves it until its restart is queued.
     let space = id.clone();
     (manager.store)
-        .run(move |db| record::forget(db, &space))
+        .run(move |db| pending::forget(db, &space))
         .await
         .unwrap();
     let moving = manager.spaces.relocating.mark(&id);

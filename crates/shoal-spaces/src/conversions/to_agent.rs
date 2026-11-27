@@ -139,7 +139,7 @@ impl Spaces {
         let admissions = daemon.lock_agent_admissions().await;
         if let Some(execution) = self.running_agent(daemon, &id).await? {
             (self.store)
-                .write(move |tx| super::record::record_agent_switch(tx, &id, execution, taking))
+                .write(move |tx| super::pending::record_agent_switch(tx, &id, execution, taking))
                 .await?;
             drop(admissions);
             // The relocation waits for the agent's turn to end, which it may
@@ -153,7 +153,7 @@ impl Spaces {
         let execution = (saved.map(|saved| saved.execution)).unwrap_or_else(ExecutionId::generate);
         let (space, recorded, switching) = (id.clone(), execution.clone(), taking.clone());
         (self.store)
-            .write(move |tx| super::record::record_stopped_switch(tx, &space, recorded, switching))
+            .write(move |tx| super::pending::record_stopped_switch(tx, &space, recorded, switching))
             .await?;
         drop(admissions);
         // An attach follows the agent across the switch until its restore
@@ -163,7 +163,7 @@ impl Spaces {
         if switched.is_err() {
             let space = id.clone();
             (self.store)
-                .write(move |tx| super::record::forget(tx, &space))
+                .write(move |tx| super::pending::forget(tx, &space))
                 .await?;
         }
         switched.map(|()| true)

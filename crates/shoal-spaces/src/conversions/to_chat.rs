@@ -4,7 +4,7 @@ use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Context as _, Result, bail, ensure};
 
-use super::record::{Carrying, ConvertedChat};
+use super::pending::{Carrying, ConvertedChat};
 use crate::{
     config::modes::ModeName,
     model::{CheckpointCause, HoldPlacer, SpaceKind, Workspace},
@@ -49,7 +49,7 @@ impl Spaces {
         let chat = (self.carrying_on(daemon, &workspace, mode, &change, &carrying)).await?;
         let id = workspace.id.clone();
         self.store
-            .write(move |tx| super::record::record_chat_conversion(tx, &id, chat, carrying))
+            .write(move |tx| super::pending::record_chat_conversion(tx, &id, chat, carrying))
             .await?;
         // The relocation waits for the agent's turn to end, which it may
         // have already.

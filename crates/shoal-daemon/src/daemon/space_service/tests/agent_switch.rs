@@ -362,7 +362,7 @@ async fn no_agent_is_admitted_while_a_switch_copies_the_sessions() {
     (manager.store)
         .write(move |tx| {
             let execution = ExecutionId::generate();
-            crate::daemon::conversions::record::record_stopped_switch(tx, &id, execution, taking)
+            crate::daemon::conversions::pending::record_stopped_switch(tx, &id, execution, taking)
         })
         .await
         .unwrap();
@@ -376,7 +376,7 @@ async fn no_agent_is_admitted_while_a_switch_copies_the_sessions() {
     );
     let id = talk.id.clone();
     (manager.store)
-        .write(move |tx| crate::daemon::conversions::record::forget(tx, &id))
+        .write(move |tx| crate::daemon::conversions::pending::forget(tx, &id))
         .await
         .unwrap();
     assert!(

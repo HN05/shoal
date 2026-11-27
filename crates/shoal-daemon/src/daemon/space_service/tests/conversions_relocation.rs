@@ -339,7 +339,7 @@ async fn a_workspace_whose_agent_exited_still_becomes_a_chat_with_its_session() 
         narrowing: Default::default(),
     };
     exited.write(&manager.paths, &workspace.id).unwrap();
-    let chat = crate::daemon::conversions::record::ConvertedChat {
+    let chat = crate::daemon::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution,
         origin: None,
@@ -381,7 +381,7 @@ async fn restore_queued(manager: &Manager, id: &shoal_ids::space_ids::SpaceId) -
 async fn record_chat_conversion(
     manager: &Manager,
     workspace: &Workspace,
-    chat: crate::daemon::conversions::record::ConvertedChat,
+    chat: crate::daemon::conversions::pending::ConvertedChat,
 ) {
     let (id, pending) = (
         workspace.id.clone(),
@@ -392,7 +392,7 @@ async fn record_chat_conversion(
         },
     );
     (manager.store)
-        .write(move |tx| crate::daemon::conversions::record::record(tx, &id, &pending))
+        .write(move |tx| crate::daemon::conversions::pending::record(tx, &id, &pending))
         .await
         .unwrap();
 }
@@ -410,7 +410,7 @@ async fn a_stop_keeps_the_chat_a_workspace_becomes_down() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let chat = crate::daemon::conversions::record::ConvertedChat {
+    let chat = crate::daemon::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,
@@ -457,7 +457,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
         .create_workspace(&repo.id, "fix-login".into(), None, None, None)
         .await
         .unwrap();
-    let chat = crate::daemon::conversions::record::ConvertedChat {
+    let chat = crate::daemon::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,
@@ -488,7 +488,7 @@ async fn a_stop_while_the_relocation_waits_keeps_the_chat_down() {
     LISTED.notified().await;
     let id = workspace.id.clone();
     (manager.store)
-        .run(move |db| crate::daemon::conversions::record::hold(db, &id))
+        .run(move |db| crate::daemon::conversions::pending::hold(db, &id))
         .await
         .unwrap();
     release.send(()).unwrap();
@@ -693,7 +693,7 @@ async fn a_relocation_hands_over_the_converting_agents_its_removal_reaches() {
         )
         .await
         .unwrap();
-    let chat = crate::daemon::conversions::record::ConvertedChat {
+    let chat = crate::daemon::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,
@@ -743,7 +743,7 @@ async fn record_preparation(
         .unwrap();
     let (id, recorded) = (workspace.id.clone(), operation.clone());
     (manager.store)
-        .run(move |db| crate::daemon::conversions::record::record_preparation(db, &id, &recorded))
+        .run(move |db| crate::daemon::conversions::pending::record_preparation(db, &id, &recorded))
         .await
         .unwrap();
     let worker = crate::daemon::operations::fake::take(&operation);
@@ -843,8 +843,8 @@ async fn a_failed_hook_outlasts_its_operations_record() {
     let id = workspace.id.clone();
     (manager.store)
         .run(move |db| {
-            crate::daemon::conversions::record::record_preparation(db, &id, "gone")?;
-            crate::daemon::conversions::record::record_prepared(
+            crate::daemon::conversions::pending::record_preparation(db, &id, "gone")?;
+            crate::daemon::conversions::pending::record_prepared(
                 db,
                 &id,
                 "gone",
@@ -879,9 +879,9 @@ async fn a_preparation_end_reported_before_its_record_is_kept() {
 
     let pending = (manager.store)
         .run(move |db| {
-            use crate::daemon::conversions::record;
-            record::record_prepared(db, &id, "early", Some("hook exited 1"))?;
-            record::record_preparation(db, &id, "early")?;
+            use crate::daemon::conversions::pending;
+            pending::record_prepared(db, &id, "early", Some("hook exited 1"))?;
+            pending::record_preparation(db, &id, "early")?;
             crate::daemon::conversions::pending(db, &id)
         })
         .await

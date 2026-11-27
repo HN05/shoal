@@ -8,6 +8,7 @@ use crate::{config::modes::ModeName, model::Workspace};
 
 pub mod handoff;
 pub mod handovers;
+pub mod pending;
 pub mod record;
 pub mod relocation;
 pub mod to_agent;
@@ -15,7 +16,7 @@ pub mod to_chat;
 pub mod to_workspace;
 
 pub use handovers::Handovers;
-pub use record::{Carrying, Pending};
+pub use pending::{Carrying, Pending};
 pub use relocation::{ConversionStop, Relocating};
 pub use to_workspace::WorkspaceConversion;
 
@@ -56,7 +57,7 @@ impl Converting {
             hook_failure: None,
             carrying: self.carrying.clone(),
         };
-        record::record(tx, &self.chat.id, &pending)
+        pending::record(tx, &self.chat.id, &pending)
     }
 }
 
@@ -69,5 +70,5 @@ pub fn ensure_mode(settings: &crate::config::Effective, mode: &ModeName) -> Resu
 
 /// One whose agent has yet to start in the new place.
 pub fn pending(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Pending>> {
-    record::pending(db, id)
+    pending::pending(db, id)
 }

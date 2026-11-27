@@ -83,7 +83,7 @@ async fn a_chat_a_conversion_removed_restores_in_the_workspace_restored_beside()
         )
         .await
         .unwrap();
-    let converted = crate::daemon::conversions::record::ConvertedChat {
+    let converted = crate::daemon::conversions::pending::ConvertedChat {
         agent: "claude".into(),
         execution: shoal_ids::execution_ids::ExecutionId::generate(),
         origin: None,
