@@ -27,6 +27,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         mode: None,
         exit_code,
         oom_kills: 0,
+        cause: None,
     };
     let recorded = [
         (EventKind::AgentStarted, agent("e1", None)),
@@ -288,6 +289,7 @@ fn each_writer_s_events_decode_and_round_trip() -> Result<()> {
         mode: None,
         exit_code: Some(1),
         oom_kills: 2,
+        cause: None,
     };
     record(
         &db,

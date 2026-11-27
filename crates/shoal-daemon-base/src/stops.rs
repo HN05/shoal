@@ -1,6 +1,7 @@
 //! How the daemon stops a space's executions: why, which their wrappers
 //! show, what the stop saves for `shoal resume`, and the proof it requires
 //! of an execution that disconnected.
+use shoal_protocol::agent_ends::StopCause;
 
 /// The proof required after stopping a disconnected execution. Both policies
 /// signal only native identity-verified processes and reject owned survivors.
@@ -22,6 +23,8 @@ pub enum StopPolicy {
 pub struct StopRequest {
     pub reason: String,
     pub save: Save,
+    /// What the stopped agent's `agent_stopped` event names as its cause.
+    pub cause: StopCause,
 }
 
 /// What a stop saves for `shoal resume`.
@@ -39,57 +42,62 @@ pub enum Save {
 }
 
 impl StopRequest {
+    /// A stop for `reason` that saves `save`, which names that reason as
+    /// its cause.
+    pub fn requested(reason: impl Into<String>, save: Save) -> Self {
+        let reason = reason.into();
+        Self {
+            cause: StopCause::Requested {
+                reason: reason.clone(),
+            },
+            reason,
+            save,
+        }
+    }
+
     /// The stop `shoal stop` requests.
     pub fn manual() -> Self {
         Self {
             reason: "stopped by shoal stop".into(),
             save: Save::Everything,
+            cause: StopCause::UserStop,
         }
     }
 
     /// The stop `shoal queue cancel` requests of an agent waiting for its
     /// restore.
     pub fn queue_cancel() -> Self {
-        Self {
-            reason: "its restore was cancelled with shoal queue cancel".into(),
-            save: Save::Everything,
-        }
+        Self::requested(
+            "its restore was cancelled with shoal queue cancel",
+            Save::Everything,
+        )
     }
 
     /// The stop of an agent protection stops for `reason` that the store
     /// could not record, which saves its session for `shoal resume`.
     pub fn unrecorded(reason: &str) -> Self {
-        Self {
-            reason: format!("{reason}; its stop could not be recorded"),
-            save: Save::Everything,
-        }
+        Self::requested(
+            format!("{reason}; its stop could not be recorded"),
+            Save::Everything,
+        )
     }
 
     /// The stop of a space's agents before `shoal move --ssh` exports it,
     /// which saves their sessions for the import on the other machine, or
     /// for their restores here when that import fails.
     pub fn moving() -> Self {
-        Self {
-            reason: "its space moves to another machine".into(),
-            save: Save::Everything,
-        }
+        Self::requested("its space moves to another machine", Save::Everything)
     }
 
     /// The stop of a space's agents before its removal here, since another
     /// machine took the space over while this one was offline, which saves
     /// their sessions in its removal record.
     pub fn taken_over() -> Self {
-        Self {
-            reason: "another machine took its space over".into(),
-            save: Save::Everything,
-        }
+        Self::requested("another machine took its space over", Save::Everything)
     }
 
     pub fn repair() -> Self {
-        Self {
-            reason: "stopped to repair the workspace".into(),
-            save: Save::Nothing,
-        }
+        Self::requested("stopped to repair the workspace", Save::Nothing)
     }
 
     /// The stop before the system or the daemon shuts down, for `reason`.
@@ -97,25 +105,23 @@ impl StopRequest {
         Self {
             reason: reason.into(),
             save: Save::Shutdown,
+            cause: StopCause::Shutdown,
         }
     }
 
     /// The agent of a chat that became a workspace, whose session its
     /// conversion keeps to continue in the worktree.
     pub fn conversion() -> Self {
-        Self {
-            reason: "its chat became a workspace".into(),
-            save: Save::Nothing,
-        }
+        Self::requested("its chat became a workspace", Save::Nothing)
     }
 
     /// The agent of a space whose work another agent tool takes over from
     /// the copies of its sessions the handoff made.
     pub fn handoff() -> Self {
-        Self {
-            reason: "another agent tool takes its space's work over".into(),
-            save: Save::Nothing,
-        }
+        Self::requested(
+            "another agent tool takes its space's work over",
+            Save::Nothing,
+        )
     }
 
     /// Removal of a missing worktree, which keeps no checkpoint or record.
@@ -123,6 +129,7 @@ impl StopRequest {
         Self {
             reason: "the workspace is being removed".into(),
             save: Save::Nothing,
+            cause: StopCause::Removal,
         }
     }
 

@@ -24,6 +24,7 @@ fn journal(db: &Connection, space: &str, kind: EventKind, execution: &str, mode:
         mode: Some(mode.into()),
         exit_code: None,
         oom_kills: 0,
+        cause: None,
     };
     insert_agent(db, &SpaceId::from(space), kind, agent).unwrap();
     db.execute(

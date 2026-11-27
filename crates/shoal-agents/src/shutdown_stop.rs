@@ -16,7 +16,7 @@ use crate::daemon::Daemon;
 use crate::execution::recovery;
 use crate::execution::recovery::Saved;
 use crate::execution::recovery::SavedExt as _;
-use crate::executions::StopRequest;
+use crate::executions::{Save, StopRequest};
 use crate::log;
 use crate::model::Space;
 use crate::protocol::QueuedLaunches;
@@ -62,13 +62,19 @@ pub enum Shutdown {
 
 impl Shutdown {
     fn request(self) -> StopRequest {
-        StopRequest::shutdown(match self {
+        let reason = match self {
             Self::System => "the system is shutting down",
             Self::Daemon => "the Shoal daemon is stopping",
             Self::Away => "the user walked away from this machine",
             Self::Sleep => "this machine is going to sleep",
             Self::Pause => "the user paused this machine",
-        })
+        };
+        match self {
+            Self::System | Self::Daemon => StopRequest::shutdown(reason),
+            Self::Away | Self::Sleep | Self::Pause => {
+                StopRequest::requested(reason, Save::Shutdown)
+            }
+        }
     }
 
     /// When the work stopped, as the user's notifications say it.

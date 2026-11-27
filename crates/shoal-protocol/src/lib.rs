@@ -3,6 +3,7 @@
 pub mod absorb;
 pub mod acquirers;
 pub mod agent;
+pub mod agent_ends;
 pub mod agents;
 pub mod alerts;
 pub mod approvals;

@@ -52,10 +52,7 @@ impl Executions for Manager {
         reason: String,
     ) -> BoxFuture<'_, Vec<ExecutionId>> {
         Box::pin(async move {
-            let request = StopRequest {
-                reason,
-                save: Save::Nothing,
-            };
+            let request = StopRequest::requested(reason, Save::Nothing);
             // Native scans run after the connection map is released, as a
             // workspace stop runs them.
             let connections = self.agents.executions().connections().await;

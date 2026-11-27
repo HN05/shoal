@@ -58,6 +58,12 @@ fn details_name_what_each_entry_is_about() {
         "claude, exit code 137, 2 killed for memory"
     );
     assert_eq!(
+        details(serde_json::json!({"kind": "agent_stopped",
+            "agent": {"name": "claude", "execution_id": "e", "exit_code": null,
+            "cause": {"kind": "signal", "signal": "SIGTERM", "reached": "agent"}}})),
+        "claude, SIGTERM to its agent"
+    );
+    assert_eq!(
         details(
             serde_json::json!({"kind": "review_ready", "review": {"kind": "pr",
             "url": "https://forge.example/team/repo/pulls/2131"}})

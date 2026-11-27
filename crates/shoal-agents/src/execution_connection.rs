@@ -5,6 +5,7 @@
 use crate::control::ProtectionExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::agent_ends::StopCause;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::launches::LaunchSource;
 use std::sync::Arc;
@@ -90,6 +91,8 @@ pub struct Connected {
     reports_status: bool,
     /// The daemon stopped the command before it finished.
     stopped: bool,
+    /// What the stop the daemon sent names as its cause.
+    stop_cause: Option<StopCause>,
     /// Why Shoal cancelled on its own the automatic restore the wrapper
     /// waited for, which the agent's exit alert reports.
     restore_cancelled: Option<String>,
@@ -222,6 +225,7 @@ pub async fn reattach(
         takes_narrowing: version >= protocol::RESUME_NARROWING,
         reports_status: request.reports_status,
         stopped: false,
+        stop_cause: None,
         restore_cancelled: None,
         stop,
         records: None,
@@ -407,6 +411,7 @@ async fn relay(
         hears_restore_waits,
         takes_narrowing,
         stopped,
+        stop_cause,
         restore_cancelled,
         stop,
         source,
@@ -443,7 +448,8 @@ async fn relay(
                     changed = stop.changed(), if !sent_stop => {
                         changed?;
                         if *stop.borrow_and_update() {
-                            let PreparedStop { control, recovery } = prepare_stop(agents,stopping).await;
+                            let PreparedStop { control, recovery, cause } = prepare_stop(agents,stopping).await;
+                            *stop_cause = cause;
                             if let Some(recovery) = recovery {
                                 recovering = recovery.recovering;
                                 if unattachable.is_none() {
@@ -545,14 +551,15 @@ async fn relay(
                     .await
                 {
                     Ok(()) => Control::ChildReleased,
-                    Err(error) => {
-                        sent_stop = true;
-                        Control::Stop {
-                            reason: Some(format!("{error:#}")),
-                            removed: false,
-                        }
-                    }
+                    Err(error) => Control::Stop {
+                        reason: Some(format!("{error:#}")),
+                        removed: false,
+                    },
                 };
+                if let Some(cause) = refusal_cause(&control) {
+                    sent_stop = true;
+                    *stop_cause = Some(cause);
+                }
                 controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
@@ -571,7 +578,10 @@ async fn relay(
                     agent: agent.is_some(),
                 });
                 let control = register_again(agents, daemon, execution_id, &space.id, place).await;
-                sent_stop |= matches!(control, Control::Stop { .. });
+                if let Some(cause) = refusal_cause(&control) {
+                    sent_stop = true;
+                    *stop_cause = Some(cause);
+                }
                 controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
@@ -583,6 +593,7 @@ async fn relay(
                 if let Some(tracked) = agent {
                     let stopped = AgentEvent {
                         oom_kills: reported.map_or(0, |memory| memory.oom_kills),
+                        cause: stop_cause.clone(),
                         ..agent_event(tracked, execution_id, None)
                     };
                     (shoal_daemon_base::events::record_agent(
@@ -703,6 +714,7 @@ struct Stopping<'a> {
 struct PreparedStop {
     control: Control,
     recovery: Option<OverloadRecovery>,
+    cause: Option<StopCause>,
 }
 
 /// Whether an overload stop's agent waits to be restored.
@@ -722,16 +734,17 @@ async fn prepare_stop(agents: &Agents, stopping: Stopping<'_>) -> PreparedStop {
     if agents.restart_requested(stopping.execution_id).await {
         return prepare_restart();
     }
-    let control = if stopping.reattach && agents.executions.shutting_down() {
-        Control::Detach
-    } else {
-        requested_stop(
-            agents.executions.stop_request(stopping.execution_id).await,
-            stopping,
-        )
-    };
+    if stopping.reattach && agents.executions.shutting_down() {
+        return PreparedStop {
+            control: Control::Detach,
+            recovery: None,
+            cause: None,
+        };
+    }
+    let request = agents.executions.stop_request(stopping.execution_id).await;
     PreparedStop {
-        control,
+        cause: request.as_ref().map(|request| request.cause.clone()),
+        control: requested_stop(request, stopping),
         recovery: None,
     }
 }
@@ -752,6 +765,7 @@ async fn prepare_overload_stop(
         .await
         .filter(|_| recovering);
     PreparedStop {
+        cause: Some(protection.cause()),
         control: Control::OverloadStop {
             recover: recovering,
             reason: protection.reason,
@@ -772,6 +786,7 @@ fn prepare_restart() -> PreparedStop {
         resumes_when,
     } = Protection::restart();
     PreparedStop {
+        cause: Some(StopCause::Restart),
         control: Control::OverloadStop {
             recover: true,
             reason,
@@ -825,6 +840,7 @@ async fn finish(
         started,
         resuming,
         stopped,
+        stop_cause,
         restore_cancelled,
         memory,
         ..
@@ -915,6 +931,7 @@ async fn finish(
         };
         let ended = AgentEvent {
             oom_kills,
+            cause: stop_cause.filter(|_| stopped),
             ..agent_event(agent, &execution_id, code)
         };
         shoal_daemon_base::events::record_agent(&agents.store, &space.id, kind, ended).await;
@@ -963,6 +980,17 @@ async fn finish(
     result.map(|_| ())
 }
 
+/// The cause a stop that refuses the wrapper's request names: the refusal's
+/// reason. None for any other control.
+fn refusal_cause(control: &Control) -> Option<StopCause> {
+    match control {
+        Control::Stop { reason, .. } => Some(StopCause::Requested {
+            reason: reason.clone().unwrap_or_default(),
+        }),
+        _ => None,
+    }
+}
+
 /// What a space's log records of the agent that execution `id` runs.
 fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -> AgentEvent {
     AgentEvent {
@@ -972,6 +1000,7 @@ fn agent_event(agent: &TrackedAgent, id: &ExecutionId, exit_code: Option<i32>) -
         exit_code,
         oom_kills: 0,
         source: None,
+        cause: None,
     }
 }
 

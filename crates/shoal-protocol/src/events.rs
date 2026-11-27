@@ -561,6 +561,10 @@ pub struct AgentEvent {
     /// exit, and a start that restores an agent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<crate::launches::LaunchSource>,
+    /// What stopped it, on a stop; absent where the stop's cause is not
+    /// known, as for one a wrapper of an earlier release reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<crate::agent_ends::StopCause>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

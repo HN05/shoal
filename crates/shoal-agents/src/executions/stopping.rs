@@ -280,10 +280,7 @@ impl Agents {
         selector: &SpaceSelector,
         reason: String,
     ) -> Result<()> {
-        let request = StopRequest {
-            reason,
-            save: Save::Everything,
-        };
+        let request = StopRequest::requested(reason, Save::Everything);
         self.stop_keeping_restores(daemon, selector, request).await
     }
 
@@ -493,8 +490,8 @@ impl Agents {
         let stopping = self
             .executions
             .shut_down(StopRequest {
-                reason: "the Shoal daemon shut down".into(),
                 save: Save::Everything,
+                ..StopRequest::shutdown("the Shoal daemon shut down")
             })
             .await;
         while Instant::now() < deadline && self.executions.has_connections().await {

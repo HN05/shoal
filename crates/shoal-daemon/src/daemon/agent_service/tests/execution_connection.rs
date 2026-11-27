@@ -733,19 +733,23 @@ async fn a_wrapper_whose_terminal_reads_status_reports_hears_the_spaces_status()
 
 mod registration;
 
-/// The kills an agent's log records on its stop or exit and its last
-/// alert, once a run that a pause with 2 kills stopped finished without a
-/// memory report.
-async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
-    let (root, manager) = manager().await;
-    let path = repository(root.path(), "repo");
+/// An agent's execution in a new workspace, with the wrapper's side of its
+/// connection, once the daemon acknowledged its start.
+struct RunningAgent {
+    workspace: crate::model::Workspace,
+    wrapper_side: BufReader<UnixStream>,
+    executing: tokio::task::JoinHandle<Result<()>>,
+}
+
+async fn running_agent(manager: &Arc<Manager>, root: &std::path::Path) -> RunningAgent {
+    let path = repository(root, "repo");
     let repo = manager
         .repositories
         .register(path.to_str().unwrap().into(), None, None)
         .await
         .unwrap();
     let workspace = manager
-        .create_workspace(&repo.id, "killed".into(), None, None, None)
+        .create_workspace(&repo.id, "agent".into(), None, None, None)
         .await
         .unwrap();
     let wrapper = crate::process::identity::capture(std::process::id())
@@ -782,52 +786,98 @@ async fn kills_after_a_pause() -> (Vec<(String, Option<i64>)>, String) {
         restored_from: Vec::new(),
         reports_status: false,
     };
+    protocol::write(wrapper_side.get_mut(), &started)
+        .await
+        .unwrap();
+    assert!(matches!(read(&mut wrapper_side).await, Control::Started));
+    RunningAgent {
+        workspace,
+        wrapper_side,
+        executing,
+    }
+}
+
+impl RunningAgent {
+    async fn send(&mut self, event: &ExecutionEvent) {
+        protocol::write(self.wrapper_side.get_mut(), event)
+            .await
+            .unwrap();
+    }
+
+    /// Finish the run, its pause already reported, and return what the
+    /// space's log records of each stop or exit of its agent: the event's
+    /// kind, its kills and its cause.
+    async fn finish(mut self, manager: &Manager) -> Vec<(String, Option<i64>, Option<String>)> {
+        let finished = ExecutionEvent::Finished {
+            exit_code: 143,
+            memory: None,
+        };
+        self.send(&finished).await;
+        assert!(matches!(
+            read(&mut self.wrapper_side).await,
+            Control::Finished { .. }
+        ));
+        bounded(self.executing).await.unwrap().unwrap();
+        let id = self.workspace.id.clone();
+        (manager.store)
+            .run(move |db| {
+                let mut query = db.prepare(
+                    "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills'),
+                         json_extract(record,'$.agent.cause')
+                     FROM space_events WHERE space_id=?1
+                     AND json_extract(record,'$.kind') IN ('agent_stopped','agent_exited')",
+                )?;
+                Ok(query
+                    .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                    .collect::<rusqlite::Result<_>>()?)
+            })
+            .await
+            .unwrap()
+    }
+}
+
+#[tokio::test]
+async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
+    let (root, manager) = manager().await;
+    let mut run = running_agent(&manager, root.path()).await;
     let paused = ExecutionEvent::Paused {
         memory: Some(ScopeMemory {
             oom_kills: 2,
             peak: 1 << 30,
         }),
     };
-    for event in [started, paused] {
-        protocol::write(wrapper_side.get_mut(), &event)
-            .await
-            .unwrap();
-    }
-    assert!(matches!(read(&mut wrapper_side).await, Control::Started));
-    // The wrapper then finishes, its paused run already reported.
-    let finished = ExecutionEvent::Finished {
-        exit_code: 143,
-        memory: None,
-    };
-    protocol::write(wrapper_side.get_mut(), &finished)
-        .await
-        .unwrap();
-    assert!(matches!(
-        read(&mut wrapper_side).await,
-        Control::Finished { .. }
-    ));
-    bounded(executing).await.unwrap().unwrap();
-    let id = workspace.id.clone();
-    let kills = (manager.store)
-        .run(move |db| {
-            let mut query = db.prepare(
-                "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills')
-                 FROM space_events WHERE space_id=?1
-                 AND json_extract(record,'$.kind') IN ('agent_stopped','agent_exited')",
-            )?;
-            Ok(query
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?
-                .collect::<rusqlite::Result<_>>()?)
-        })
-        .await
-        .unwrap();
+    run.send(&paused).await;
+    let ends = run.finish(&manager).await;
+    assert_eq!(ends, [("agent_stopped".to_owned(), Some(2), None)]);
     let alerts = manager.notifications.list(false, 1).await.unwrap();
-    (kills, alerts[0].message.clone())
+    assert!(
+        alerts[0].message.contains("killed 2"),
+        "{}",
+        alerts[0].message
+    );
 }
 
+/// A stop the daemon sends names its cause on the agent's stop.
 #[tokio::test]
-async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
-    let (kills, alert) = kills_after_a_pause().await;
-    assert_eq!(kills, [("agent_stopped".to_owned(), Some(2))]);
-    assert!(alert.contains("killed 2"), "{alert}");
+async fn an_agents_stop_records_the_cause_the_daemon_stopped_it_for() {
+    let (root, manager) = manager().await;
+    let mut run = running_agent(&manager, root.path()).await;
+    let stopping = tokio::spawn({
+        let (manager, id) = (manager.clone(), run.workspace.id.clone());
+        async move {
+            let request = crate::daemon::executions::StopRequest::manual();
+            (manager.agents)
+                .stop_space(&*manager, &SpaceSelector::id(&id), request)
+                .await
+        }
+    });
+    assert!(matches!(
+        read(&mut run.wrapper_side).await,
+        Control::Pause { .. }
+    ));
+    run.send(&ExecutionEvent::Paused { memory: None }).await;
+    let ends = run.finish(&manager).await;
+    bounded(stopping).await.unwrap().unwrap();
+    let cause = r#"{"kind":"user_stop"}"#.to_owned();
+    assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
 }

@@ -104,8 +104,8 @@ impl Manager {
                     .await
                     {
                         let request = StopRequest {
-                            reason: "the Shoal daemon stopped".into(),
                             save: Save::Everything,
+                            ..StopRequest::shutdown("the Shoal daemon stopped")
                         };
                         return self
                             .agents

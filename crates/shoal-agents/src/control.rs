@@ -6,6 +6,7 @@ use crate::execution::recovery::LastSessionExt;
 use rusqlite::OptionalExtension;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::agent_ends::StopCause;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::model::ByKind;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
@@ -85,6 +86,9 @@ pub trait ProtectionExt {
     /// Whether `[overload.recovery]` decides its restore, as for a stop that
     /// load or disk space caused; idle stops restore whatever it says.
     fn follows_overload_recovery(&self) -> bool;
+
+    /// What the stop's `agent_stopped` event names as its cause.
+    fn cause(&self) -> StopCause;
 
     /// Whether a done assignment cancels its restore. An idle stop's restore
     /// waits for an update all the same, since the agent ran until Shoal
@@ -166,6 +170,19 @@ impl ProtectionExt for Protection {
 
     fn ends_with_assignment(&self) -> bool {
         !self.is_idle() || self.is_blocked()
+    }
+
+    fn cause(&self) -> StopCause {
+        match self.reason.as_str() {
+            RESTART_REASON => StopCause::Restart,
+            AWAY_REASON => StopCause::IdleSleep,
+            ROOM_REASON => StopCause::MakingRoom,
+            BLOCKED_REASON => StopCause::Blocked,
+            LIMITED_REASON | FAILED_TURN_REASON => StopCause::TurnRetry,
+            reason => StopCause::Protection {
+                reason: reason.to_owned(),
+            },
+        }
     }
 }
 

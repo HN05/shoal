@@ -91,7 +91,7 @@ fn event_line(details: &EventDetails) -> (String, String) {
         SpaceEvent::Absorbed { absorb } => fixed("Absorbed", absorbed_into(absorb)),
         SpaceEvent::AbsorbedSpace { absorb } => fixed("Absorbed a space", took_over(absorb)),
         SpaceEvent::AgentStarted { agent } => fixed("Agent started", started(agent)),
-        SpaceEvent::AgentStopped { agent } => fixed("Agent stopped", agent.name.to_string()),
+        SpaceEvent::AgentStopped { agent } => fixed("Agent stopped", stop(agent)),
         SpaceEvent::AgentExited { agent } => fixed("Agent exited", exit(agent)),
         SpaceEvent::ReviewReady { review: mark } => fixed("Marked ready", review(mark)),
         SpaceEvent::ReviewCleared { review: mark } => fixed("Ready withdrawn", review(mark)),
@@ -307,6 +307,14 @@ fn exit(agent: &AgentEvent) -> String {
     match agent.oom_kills {
         0 => exit,
         kills => format!("{exit}, {kills} killed for memory"),
+    }
+}
+
+/// The stopped agent and what stopped it, when its event records that.
+fn stop(agent: &AgentEvent) -> String {
+    match &agent.cause {
+        Some(cause) => format!("{}, {cause}", agent.name),
+        None => agent.name.to_string(),
     }
 }
 

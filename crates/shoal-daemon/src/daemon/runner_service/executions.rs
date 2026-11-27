@@ -89,10 +89,7 @@ impl shoal_runner::daemon::Executions for Manager {
     }
 
     fn stop_job_runner<'a>(&'a self, id: &'a SpaceId, reason: String) -> BoxFuture<'a, Result<()>> {
-        let request = StopRequest {
-            reason,
-            save: Save::Nothing,
-        };
+        let request = StopRequest::requested(reason, Save::Nothing);
         Box::pin(async move {
             self.agents
                 .stop_space(self, &SpaceSelector::id(id), request)

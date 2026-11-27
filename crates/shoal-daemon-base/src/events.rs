@@ -442,10 +442,15 @@ pub fn record_gate(
     journal::append(db, &request.space_id, SpaceEvent::GateDecided { gate })
 }
 
-/// Record an agent's start, stop or exit in the space `id`'s log; a
-/// failure is logged, never returned, as it must not fail the agent's
-/// lifecycle.
+/// Record an agent's start, stop or exit in the space `id`'s log, and a
+/// stop's cause in the daemon's; a failure is logged, never returned, as it
+/// must not fail the agent's lifecycle.
 pub async fn record_agent(store: &Store, id: &SpaceId, kind: EventKind, agent: AgentEvent) {
+    if kind == EventKind::AgentStopped {
+        let cause =
+            (agent.cause.as_ref()).map_or_else(|| "unknown".to_owned(), ToString::to_string);
+        log!("agent {} of {id} stopped: {cause}", agent.name);
+    }
     let space = id.clone();
     let recorded = store
         .run(move |db| insert_agent(db, &space, kind, agent))
