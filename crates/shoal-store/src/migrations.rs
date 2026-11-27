@@ -7,6 +7,7 @@ use rusqlite::Connection;
 mod agent_modes;
 mod alert_attachments;
 mod approval_columns;
+mod clean_request_columns;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
@@ -19,7 +20,7 @@ mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 326;
+pub const SCHEMA_VERSION: i64 = 327;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -184,6 +185,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         326,
         include_str!("migrations/0326_simulator_columns.sql"),
         Some(simulator_columns::move_fields),
+    ),
+    (
+        327,
+        include_str!("migrations/0327_clean_request_columns.sql"),
+        Some(clean_request_columns::move_fields),
     ),
 ];
 

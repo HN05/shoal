@@ -1,9 +1,7 @@
 //! Audit trail for clean-device requests. Persisted before any destructive
 //! simctl action and retained after the workspace is gone.
 use anyhow::{Result, ensure};
-use rusqlite::{OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
-use shoal_ids::space_ids::SpaceId;
 
 use super::{SimRequest, Simulator};
 use crate::{Leases, allocation::Allocation, daemon::Daemon, model::Workspace, time::UnixTime};
@@ -12,6 +10,11 @@ pub use shoal_protocol::sim::{
     AuditEntry, CleanAction, CleanRequest, CleanRequestStatus, EvictedDevice,
 };
 use shoal_protocol::space_names::SpaceSelector;
+
+mod records;
+pub use records::interrupt as interrupt_clean_requests;
+#[cfg(feature = "test-support")]
+pub use records::save as record_clean_request;
 
 /// Operations on the client type [`CleanRequest`] that only the `shoal` command uses.
 pub(super) trait CleanRequestExt {
@@ -88,20 +91,8 @@ impl Leases {
     ) -> Result<CleanRequest> {
         uuid::Uuid::parse_str(&request.request_id)?;
         let id = request.request_id.clone();
-        let previous = self
-            .store
-            .run(move |db| {
-                Ok(db
-                    .query_row(
-                        "SELECT record FROM simulator_clean_requests WHERE request_id=?1",
-                        [id],
-                        |r| r.get::<_, String>(0),
-                    )
-                    .optional()?)
-            })
-            .await?;
-        let audit = if let Some(previous) = previous {
-            let mut audit: CleanRequest = serde_json::from_str(&previous)?;
+        let previous = self.store.run(move |db| records::find(db, &id)).await?;
+        let audit = if let Some(mut audit) = previous {
             ensure!(
                 audit.workspace_id == workspace.id
                     && audit.execution_id == execution_id
@@ -155,20 +146,8 @@ impl Leases {
     }
 
     pub async fn save_clean_request(&self, audit: &CleanRequest) -> Result<()> {
-        let (id, owner, record) = (
-            audit.request.request_id.clone(),
-            audit.workspace_id.clone(),
-            serde_json::to_string(audit)?,
-        );
-        self.store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO simulator_clean_requests(request_id,workspace_id,record) VALUES (?1,?2,?3) ON CONFLICT(request_id) DO UPDATE SET record=excluded.record",
-                    params![id, owner, record],
-                )?;
-                Ok(())
-            })
-            .await
+        let audit = audit.clone();
+        self.store.run(move |db| records::save(db, &audit)).await
     }
 
     /// The clean requests of the workspace `selector` names, or of all of
@@ -186,34 +165,7 @@ impl Leases {
             "history limit must be between 1 and 50"
         );
         self.store
-            .run(move |db| history(db, owner.as_ref(), limit, before))
+            .run(move |db| records::history(db, owner.as_ref(), limit, before))
             .await
     }
-}
-
-/// Up to `limit` clean requests before `before`, of `owner` or of every
-/// workspace, newest first.
-fn history(
-    db: &rusqlite::Connection,
-    owner: Option<&SpaceId>,
-    limit: u32,
-    before: Option<i64>,
-) -> Result<Vec<AuditEntry>> {
-    let records = db
-        .prepare(
-            "SELECT id,record FROM simulator_clean_requests WHERE (?1 IS NULL OR workspace_id=?1) AND (?2 IS NULL OR id<?2) ORDER BY id DESC LIMIT ?3",
-        )?
-        .query_map(params![owner, before, limit], |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    records
-        .into_iter()
-        .map(|(id, record)| {
-            Ok(AuditEntry {
-                id,
-                request: serde_json::from_str(&record)?,
-            })
-        })
-        .collect()
 }

@@ -2,7 +2,9 @@ use crate::daemon::quarantine::*;
 use crate::daemon::store::Store;
 use crate::state::WorkspaceState;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::sim::{CleanRequest, CleanRequestStatus, SimRequest};
 use shoal_protocol::test_support;
+use shoal_protocol::time::UnixTime;
 use shoal_store::test_support::seeds;
 use std::path::Path;
 
@@ -32,9 +34,30 @@ fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
     }
     let preparing = SpaceId::from("preparing");
     seeds::bare_execution(db, "execution", &preparing, ExecutionState::Running)?;
-    db.execute_batch("INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
-                VALUES ('clean','preparing','{\"status\":\"requested\",\"reason\":\"keep audit\"}');")?;
+    shoal_leases::sim::record_clean_request(db, &requested_clean(preparing))?;
     Ok(())
+}
+
+/// A clean request of `workspace` that a stopped daemon left in progress.
+fn requested_clean(workspace: SpaceId) -> CleanRequest {
+    CleanRequest {
+        workspace_id: workspace,
+        workspace_name: "preparing".into(),
+        repository_id: "repo".into(),
+        execution_id: None,
+        requested_at: UnixTime::from_seconds(1),
+        updated_at: UnixTime::from_seconds(1),
+        attempts: 1,
+        request: SimRequest::new("default".into()),
+        status: CleanRequestStatus::Requested,
+        action: None,
+        simulator_id: None,
+        udid: None,
+        apps_removed: None,
+        erase_completed: false,
+        evicted: Vec::new(),
+        error: None,
+    }
 }
 
 fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
@@ -42,7 +65,7 @@ fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
         .prepare(
             "SELECT json_array(id,state,error) FROM workspaces
             UNION ALL SELECT json_array(id,state) FROM executions
-            UNION ALL SELECT record FROM simulator_clean_requests ORDER BY 1",
+            UNION ALL SELECT json_array(status) FROM simulator_clean_requests ORDER BY 1",
         )?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
@@ -76,7 +99,7 @@ fn quarantined_snapshot() -> Vec<String> {
         })
         .collect();
     rows.push(serde_json::json!(["execution", ExecutionState::Unknown]).to_string());
-    rows.push(r#"{"status":"interrupted","reason":"keep audit"}"#.into());
+    rows.push(serde_json::json!([CleanRequestStatus::Interrupted]).to_string());
     rows.sort();
     rows
 }

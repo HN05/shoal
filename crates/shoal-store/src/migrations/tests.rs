@@ -242,6 +242,7 @@ fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
 mod agent_modes;
 mod alert_attachments;
 mod approval_columns;
+mod clean_request_columns;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;

@@ -16,11 +16,6 @@ CREATE TABLE ports (
             env_var TEXT NOT NULL, reason TEXT, PRIMARY KEY(workspace_id, name), UNIQUE(workspace_id, env_var)
         );
 
-CREATE TABLE simulator_clean_requests (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
-            workspace_id TEXT NOT NULL, record TEXT NOT NULL
-        );
-
 CREATE TABLE resource_pools (
             scope TEXT NOT NULL, name TEXT NOT NULL, definition TEXT NOT NULL, PRIMARY KEY(scope,name)
         );
@@ -1175,9 +1170,12 @@ CREATE TABLE simulators(
     record TEXT NOT NULL
 );
 
-CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
+CREATE TABLE "simulator_clean_requests" (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, request_id TEXT NOT NULL UNIQUE,
+    workspace_id TEXT NOT NULL, status TEXT NOT NULL, record TEXT NOT NULL
+);
 
-CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
+CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);
 
@@ -1305,6 +1303,8 @@ CREATE INDEX space_events_agents ON space_events(created_at)
     WHERE kind IN ('agent_started','agent_stopped','agent_exited');
 
 CREATE INDEX simulators_effective_owner ON simulators(coalesce(workspace_id, last_workspace_id), id);
+
+CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
 
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL

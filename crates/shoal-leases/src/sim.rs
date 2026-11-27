@@ -12,7 +12,9 @@ use shoal_ids::space_ids::SpaceId;
 use uuid::Uuid;
 
 use audit::CleanRequest;
-pub use records::interrupt_clean_requests;
+pub use audit::interrupt_clean_requests;
+#[cfg(feature = "test-support")]
+pub use audit::record_clean_request;
 pub use shoal_protocol::sim::{
     Profile, SimConfig, SimRequest, Simulator, SimulatorCatalog, SimulatorOverview, SimulatorState,
 };

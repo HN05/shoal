@@ -221,14 +221,14 @@ states!(CleanAction {
     CreateAfterEviction => "create_after_eviction",
 });
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvictedDevice {
     pub id: String,
     pub udid: Option<String>,
     pub installed_apps: Option<usize>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CleanRequest {
     pub workspace_id: SpaceId,
     pub workspace_name: SpaceName,
