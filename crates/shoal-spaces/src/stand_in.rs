@@ -1622,6 +1622,10 @@ impl Hub for StandIn {
         Box::pin(async { bail!("{NOT_HERE}: named_machine") })
     }
 
+    fn joined_machines(&self) -> BoxFuture<'_, Result<Vec<Member>>> {
+        Box::pin(async { bail!("{NOT_HERE}: joined_machines") })
+    }
+
     fn files_stay_here(&self, _: &str) -> anyhow::Error {
         unreachable!("{NOT_HERE}: files_stay_here")
     }

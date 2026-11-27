@@ -460,6 +460,12 @@ the background there, with that machine's agent tools and modes. `--mode`
 names one of that machine's modes, which decides whether the start makes a
 workspace or a chat. A terminal's picker lists those modes.
 
+Your machine refuses the start before anything goes there when the hub lists
+that machine without the `--agent` it names, for the start's repository or
+outside one. The refusal names the connected machines that list that agent.
+A machine that has not reported yet, or has not registered the repository,
+gets the start and decides there.
+
 That machine finds the repository by its origin. Where it has none, it clones
 it as `shoal repo add <url>` does. A start below another machine's space, on
 any machine, in a repository the starting machine lacks, clones it from the

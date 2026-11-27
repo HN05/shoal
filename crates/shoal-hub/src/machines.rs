@@ -30,6 +30,15 @@ impl Hub {
         Ok(Named { machine, own })
     }
 
+    /// The joined machines, as [`Self::named_machine`] reads them; none on a
+    /// machine in no hub.
+    pub async fn joined_machines(&self, daemon: &dyn Daemon) -> Result<Vec<Member>> {
+        let known = self.directory_or_known(daemon).await?;
+        Ok(known
+            .map(|(_, directory)| directory.machines)
+            .unwrap_or_default())
+    }
+
     /// The other joined machine `named` names, as
     /// [`Self::named_machine`] reads it; none when it names none, or this
     /// one.

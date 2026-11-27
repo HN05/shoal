@@ -138,7 +138,8 @@ impl Request {
 
 impl Machine {
     pub fn has_repository(&self, origin: Option<&str>) -> bool {
-        origin.is_none_or(|origin| self.registered(origin).is_some())
+        let registered = |origin| (self.capacity.iter()).any(|c| c.registered(origin).is_some());
+        origin.is_none_or(registered)
     }
 
     /// Whether it can launch `agent` in the repository of `origin`, or
@@ -148,14 +149,22 @@ impl Machine {
         let Some(capacity) = &self.capacity else {
             return false;
         };
-        let registered = origin.and_then(|origin| self.registered(origin));
-        let agents = registered.map_or(&capacity.agents, |registered| &registered.agents);
+        let agents = capacity.agents_in(origin).unwrap_or(&capacity.agents);
         agents.iter().any(|launched| launched == agent)
+    }
+}
+
+impl Capacity {
+    /// The agents it launches in the repository of `origin`, or outside a
+    /// repository without one; none for a repository it has not reported.
+    pub fn agents_in(&self, origin: Option<&str>) -> Option<&[String]> {
+        match origin {
+            Some(origin) => (self.registered(origin)).map(|registered| &registered.agents[..]),
+            None => Some(&self.agents),
+        }
     }
 
     fn registered(&self, origin: &str) -> Option<&Registered> {
-        (self.capacity.iter())
-            .flat_map(|capacity| &capacity.repositories)
-            .find(|registered| registered.origin == origin)
+        (self.repositories.iter()).find(|registered| registered.origin == origin)
     }
 }

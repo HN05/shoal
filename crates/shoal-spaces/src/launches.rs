@@ -17,6 +17,7 @@ pub mod check;
 pub mod create;
 pub mod elsewhere;
 pub mod labels;
+mod launchable;
 pub mod placement;
 pub use placement::{heavy, lifetime};
 mod run;

@@ -382,6 +382,7 @@ impl Spaces {
         caller: Option<&Caller>,
     ) -> Result<Carried> {
         if !self.launch_shape(daemon, launch, caller).await?.repository {
+            self.ensure_launches(daemon, launch, machine, None).await?;
             return Ok(Carried::default());
         }
         let Some(repository) = self.found_repository(daemon, launch, caller).await? else {
@@ -401,6 +402,7 @@ impl Spaces {
                 machine.name
             )
         })?;
+        (self.ensure_launches(daemon, launch, machine, Some(&origin))).await?;
         let (mut base_branch, mut commit) = (None, None);
         let carrying = (machine, &repository, origin.as_str());
         // A copy without unsaved files keeps them in its HEAD, its base.

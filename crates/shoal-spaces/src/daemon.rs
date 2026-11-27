@@ -757,6 +757,9 @@ pub trait Hub: Send + Sync {
     /// says whether it is this machine.
     fn named_machine<'a>(&'a self, named: &'a str) -> BoxFuture<'a, Result<(Member, bool)>>;
 
+    /// The joined machines, as `named_machine` reads them.
+    fn joined_machines(&self) -> BoxFuture<'_, Result<Vec<Member>>>;
+
     /// `elsewhere` names where it runs, such as "machine desk".
     fn files_stay_here(&self, elsewhere: &str) -> anyhow::Error;
 

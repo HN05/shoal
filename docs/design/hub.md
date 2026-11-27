@@ -297,6 +297,11 @@ The caller's machine reads that machine's modes through the hub. It names the
 repository by its origin and sends the config the repository tracks. That
 machine reads the modes under that config where it lacks the repository.
 
+The caller's machine refuses a start whose agent the hub lists that machine
+without, before it carries anything there, since that machine would refuse
+it. It goes by the machine's last [capacity report](#capacity-reports), so a
+machine without one, or without the repository, decides on its own.
+
 ### What a launch carries
 
 The launch carries:

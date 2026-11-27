@@ -154,6 +154,10 @@ impl shoal_spaces::daemon::Hub for Manager {
         })
     }
 
+    fn joined_machines(&self) -> BoxFuture<'_, Result<Vec<Member>>> {
+        Box::pin(self.hub.joined_machines(self))
+    }
+
     fn files_stay_here(&self, elsewhere: &str) -> anyhow::Error {
         shoal_hub::files_stay_here(elsewhere)
     }
