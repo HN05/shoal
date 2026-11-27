@@ -6,7 +6,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceName;
 
-use crate::model::SpaceKind;
+use crate::model::{Space, SpaceKind};
 
 pub fn space_kind(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<SpaceKind>> {
     Ok(db
@@ -29,6 +29,17 @@ pub fn space_ids(db: &rusqlite::Connection) -> Result<std::collections::HashSet<
         .prepare("SELECT id FROM spaces")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Fills in what every space keeps beside its row: its holds, ready marks,
+/// progress, parent and children.
+pub fn load_shared<P>(db: &rusqlite::Connection, space: &mut Space<P>) -> Result<()> {
+    space.holds = crate::holds::list(db, &space.id)?;
+    space.review = crate::ready_marks::list(db, &space.id)?;
+    space.progress = crate::progress::current(db, &space.id)?;
+    space.parent = crate::tree::parent(db, &space.id)?;
+    space.children = crate::tree::children(db, &space.id)?;
+    Ok(())
 }
 
 /// Of every workspace when `repository` is `None`.

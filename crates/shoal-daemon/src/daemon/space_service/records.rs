@@ -11,7 +11,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::agent::Agent;
 use shoal_protocol::executions::TurnRetry;
-use shoal_protocol::model::{Chat, LinkedItem, Relation, Repository, SpaceLinks, Workspace};
+use shoal_protocol::model::{Chat, LinkedItem, Relation, Repository, Space, SpaceLinks, Workspace};
 use shoal_protocol::state::AgentState;
 use shoal_spaces::daemon::Dropped;
 
@@ -28,30 +28,17 @@ pub(crate) struct SpaceRecords {
 
 impl shoal_spaces::daemon::Records for SpaceRecords {
     fn load_workspace(&self, db: &Connection, workspace: &mut Workspace) -> Result<()> {
-        let id = &workspace.id.clone();
+        load_space(db, workspace)?;
         workspace.latest_review = shoal_reviews::store::latest_status(
             db,
             &crate::daemon::review_service::ReviewRecords,
-            id,
+            &workspace.id,
         )?;
-        workspace.agent_state = turn_state::current(db, id)?;
-        workspace.sleep = idle_wakes::sleep::current(db, id)?;
-        workspace.wake_at = wake_timers::due_at(db, id)?;
-        workspace.asleep = crate::daemon::agent_queue::asleep::current(db, id)?;
-        workspace.restart = restarts::record::current(db, id)?;
-        workspace.links = shoal_links::linked::space_links(db, id)?;
         Ok(())
     }
 
     fn load_chat(&self, db: &Connection, chat: &mut Chat) -> Result<()> {
-        let id = &chat.id.clone();
-        chat.links = shoal_links::linked::space_links(db, id)?;
-        chat.agent_state = turn_state::current(db, id)?;
-        chat.sleep = idle_wakes::sleep::current(db, id)?;
-        chat.wake_at = wake_timers::due_at(db, id)?;
-        chat.asleep = crate::daemon::agent_queue::asleep::current(db, id)?;
-        chat.restart = restarts::record::current(db, id)?;
-        Ok(())
+        load_space(db, chat)
     }
 
     fn space_links(&self, db: &Connection, id: &SpaceId) -> Result<SpaceLinks> {
@@ -175,4 +162,17 @@ impl shoal_spaces::daemon::Records for SpaceRecords {
     fn coordination(&self) -> &dyn shoal_coordination::daemon::Records {
         &self.coordination
     }
+}
+
+/// Fills in what the other subsystems keep of every space: its agent's
+/// state, sleep, wake, restart and place in the queue, and its links.
+fn load_space<P>(db: &Connection, space: &mut Space<P>) -> Result<()> {
+    let id = &space.id;
+    space.agent_state = turn_state::current(db, id)?;
+    space.sleep = idle_wakes::sleep::current(db, id)?;
+    space.wake_at = wake_timers::due_at(db, id)?;
+    space.asleep = crate::daemon::agent_queue::asleep::current(db, id)?;
+    space.restart = restarts::record::current(db, id)?;
+    space.links = shoal_links::linked::space_links(db, id)?;
+    Ok(())
 }

@@ -267,12 +267,6 @@ pub fn place_below(
     set_parent(db, space, Some(parent))
 }
 
-pub fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
-    workspace.parent = parent(db, &workspace.id)?;
-    workspace.children = children(db, &workspace.id)?;
-    Ok(())
-}
-
 pub mod move_up;
 mod parents;
 mod reads;

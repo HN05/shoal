@@ -646,11 +646,7 @@ fn recorded(
     .filter(|chat| (reached.as_ref()).is_none_or(|reached| reached.contains(&chat.id)))
     .map(|mut chat| {
         chat.running = crate::executions::execution_count(db, &chat.id, None)? > 0;
-        chat.review = crate::ready_marks::list(db, &chat.id)?;
-        chat.holds = crate::holds::list(db, &chat.id)?;
-        chat.parent = super::tree::parent(db, &chat.id)?;
-        chat.children = super::tree::children(db, &chat.id)?;
-        chat.progress = crate::progress::current(db, &chat.id)?;
+        spaces::load_shared(db, &mut chat)?;
         records.load_chat(db, &mut chat)?;
         Ok(chat)
     })

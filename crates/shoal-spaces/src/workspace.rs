@@ -237,12 +237,9 @@ fn load_details(
     records: &dyn Records,
     workspace: &mut Workspace,
 ) -> Result<()> {
-    workspace.holds = super::holds::list(db, &workspace.id)?;
-    workspace.review = super::ready_marks::list(db, &workspace.id)?;
-    workspace.progress = crate::progress::current(db, &workspace.id)?;
+    super::spaces::load_shared(db, workspace)?;
     stack::load(db, workspace)?;
     copies::load(db, workspace)?;
-    super::tree::load(db, workspace)?;
     let running = Some(crate::state::ExecutionState::Running);
     workspace.running = crate::executions::execution_count(db, &workspace.id, running)? > 0;
     workspace.done = store::spaces::done(db, &workspace.id)?;
