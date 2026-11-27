@@ -2,7 +2,6 @@
 //! the new space links the run.
 use std::{path::Path, sync::Arc};
 
-use shoal_core::start_plan::QueuedStart;
 use shoal_forge_types::items::reference::ItemInput;
 use shoal_protocol::launches::{ItemChoice, Launch, LaunchSource, StartTarget};
 use shoal_protocol::protocol::{Launched, operations::StartedWorkspace};
@@ -105,12 +104,8 @@ impl Forge {
 
     /// The run the agent `launched` queued starts on, as its plan names it.
     async fn started_run(&self, launched: &Launched) -> Option<String> {
-        let entry = launched.entry.as_ref().unwrap().id.clone();
-        let plan: String = (self.manager.store)
-            .run(move |db| shoal_store::test_support::queue::launch_plan(db, entry.as_str()))
-            .await
-            .unwrap();
-        let start = QueuedStart::of(&plan).unwrap();
+        let entry = &launched.entry.as_ref().unwrap().id;
+        let start = crate::daemon::test_support::planned_start(&self.manager, entry).await;
         start.launch.run.map(|run| run.to_string())
     }
 

@@ -131,7 +131,7 @@ async fn a_chats_failed_launch_keeps_the_chat() {
         .start_new_chat(&*manager, Some((&repo.id).into()), None, chat);
     let chat = chat.await.unwrap();
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
-    let request = crate::start_plan::queued_agent_request(&chat, launch, None).unwrap();
+    let request = crate::start_plan::queued_agent_request(&chat, launch, None);
     let entry = manager
         .agents
         .queue_add(&*manager, request)

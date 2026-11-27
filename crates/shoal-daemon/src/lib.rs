@@ -6,7 +6,7 @@ mod daemon;
 use shoal_core::env;
 #[cfg(test)]
 use shoal_core::reviews;
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(test)]
 use shoal_core::start_plan;
 #[cfg(any(test, feature = "test-support"))]
 use shoal_core::test_support;

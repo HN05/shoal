@@ -1,13 +1,14 @@
-//! The plan of a queued agent start, which everything that queues one and
-//! the `queue-start` worker that carries it out agree on. The queue keeps it
-//! as JSON in [`QueueRequest::plan`] until the worker runs.
+//! How an agent start is queued and placed: the queue request that
+//! everything that queues one builds, which keeps its start in
+//! [`QueueRequest::start`] until the `queue-start` worker carries it out,
+//! and what the place the worker opens runs.
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use std::path::PathBuf;
 
 use anyhow::Result;
 
 use crate::{
-    model::QueueRequest,
+    model::{QueueRequest, QueuedStart},
     protocol::{
         CreationOptions, PullHead,
         operations::{QueuedLaunch, WorkspaceStart},
@@ -18,23 +19,6 @@ use shoal_protocol::space_names::SpaceSelector;
 
 mod place;
 pub use place::open_place;
-
-/// The plan of a queued agent start, the same for every kind of space: the
-/// launch of the agent of the recorded space its entry names, and the PR it
-/// links as it starts.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct QueuedStart {
-    pub launch: QueuedLaunch,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pr: Option<crate::forge::items::reference::ItemInput>,
-}
-
-impl QueuedStart {
-    /// The plan a queue entry holds as the JSON `plan`.
-    pub fn of(plan: &str) -> Result<Self> {
-        anyhow::Context::context(serde_json::from_str(plan), "read the queued launch's plan")
-    }
-}
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 pub struct Creation {
@@ -156,31 +140,16 @@ pub fn queued_agent_request<P>(
     space: &crate::model::Space<P>,
     mut launch: QueuedLaunch,
     pr: Option<crate::forge::items::reference::ItemInput>,
-) -> Result<QueueRequest> {
+) -> QueueRequest {
     let env =
         (launch.env.take()).unwrap_or_else(|| crate::terminal::detached_start_environment(None));
-    let issue_title = launch.issue.as_ref().map(|issue| issue.title.clone());
-    let issue_labels = (launch.issue.as_ref()).map_or_else(Vec::new, |issue| issue.labels.clone());
-    let (agent, now, here) = (launch.agent.clone(), launch.now, launch.here);
-    let (mode, narrowing) = (launch.mode.clone(), launch.narrowing);
-    let (source, replace) = (launch.source.clone(), launch.replace);
-    let plan = QueuedStart { launch, pr };
-    Ok(QueueRequest {
+    QueueRequest {
         name: space.name.clone(),
-        agent,
-        mode,
-        narrowing,
-        issue_title,
-        issue_labels,
-        plan: serde_json::to_string(&plan)?,
+        start: QueuedStart { launch, pr },
         env,
-        now,
         space: SpaceSelector::id(&space.id),
-        starts_in_caller: here,
         blockers: Vec::new(),
-        source,
-        replace,
-    })
+    }
 }
 
 /// What the place a start opens beside its terminal hands over to: the

@@ -157,53 +157,32 @@ pub struct StoppedSpace {
     pub cancelled_run: Option<String>,
 }
 
-/// An agent launch in a recorded space to admit or queue. The plan is JSON
-/// in the format of `shoal-core`'s `start_plan::QueuedStart`, which the
-/// `queue-start` worker reads back.
+/// An agent launch in a recorded space to admit or queue.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueueRequest {
     pub name: SpaceName,
-    pub agent: crate::agent::Agent,
-    /// The mode the agent starts in; the default mode when omitted.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mode: Option<crate::config::modes::ModeName>,
-    /// The permissions `--permission` gave the agent, which apply as
-    /// given whatever its mode's.
-    #[serde(
-        default,
-        skip_serializing_if = "crate::config::permissions::PermissionsConfig::is_empty"
-    )]
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub issue_title: Option<String>,
-    pub plan: String,
+    pub start: QueuedStart,
     /// Terminal multiplexer variables the start needs to reach the same window,
     /// and the caller's output setting.
     pub env: std::collections::BTreeMap<String, String>,
-    /// Start at once regardless of the limits; the agent still takes a slot.
-    /// A scoped caller does as its `limits` permission allows.
-    pub now: bool,
     /// The recorded space the launch starts its agent in, in that space's
     /// repository. The daemon starts the entry itself, outside the caller's
-    /// processes, whether or not a limit applies, unless `starts_in_caller`.
+    /// processes, whether or not a limit applies, unless the launch runs
+    /// `here`.
     pub space: SpaceSelector,
-    /// The caller starts the launch in `space` itself once admitted, rather
-    /// than the daemon.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub starts_in_caller: bool,
     /// What blocks the launch; it always queues while any remains.
     #[serde(default)]
     pub blockers: Vec<Blocker>,
-    /// The labels of the issue the launch works on, whose
-    /// `[priority.labels]` priority ranks it when it is given none.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub issue_labels: Vec<String>,
-    /// What made the launch, which its agent's start records.
+}
+
+/// The plan of a queued agent start, the same for every kind of space: the
+/// launch of the agent of the recorded space its entry names, and the PR it
+/// links as it starts, which the `queue-start` worker carries out.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueuedStart {
+    pub launch: crate::protocol::operations::QueuedLaunch,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source: Option<crate::launches::LaunchSource>,
-    /// Discard the stopped or asleep agent of `space` first, so the launch
-    /// takes its place.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub replace: bool,
+    pub pr: Option<crate::forge::items::reference::ItemInput>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,5 +199,5 @@ pub struct QueueAdmission {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueuedPlan {
     pub entry: QueueEntry,
-    pub plan: String,
+    pub start: QueuedStart,
 }

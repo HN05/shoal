@@ -267,7 +267,7 @@ async fn an_app_queues_an_agent_once_it_can_run() {
     let queued: QueueEntry = connection::request(&app, queue("probe")).await.unwrap();
     let plan = queued_plan(&daemon, &queued).await;
     // A launcher's `{prompt}` receives it rather than its forwarded arguments.
-    assert_eq!(plan["launch"]["prompt"], "Fix the build");
+    assert_eq!(plan.launch.prompt.as_deref(), Some("Fix the build"));
     assert_eq!(queued.agent, "probe");
 
     // A workspace's agent queues agents only in the workspaces below its own,
@@ -338,11 +338,10 @@ async fn a_worker_without_an_agent_or_task_takes_the_default_on_its_issue() {
     assert_eq!(queued.agent, "probe");
     assert_eq!(queued.issue_title.as_deref(), Some("Report"));
     let plan = queued_plan(&daemon, &queued).await;
+    let issue = plan.launch.issue.map(|issue| issue.url.to_string());
     assert!(
-        plan["launch"]["issue"]["url"]
-            .as_str()
-            .is_some_and(|url| url.ends_with("/40")),
-        "{plan}"
+        issue.as_ref().is_some_and(|url| url.ends_with("/40")),
+        "{issue:?}"
     );
 }
 
@@ -595,20 +594,15 @@ async fn a_scoped_start_takes_no_queue_entry_of_another_launch() {
         .await
         .unwrap();
     // The child's agent holds a slot, which the parent's scope reaches.
+    let launch = shoal_protocol::protocol::operations::QueuedLaunch {
+        here: true,
+        ..shoal_protocol::protocol::operations::QueuedLaunch::new("claude".into())
+    };
     let request = shoal_protocol::model::QueueRequest {
-        source: None,
-        replace: false,
-        issue_labels: Vec::new(),
-        narrowing: Default::default(),
-        mode: None,
         name: "child".into(),
-        agent: "claude".into(),
-        issue_title: None,
-        plan: "{}".into(),
+        start: shoal_protocol::model::QueuedStart { launch, pr: None },
         env: Default::default(),
-        now: false,
         space: SpaceSelector::id(&child.id),
-        starts_in_caller: true,
         blockers: Vec::new(),
     };
     let theirs = (daemon.manager.agents.queue_add(&*daemon.manager, request))

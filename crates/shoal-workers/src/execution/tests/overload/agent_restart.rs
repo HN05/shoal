@@ -111,20 +111,12 @@ async fn waiting_launch(manager: &Manager, workspace: &crate::model::Workspace) 
     let waiting = (manager.create_workspace(repository, "waiting".into(), None, None, None))
         .await
         .unwrap();
+    let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
     QueueRequest {
-        source: None,
-        replace: false,
-        issue_labels: Vec::new(),
-        narrowing: Default::default(),
         name: waiting.name.clone(),
-        agent: "claude".into(),
-        mode: None,
-        issue_title: None,
-        plan: "{}".into(),
+        start: crate::model::QueuedStart { launch, pr: None },
         env: Default::default(),
-        now: false,
         space: SpaceSelector::id(&waiting.id),
-        starts_in_caller: false,
         blockers: Vec::new(),
     }
 }

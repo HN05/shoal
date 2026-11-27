@@ -1,27 +1,30 @@
 //! The agent queue's rows a test reads where the queue offers no operation
 //! that reads them.
 use anyhow::Result;
-use rusqlite::Connection;
+use rusqlite::{Connection, Row};
 
-/// The plans of the launches queued in chats, oldest first, while they wait
-/// or start.
-pub fn chat_launch_plans(db: &Connection) -> Result<Vec<String>> {
+/// What `read` reads of each launch queued in a chat, oldest first, while
+/// it waits or starts.
+pub fn chat_launches<T>(
+    db: &Connection,
+    read: impl FnMut(&Row<'_>) -> rusqlite::Result<T>,
+) -> Result<Vec<T>> {
     Ok(db
         .prepare(
-            "SELECT q.plan FROM agent_queue q JOIN spaces s ON s.id=q.space_id
+            "SELECT q.* FROM agent_queue q JOIN spaces s ON s.id=q.space_id
              WHERE q.kind='launch' AND s.kind='chat' ORDER BY q.seq",
         )?
-        .query_map([], |row| row.get(0))?
+        .query_map([], read)?
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// The plan of the launch `id`, while it waits or starts.
-pub fn launch_plan(db: &Connection, id: &str) -> Result<String> {
-    Ok(
-        db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
-            row.get(0)
-        })?,
-    )
+/// What `read` reads of the queue entry `id`, while it waits or starts.
+pub fn entry<T>(
+    db: &Connection,
+    id: &str,
+    read: impl FnOnce(&Row<'_>) -> rusqlite::Result<T>,
+) -> Result<T> {
+    Ok(db.query_row("SELECT * FROM agent_queue WHERE id=?1", [id], read)?)
 }
 
 /// How many entries the queue records.

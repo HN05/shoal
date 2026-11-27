@@ -7,11 +7,10 @@ use shoal_ids::repository_ids::RepositoryId;
 use super::blockers;
 use crate::daemon::{Records, Removals};
 use crate::model::QueueEntry;
-use crate::model::QueueRequest;
+use crate::model::{QueueRequest, QueuedStart};
 use crate::state::QueueKind;
 use crate::state::QueueState;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
-use shoal_protocol::launches::LaunchSource;
 use shoal_protocol::time::UnixTime;
 
 /// A waiting row of the queue.
@@ -128,34 +127,20 @@ pub enum Awaits {
 /// What a launch asks for, a workspace's or a chat's, as its row records it.
 pub struct LaunchRequest {
     pub name: shoal_protocol::space_names::SpaceName,
-    pub agent: shoal_protocol::agent::Agent,
-    pub mode: Option<crate::config::modes::ModeName>,
-    pub narrowing: crate::config::permissions::PermissionsConfig,
-    pub issue_title: Option<String>,
-    pub issue_labels: Vec<String>,
-    pub plan: String,
+    pub start: QueuedStart,
     pub env: std::collections::BTreeMap<String, String>,
-    pub now: bool,
     pub blockers: Vec<shoal_protocol::progress::Blocker>,
     pub priority: Option<shoal_schedule::priority::Priority>,
-    pub source: Option<LaunchSource>,
 }
 
 impl From<QueueRequest> for LaunchRequest {
     fn from(request: QueueRequest) -> Self {
         Self {
             name: request.name,
-            agent: request.agent,
-            mode: request.mode,
-            narrowing: request.narrowing,
-            issue_title: request.issue_title,
-            issue_labels: request.issue_labels,
-            plan: request.plan,
+            start: request.start,
             env: request.env,
-            now: request.now,
             blockers: request.blockers,
             priority: None,
-            source: request.source,
         }
     }
 }
@@ -309,6 +294,8 @@ pub fn insert_launch(
         super::failures::replace(tx, space)?;
     }
     let request = &launch.request;
+    let planned = &request.start.launch;
+    let issue = planned.issue.as_ref();
     let now = UnixTime::now();
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once,space_id)
@@ -318,20 +305,20 @@ pub fn insert_launch(
             QueueKind::Launch,
             launch.repository,
             request.name,
-            request.agent,
-            request.issue_title,
-            request.plan,
+            planned.agent,
+            issue.map(|issue| &issue.title),
+            serde_json::to_string(&request.start)?,
             serde_json::to_string(&request.env)?,
             launch.state,
             now,
             (launch.state == QueueState::Starting).then_some(now),
             launch.opens,
-            request.mode,
-            shoal_store::narrowing_column(&request.narrowing)?,
+            planned.mode,
+            shoal_store::narrowing_column(&planned.narrowing)?,
             launch.scope,
             request.priority,
-            serde_json::to_string(&request.issue_labels)?,
-            (request.source.as_ref()).map(serde_json::to_string).transpose()?,
+            serde_json::to_string(issue.map_or(&[][..], |issue| &issue.labels))?,
+            (planned.source.as_ref()).map(serde_json::to_string).transpose()?,
             at_once,
             launch.chat,
         ],
@@ -369,7 +356,7 @@ pub fn ensure_recordable(
     let waits_for_setup = match (&launch.opens, launch.awaits) {
         (Some(_), Awaits::Preparation { .. }) => true,
         (Some(workspace), Awaits::FailedSetup) => {
-            !launch.request.now && setup_failed(tx, workspace)?
+            !launch.request.start.launch.now && setup_failed(tx, workspace)?
         }
         (None, _) => false,
     };
@@ -489,6 +476,17 @@ pub fn last_seq(db: &rusqlite::Connection) -> Result<i64> {
 }
 
 pub const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,space_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
+
+/// The start the launch's `row` plans, which a restore's or a job's lacks.
+pub fn planned_start(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueuedStart> {
+    shoal_store::json_column(row, "plan")?.ok_or_else(|| {
+        rusqlite::Error::InvalidColumnType(
+            row.as_ref().column_index("plan").unwrap_or_default(),
+            "plan".into(),
+            rusqlite::types::Type::Null,
+        )
+    })
+}
 
 pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {

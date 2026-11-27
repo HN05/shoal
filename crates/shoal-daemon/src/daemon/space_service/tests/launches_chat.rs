@@ -36,8 +36,7 @@ async fn a_chat_launch_queues_its_agent_with_its_prompt() {
     assert_eq!(launched.space.kind(), SpaceKind::Chat);
     let entry = launched.entry.unwrap();
     assert_eq!(entry.space(), Some(&launched.space.id));
-    let plan = manager.agents.queued_plan(&entry.id).await.unwrap().plan;
-    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
+    let start = manager.agents.queued_plan(&entry.id).await.unwrap().start;
     assert_eq!(
         start.launch.prompt.as_deref(),
         Some("Set up the repository")
@@ -145,8 +144,7 @@ async fn a_launched_chat_is_recorded_with_its_issue_before_its_agent_starts() {
     assert_eq!(entry.space(), Some(&chat.id));
     // Its agent starts on the issue its link resolved, which its start
     // reads again.
-    let plan = manager.agents.queued_plan(&entry.id).await.unwrap().plan;
-    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
+    let start = manager.agents.queued_plan(&entry.id).await.unwrap().start;
     let issue = start.launch.issue.map(|issue| issue.url.url().to_owned());
     assert_eq!(
         issue.as_deref(),

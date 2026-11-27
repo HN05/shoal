@@ -94,11 +94,12 @@ impl Spaces {
         request: &QueueRequest,
         repository: &RepositoryId,
     ) -> Result<Option<Priority>> {
-        if request.issue_labels.is_empty() {
+        let labels = (request.start.launch.issue.as_ref()).map_or(&[][..], |issue| &issue.labels);
+        if labels.is_empty() {
             return Ok(None);
         }
         let settings = daemon.repository_settings(repository).await?;
-        let labels = request.issue_labels.iter().map(String::as_str);
+        let labels = labels.iter().map(String::as_str);
         Ok(settings.priority.of_labels(labels))
     }
 

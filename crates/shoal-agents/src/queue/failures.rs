@@ -8,7 +8,7 @@ use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
 use shoal_protocol::protocol::RetryStart;
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
 
-use super::store::{Awaits, Launch, LaunchRequest, entry, insert_launch};
+use super::store::{Awaits, Launch, LaunchRequest, entry, insert_launch, planned_start};
 use crate::Agents;
 use crate::daemon::Daemon;
 use crate::daemon::{Records, Removals};
@@ -170,17 +170,10 @@ fn failed_launch(row: &rusqlite::Row<'_>, kind: SpaceKind) -> rusqlite::Result<L
     };
     let request = LaunchRequest {
         name: row.get("name")?,
-        agent: row.get("agent")?,
-        mode: row.get("mode")?,
-        narrowing: json_column(row, "narrowing")?.unwrap_or_default(),
-        issue_title: row.get("issue_title")?,
-        issue_labels: json_column(row, "issue_labels")?.unwrap_or_default(),
-        plan: row.get("plan")?,
+        start: planned_start(row)?,
         env: json_column(row, "env")?.unwrap_or_default(),
-        now: false,
         blockers: Vec::new(),
         priority: row.get("priority")?,
-        source: json_column(row, "source")?,
     };
     Ok(Launch {
         id: row.get("id")?,

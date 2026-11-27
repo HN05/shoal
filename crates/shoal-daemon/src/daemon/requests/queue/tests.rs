@@ -3,7 +3,6 @@ use crate::{
         agent_service::tests::queue::launch_in,
         test_support::{global_config, manager, repository},
     },
-    model::QueueRequest,
     protocol::{QueueMethod, RetryStart},
 };
 
@@ -20,10 +19,7 @@ async fn the_users_restore_of_a_failed_launch_engages_them() {
     let repo = repo.await.unwrap();
     let workspace = manager.create_workspace(&repo.id, "work".into(), None, None, None);
     let workspace = workspace.await.unwrap();
-    let request = QueueRequest {
-        plan: r#"{"launch":{"agent":"claude"}}"#.into(),
-        ..launch_in(&workspace, false)
-    };
+    let request = launch_in(&workspace, false);
     let entry = manager
         .agents
         .queue_add(&*manager, request)

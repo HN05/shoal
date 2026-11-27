@@ -443,9 +443,11 @@ async fn a_launch_in_a_space_without_a_priority_ranks_with_the_highest_its_issue
     let repo = register(&manager, &temp, "repo").await;
     manager.publish_config(global_config(LABELS));
     add(&manager, &repo, "running").await;
-    let labelled = async |name| QueueRequest {
-        issue_labels: vec!["later".into(), "urgent".into()],
-        ..request(&manager, &repo, name, false).await
+    let labelled = async |name| {
+        labelled(
+            request(&manager, &repo, name, false).await,
+            &["later", "urgent"],
+        )
     };
     let given = labelled("given").await;
     (manager
@@ -518,11 +520,18 @@ async fn queue_in_areas(
     name: &str,
     labels: &[&str],
 ) {
-    let request = QueueRequest {
-        issue_labels: labels.iter().map(|label| label.to_string()).collect(),
-        ..request(manager, repo, name, false).await
-    };
+    let request = labelled(request(manager, repo, name, false).await, labels);
     manager.agents.queue_add(manager, request).await.unwrap();
+}
+
+/// `request` on an issue with `labels`.
+fn labelled(mut request: QueueRequest, labels: &[&str]) -> QueueRequest {
+    request.start.launch.issue = Some(crate::protocol::operations::LaunchIssue {
+        url: "https://forge.example/team/repo/issues/1".parse().unwrap(),
+        title: "Labelled".into(),
+        labels: labels.iter().map(|label| label.to_string()).collect(),
+    });
+    request
 }
 
 /// The waiting entries' names and shared areas, in queue order.

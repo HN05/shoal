@@ -14,7 +14,8 @@ use crate::{
         test_support::{global_config, manager, repository},
         workspace_files::Attacher,
     },
-    model::{QueueAdmission, QueueEntry, QueueRequest, Repository, Workspace},
+    model::{QueueAdmission, QueueEntry, QueueRequest, QueuedStart, Repository, Workspace},
+    protocol::operations::QueuedLaunch,
     state::{QueueKind, QueueState, WorkspaceState},
 };
 use shoal_protocol::assignments::Done;
@@ -53,20 +54,21 @@ pub(crate) async fn request(
 
 /// The launch of an agent in `workspace`, which the daemon starts.
 pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
+    queued_in(workspace, QueuedLaunch { now, ..claude() })
+}
+
+/// The launch of Claude with nothing else to say.
+pub(crate) fn claude() -> QueuedLaunch {
+    QueuedLaunch::new("claude".into())
+}
+
+/// The request of `launch` in `workspace`, from a terminal in Herdr.
+pub(crate) fn queued_in(workspace: &Workspace, launch: QueuedLaunch) -> QueueRequest {
     QueueRequest {
-        source: None,
-        replace: false,
-        issue_labels: Vec::new(),
-        narrowing: Default::default(),
-        mode: None,
         name: workspace.name.clone(),
-        agent: "claude".into(),
-        issue_title: None,
-        plan: "{}".into(),
+        start: QueuedStart { launch, pr: None },
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
-        now,
         space: SpaceSelector::id(&workspace.id),
-        starts_in_caller: false,
         blockers: Vec::new(),
     }
 }

@@ -166,10 +166,13 @@ async fn replacing_an_asleep_agent_stops_the_wrapper_waiting_for_it() {
         .unwrap();
     let wrapper = wrapper_ending_when_stopped(&fixture, &execution, stop);
 
-    let request = QueueRequest {
-        replace: true,
-        ..launch_in(&workspace, false)
-    };
+    let request = queued_in(
+        &workspace,
+        QueuedLaunch {
+            replace: true,
+            ..claude()
+        },
+    );
     let admission = fixture.agents.queue_add(daemon, request).await.unwrap();
 
     wrapper.await.unwrap();
@@ -274,11 +277,12 @@ async fn a_replacing_launch_the_queue_refuses_keeps_the_stopped_agent() {
     let failed = WorkspaceState::Failed;
     fixture.set_state(&workspace.id, failed, None).await;
 
-    let request = QueueRequest {
+    let replacing = QueuedLaunch {
         replace: true,
         now: true,
-        ..launch_in(&workspace, false)
+        ..claude()
     };
+    let request = queued_in(&workspace, replacing);
     let refused = fixture.agents.queue_add(&*fixture.daemon, request).await;
 
     assert!(

@@ -1,16 +1,17 @@
 use crate::daemon::{
-    agent_service::tests::queue::{create, launch_in, limit_globally, register},
+    agent_service::tests::queue::{claude, create, launch_in, limit_globally, register},
     manager::Manager,
     notifications::AlertKind,
     test_support::{commit, manager},
 };
-use crate::model::{QueueEntry, Workspace};
+use crate::model::{QueueEntry, QueueRequest, QueuedStart, Workspace};
+use crate::protocol::operations::QueuedLaunch;
 
 /// Queue the launch of an agent in `workspace` with the queued start
-/// `plan`, which the queue admits at once.
-async fn starting(manager: &Manager, workspace: &Workspace, plan: &str) -> QueueEntry {
-    let request = crate::model::QueueRequest {
-        plan: plan.into(),
+/// `start`, which the queue admits at once.
+async fn starting(manager: &Manager, workspace: &Workspace, start: QueuedStart) -> QueueEntry {
+    let request = QueueRequest {
+        start,
         ..launch_in(workspace, false)
     };
     manager
@@ -22,7 +23,14 @@ async fn starting(manager: &Manager, workspace: &Workspace, plan: &str) -> Queue
         .unwrap()
 }
 
-const PLAN: &str = r#"{"launch":{"agent":"claude","prompt":"Fix the login"}}"#;
+/// The start of an agent told to fix the login.
+fn fix_the_login() -> QueuedStart {
+    let launch = QueuedLaunch {
+        prompt: Some("Fix the login".into()),
+        ..claude()
+    };
+    QueuedStart { launch, pr: None }
+}
 
 #[tokio::test]
 async fn an_admitted_agent_starts_on_its_untouched_branch_brought_up_to_date() {
@@ -36,13 +44,13 @@ async fn an_admitted_agent_starts_on_its_untouched_branch_brought_up_to_date() {
     std::fs::write(repository.path.join("later"), "later\n").unwrap();
     commit(&repository.path, "later");
     for workspace in [&untouched, &touched] {
-        let entry = starting(&manager, workspace, PLAN).await;
+        let entry = starting(&manager, workspace, fix_the_login()).await;
         let opened = manager
             .agents
             .open_queued_start(&*manager, &entry.id, None)
             .await
             .unwrap();
-        assert_eq!(opened.plan, PLAN);
+        assert_eq!(opened.start.launch.prompt.as_deref(), Some("Fix the login"));
         // The entry is the workspace's, so its agent takes it over.
         let entries = manager.agents.queue_entries(&*manager).await.unwrap();
         let taken = entries.iter().find(|queued| queued.id == entry.id).unwrap();
@@ -60,8 +68,16 @@ async fn a_pr_the_start_cannot_link_warns_its_starter_and_the_agent_starts() {
     let repository = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repository, "review").await;
-    let plan = r#"{"launch":{"agent":"claude","prompt":null},"pr":"7"}"#;
-    let entry = starting(&manager, &workspace, plan).await;
+    let pr = Some("7".parse().unwrap());
+    let entry = starting(
+        &manager,
+        &workspace,
+        QueuedStart {
+            launch: claude(),
+            pr,
+        },
+    )
+    .await;
 
     manager
         .agents
@@ -87,7 +103,7 @@ async fn a_moved_worktree_refuses_its_admitted_agent() {
     let repository = register(&manager, &temp, "repo").await;
     limit_globally(&manager, 1);
     let workspace = create(&manager, &repository, "moved").await;
-    let entry = starting(&manager, &workspace, PLAN).await;
+    let entry = starting(&manager, &workspace, fix_the_login()).await;
     std::fs::rename(&workspace.path, temp.path().join("elsewhere")).unwrap();
 
     assert!(

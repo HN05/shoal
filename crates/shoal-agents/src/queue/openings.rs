@@ -9,7 +9,6 @@ use crate::forge::items::reference::ItemInput;
 use crate::model::QueuedPlan;
 use crate::model::Relation;
 use crate::model::Workspace;
-use crate::start_plan::QueuedStart;
 use shoal_daemon_base::callers::Caller;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::space_names::SpaceSelector;
@@ -26,8 +25,8 @@ impl Agents {
         let queued = self.queued_plan(id).await?;
         let space = (queued.entry.space()).context("the starting launch names no space")?;
         if let Ok(workspace) = daemon.space_by_id(space).await?.into_workspace() {
-            let start = QueuedStart::of(&queued.plan)?;
-            self.open_admitted(daemon, id, &workspace, start.pr, caller)
+            let pr = queued.start.pr.clone();
+            self.open_admitted(daemon, id, &workspace, pr, caller)
                 .await?;
         }
         Ok(queued)

@@ -12,7 +12,6 @@ use crate::{
     config::{modes::ModeName, templates::Subject},
     hosting,
     protocol::{ItemContext, operations::QueuedLaunch},
-    start_plan::QueuedStart,
     terminal::{Owner, PlaceName},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -49,7 +48,7 @@ async fn start_entry(
     scope: &mut SpaceScope,
 ) -> Result<i32> {
     let queued = crate::client::queue::open_start(starting.caller().paths, entry.clone()).await?;
-    let start = QueuedStart::of(&queued.plan)?;
+    let start = queued.start;
     let space = (queued.entry.space()).context("the starting launch names no space")?;
     let space = crate::homes::records(starting.caller().paths, &SpaceSelector::id(space)).await?;
     host(starting, &space, place_name, Some(&start.launch.agent)).await?;

@@ -10,11 +10,12 @@ async fn a_restored_failed_launch_queues_again_as_it_was() {
     limit_globally(&fixture, 1);
     let daemon = &*fixture.daemon;
     let workspace = fixture.workspace("work").await;
-    let request = QueueRequest {
-        plan: r#"{"launch":{"agent":"claude","prompt":"Fix the login"}}"#.into(),
+    let launch = QueuedLaunch {
+        prompt: Some("Fix the login".into()),
         mode: Some("plan".into()),
-        ..launch_in(&workspace, false)
+        ..claude()
     };
+    let request = queued_in(&workspace, launch);
     let entry = fixture.agents.queue_add(daemon, request).await;
     let entry = entry.unwrap().entry.unwrap();
     (fixture.agents.fail_queue_entry(daemon, &entry.id, "gone"))
@@ -29,8 +30,9 @@ async fn a_restored_failed_launch_queues_again_as_it_was() {
     assert_eq!(retried.id, entry.id);
     assert_eq!(retried.mode, Some("plan".into()));
     dispatch(&fixture).await;
-    let plan = fixture.agents.queued_plan(&entry.id).await.unwrap().plan;
-    assert!(plan.contains("Fix the login"), "{plan}");
+    let start = fixture.agents.queued_plan(&entry.id).await.unwrap().start;
+    assert_eq!(start.launch.prompt.as_deref(), Some("Fix the login"));
+    assert_eq!(start.launch.mode, Some("plan".into()));
 }
 
 /// A permission change a restore makes reaches a failed launch: the entry
@@ -41,10 +43,7 @@ async fn a_failed_launch_takes_a_permission_change() {
     limit_globally(&fixture, 1);
     let daemon = &*fixture.daemon;
     let workspace = fixture.workspace("work").await;
-    let request = QueueRequest {
-        plan: r#"{"launch":{"agent":"claude"}}"#.into(),
-        ..launch_in(&workspace, false)
-    };
+    let request = launch_in(&workspace, false);
     let entry = fixture.agents.queue_add(daemon, request).await;
     let entry = entry.unwrap().entry.unwrap();
     (fixture.agents.fail_queue_entry(daemon, &entry.id, "gone"))
@@ -75,15 +74,8 @@ async fn a_failed_launch_takes_a_permission_change() {
         .await
         .unwrap();
     assert_eq!(retried.narrowing, change.set);
-    let id = retried.id.clone();
-    let plan: String = (fixture.agents.store)
-        .read(move |tx| {
-            let plan = "SELECT plan FROM agent_queue WHERE id=?1";
-            Ok(tx.query_row(plan, [id], |row| row.get(0))?)
-        })
-        .await
-        .unwrap();
-    let start = crate::start_plan::QueuedStart::of(&plan).unwrap();
+    dispatch(&fixture).await;
+    let start = fixture.agents.queued_plan(&retried.id).await.unwrap().start;
     assert_eq!(start.launch.narrowing, change.set);
 }
 

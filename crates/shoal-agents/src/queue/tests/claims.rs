@@ -90,10 +90,13 @@ async fn a_queued_worker_run_here_waits_for_its_callers_claim() {
     let daemon = &*fixture.daemon;
     let busy = add(&fixture, "busy").await.entry.unwrap();
     let workspace = fixture.workspace("worker").await;
-    let here = QueueRequest {
-        starts_in_caller: true,
-        ..launch_in(&workspace, false)
-    };
+    let here = queued_in(
+        &workspace,
+        QueuedLaunch {
+            here: true,
+            ..claude()
+        },
+    );
     let entry = fixture.agents.queue_add(daemon, here).await;
     let entry = entry.unwrap().entry.unwrap();
     assert_eq!(entry.state, QueueState::Queued);

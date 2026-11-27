@@ -1,15 +1,12 @@
-use crate::{protocol::operations::QueuedLaunch, start_plan::QueuedStart};
-
 use super::*;
 
-/// The plan of a start of an agent told to fix the login in `workspace`.
-fn opening(workspace: &Workspace) -> String {
+/// The request of a start of an agent told to fix the login in `workspace`.
+fn opening(workspace: &Workspace) -> QueueRequest {
     let launch = QueuedLaunch {
         prompt: Some("Fix the login".into()),
-        ..QueuedLaunch::new("claude".parse().unwrap())
+        ..claude()
     };
-    let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
-    request.plan
+    queued_in(workspace, launch)
 }
 
 /// A start of the plan `opening` gives a new `child` workspace, admitted
@@ -18,11 +15,7 @@ async fn failed_start(fixture: &Fixture) -> (Workspace, QueueEntry) {
     limit_globally(fixture, 1);
     let daemon = &*fixture.daemon;
     let child = fixture.workspace("child").await;
-    let request = QueueRequest {
-        plan: opening(&child),
-        ..launch_in(&child, false)
-    };
-    let starting = fixture.agents.queue_add(daemon, request).await;
+    let starting = fixture.agents.queue_add(daemon, opening(&child)).await;
     let starting = starting.unwrap().entry.unwrap();
     assert_eq!(starting.state, QueueState::Starting);
     (fixture.agents)
@@ -36,17 +29,13 @@ async fn failed_start(fixture: &Fixture) -> (Workspace, QueueEntry) {
 
 async fn plan(fixture: &Fixture, entry: &QueueEntry) -> QueuedStart {
     let id = entry.id.clone();
-    let plan: String = (fixture.agents.store)
+    (fixture.agents.store)
         .run(move |db| {
-            Ok(
-                db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
-                    row.get(0)
-                })?,
-            )
+            let row = "SELECT * FROM agent_queue WHERE id=?1";
+            Ok(db.query_row(row, [id], crate::queue::store::planned_start)?)
         })
         .await
-        .unwrap();
-    serde_json::from_str(&plan).unwrap()
+        .unwrap()
 }
 
 /// Queue the agent of the new `workspace`, starting `now` or not, to

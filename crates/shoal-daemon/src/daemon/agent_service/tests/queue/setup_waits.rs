@@ -1,6 +1,6 @@
 use rusqlite::params;
 
-use crate::daemon::agent_service::tests::queue::{create, launch_in, limit_globally, register};
+use crate::daemon::agent_service::tests::queue::{create, limit_globally, queued_in, register};
 use crate::{
     daemon::{manager::Manager, test_support::manager},
     model::{QueueEntry, QueueRequest, Repository, Workspace},
@@ -9,14 +9,13 @@ use crate::{
 };
 use shoal_protocol::space_names::SpaceSelector;
 
-/// The plan of a start of an agent told to fix the login in `workspace`.
-fn opening(workspace: &Workspace) -> String {
+/// The request of a start of an agent told to fix the login in `workspace`.
+fn opening(workspace: &Workspace) -> QueueRequest {
     let launch = QueuedLaunch {
         prompt: Some("Fix the login".into()),
         ..QueuedLaunch::new("claude".parse().unwrap())
     };
-    let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
-    request.plan
+    queued_in(workspace, launch)
 }
 
 /// A start of the `plan` of a new `child` workspace of `repository`,
@@ -25,21 +24,15 @@ fn opening(workspace: &Workspace) -> String {
 async fn failed_start(
     manager: &Manager,
     repository: &Repository,
-    plan: fn(&Workspace) -> String,
+    plan: fn(&Workspace) -> QueueRequest,
 ) -> (Workspace, QueueEntry) {
     limit_globally(manager, 1);
     let child = create(manager, repository, "child").await;
-    let starting = (manager.agents.queue_add(
-        manager,
-        QueueRequest {
-            plan: plan(&child),
-            ..launch_in(&child, false)
-        },
-    ))
-    .await
-    .unwrap()
-    .entry
-    .unwrap();
+    let starting = (manager.agents.queue_add(manager, plan(&child)))
+        .await
+        .unwrap()
+        .entry
+        .unwrap();
     assert_eq!(starting.state, QueueState::Starting);
     manager
         .agents

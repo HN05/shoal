@@ -407,22 +407,7 @@ async fn a_conversion_to_another_tool_waits_for_no_queued_agent() {
         .await
         .unwrap();
     for space in [&busy, &workspace] {
-        let launch = crate::model::QueueRequest {
-            source: None,
-            replace: false,
-            issue_labels: Vec::new(),
-            narrowing: Default::default(),
-            mode: None,
-            name: space.name.clone(),
-            agent: "claude".into(),
-            issue_title: None,
-            plan: "{}".into(),
-            env: Default::default(),
-            now: false,
-            space: SpaceSelector::id(&space.id),
-            starts_in_caller: false,
-            blockers: Vec::new(),
-        };
+        let launch = crate::daemon::agent_service::tests::queue::launch_in(space, false);
         manager.agents.queue_add(&*manager, launch).await.unwrap();
     }
     let selector = SpaceSelector::id(&workspace.id);

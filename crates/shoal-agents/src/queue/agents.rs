@@ -38,7 +38,7 @@ impl Agents {
         if let Some(issue) = assigned_issue(&workspace) {
             launch.default_issue(issue);
         }
-        let mut request = queued_agent_request(&workspace, launch, pr)?;
+        let mut request = queued_agent_request(&workspace, launch, pr);
         request.blockers = blockers;
         self.queue_add(daemon, request)
             .await?
@@ -64,7 +64,7 @@ impl Agents {
             },
             false => Awaits::FailedSetup,
         };
-        let mut request = queued_agent_request(space, launch, pr)?;
+        let mut request = queued_agent_request(space, launch, pr);
         request.blockers = blockers;
         self.queue_add_awaiting(daemon, request, awaits).await
     }

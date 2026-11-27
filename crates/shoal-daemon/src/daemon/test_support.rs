@@ -527,13 +527,29 @@ pub fn ended(pid: u32) -> bool {
     expect(dead_code, reason = "the launch tests in `shoal-client` read it")
 )]
 pub async fn chat_launches(manager: &Manager) -> Vec<crate::protocol::operations::QueuedLaunch> {
-    let plans = (manager.store)
-        .run(|db| shoal_store::test_support::queue::chat_launch_plans(db))
+    let planned = crate::daemon::agent_queue::store::planned_start;
+    let starts = (manager.store)
+        .run(move |db| shoal_store::test_support::queue::chat_launches(db, planned))
         .await
         .unwrap();
-    (plans.iter())
-        .map(|plan| crate::start_plan::QueuedStart::of(plan).unwrap().launch)
-        .collect()
+    starts.into_iter().map(|start| start.launch).collect()
+}
+
+/// The start the launch `entry` of the daemon of `manager` plans, while
+/// it waits or starts.
+#[cfg(test)]
+pub(crate) async fn planned_start(
+    manager: &Manager,
+    entry: &shoal_ids::queue_entry_ids::QueueEntryId,
+) -> crate::model::QueuedStart {
+    let (entry, planned) = (
+        entry.clone(),
+        crate::daemon::agent_queue::store::planned_start,
+    );
+    (manager.store)
+        .run(move |db| shoal_store::test_support::queue::entry(db, entry.as_str(), planned))
+        .await
+        .unwrap()
 }
 
 /// Move the space `selector` names, with the spaces below it that

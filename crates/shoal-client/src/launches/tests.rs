@@ -35,8 +35,7 @@ async fn a_launch_in_a_workspace_queues_its_worker_on_the_launchs_task() {
     assert_eq!(queued.space.id, parent.id);
     let entry = queued.entry.unwrap();
     assert_eq!(entry.agent, "probe");
-    let plan: shoal_core::start_plan::QueuedStart =
-        serde_json::from_value(queued_plan(&daemon, &entry).await).unwrap();
+    let plan = queued_plan(&daemon, &entry).await;
     assert_eq!(plan.launch.args, ["Fix the build"]);
     // Without an agent of its own, it queues `agent.default`.
     let other = daemon.workspace("other").await;

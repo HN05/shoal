@@ -28,10 +28,12 @@ async fn the_waiting_launches_are_read_with_their_issues_labels() {
     let fixture = Fixture::new().await;
     crate::queue::tests::limit_globally(&fixture, 1);
     let labelled = async |name: &str| {
-        let request = QueueRequest {
-            issue_labels: vec![format!("area/{name}")],
-            ..crate::queue::tests::request(&fixture, name, false).await
-        };
+        let mut request = crate::queue::tests::request(&fixture, name, false).await;
+        request.start.launch.issue = Some(crate::protocol::operations::LaunchIssue {
+            url: "https://forge.example/team/repo/issues/1".parse().unwrap(),
+            title: "Labelled".into(),
+            labels: vec![format!("area/{name}")],
+        });
         let admission = fixture.agents.queue_add(&*fixture.daemon, request).await;
         admission.unwrap().entry.unwrap()
     };

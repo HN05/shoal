@@ -19,8 +19,9 @@ use super::{Grant, OneShotStop, Serving, dispatch::START_GRACE, slots::Slot};
 use crate::{
     capacity::Activity,
     executions::ExecutionKind,
-    model::{HeldBy, QueueAdmission, QueueEntry, QueueRequest, Workspace},
+    model::{HeldBy, QueueAdmission, QueueEntry, QueueRequest, QueuedStart, Workspace},
     overload::Pressure,
+    protocol::operations::QueuedLaunch,
     queued_starts::fake::STARTED,
     stand_in::Fixture,
     state::{ExecutionState, QueueKind, QueueState, WorkspaceState},
@@ -41,20 +42,21 @@ pub(crate) async fn request(fixture: &Fixture, name: &str, now: bool) -> QueueRe
 
 /// The launch of an agent in `workspace`, which the daemon starts.
 pub(crate) fn launch_in(workspace: &Workspace, now: bool) -> QueueRequest {
+    queued_in(workspace, QueuedLaunch { now, ..claude() })
+}
+
+/// The launch of Claude with nothing else to say.
+pub(crate) fn claude() -> QueuedLaunch {
+    QueuedLaunch::new("claude".into())
+}
+
+/// The request of `launch` in `workspace`, from a terminal in Herdr.
+pub(crate) fn queued_in(workspace: &Workspace, launch: QueuedLaunch) -> QueueRequest {
     QueueRequest {
-        source: None,
-        replace: false,
-        issue_labels: Vec::new(),
-        narrowing: Default::default(),
-        mode: None,
         name: workspace.name.clone(),
-        agent: "claude".into(),
-        issue_title: None,
-        plan: "{}".into(),
+        start: QueuedStart { launch, pr: None },
         env: BTreeMap::from([("HERDR_ENV".into(), "1".into())]),
-        now,
         space: SpaceSelector::id(&workspace.id),
-        starts_in_caller: false,
         blockers: Vec::new(),
     }
 }
@@ -763,10 +765,13 @@ async fn a_launch_in_an_existing_workspace_its_caller_starts_is_left_to_it() {
     fixture
         .configure("[machine]\nmax_heavy_agents = 1000\n[machine.overload.disk]\nenabled = false");
     let workspace = fixture.workspace("here").await;
-    let request = QueueRequest {
-        starts_in_caller: true,
-        ..launch_in(&workspace, false)
-    };
+    let request = queued_in(
+        &workspace,
+        QueuedLaunch {
+            here: true,
+            ..claude()
+        },
+    );
     let admission = fixture.agents.queue_add(&*fixture.daemon, request).await;
     // The entry keeps the workspace's one launch while the caller starts it.
     let admission = admission.unwrap();
@@ -866,10 +871,11 @@ async fn the_agent_that_takes_a_launchs_entry_learns_what_made_the_launch() {
         name: "nightly".into(),
     };
     let workspace = fixture.workspace("launch").await;
-    let launch = QueueRequest {
+    let source_launch = QueuedLaunch {
         source: Some(source.clone()),
-        ..launch_in(&workspace, false)
+        ..claude()
     };
+    let launch = queued_in(&workspace, source_launch);
     let entry = fixture.agents.queue_add(daemon, launch).await;
     let entry = entry.unwrap().entry.unwrap();
     (fixture.agents)
@@ -1175,10 +1181,8 @@ async fn a_tools_upstream_limit_holds_its_queued_agents_while_others_start() {
     let claude = add(&fixture, "claude").await;
     assert!(!admitted(&claude));
     let claude = claude.entry.unwrap();
-    let codex = QueueRequest {
-        agent: "codex".into(),
-        ..request(&fixture, "codex", false).await
-    };
+    let codex = fixture.workspace("codex").await;
+    let codex = queued_in(&codex, QueuedLaunch::new("codex".into()));
     assert!(admitted(
         &fixture.agents.queue_add(daemon, codex).await.unwrap()
     ));

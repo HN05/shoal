@@ -118,7 +118,7 @@ async fn a_recorded_chats_agent_queues_as_a_workspaces_does() {
         mode: Some("pair".into()),
         ..crate::protocol::operations::QueuedLaunch::new("claude".into())
     };
-    let request = crate::start_plan::queued_agent_request(&chat, launch, None).unwrap();
+    let request = crate::start_plan::queued_agent_request(&chat, launch, None);
 
     let admission = manager
         .agents

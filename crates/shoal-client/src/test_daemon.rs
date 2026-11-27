@@ -40,15 +40,12 @@ pub(crate) fn code<T: std::fmt::Debug>(result: anyhow::Result<T>) -> ErrorCode {
 }
 
 /// The plan the daemon queued with `entry`.
-pub(crate) async fn queued_plan(daemon: &TestDaemon, entry: &QueueEntry) -> serde_json::Value {
-    let plan = daemon
-        .manager
-        .agents
-        .queued_plan(&entry.id)
-        .await
-        .unwrap()
-        .plan;
-    serde_json::from_str(&plan).unwrap()
+pub(crate) async fn queued_plan(
+    daemon: &TestDaemon,
+    entry: &QueueEntry,
+) -> shoal_protocol::model::QueuedStart {
+    let plan = daemon.manager.agents.queued_plan(&entry.id).await;
+    plan.unwrap().start
 }
 
 /// A request to start workspace `start` of the test repository from HEAD.

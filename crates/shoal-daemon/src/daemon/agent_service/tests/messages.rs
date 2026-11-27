@@ -237,7 +237,7 @@ async fn a_message_to_one_space_says_when_its_agent_reads_it() {
     let queued = create("queued").await.unwrap();
     // Queued without the check that claude is on PATH, which CI lacks.
     let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
-    let request = crate::start_plan::queued_agent_request(&queued, launch, None).unwrap();
+    let request = crate::start_plan::queued_agent_request(&queued, launch, None);
     manager.agents.queue_add(&*manager, request).await.unwrap();
     let without = create("without").await.unwrap();
     let repo = manager
@@ -538,7 +538,7 @@ async fn a_message_to_all_waits_for_stopped_and_queued_agents_without_starting_t
     // Queued without the check that claude is on PATH, which CI lacks.
     for workspace in [&queued, &full] {
         let launch = crate::protocol::operations::QueuedLaunch::new("claude".into());
-        let request = crate::start_plan::queued_agent_request(workspace, launch, None).unwrap();
+        let request = crate::start_plan::queued_agent_request(workspace, launch, None);
         manager.agents.queue_add(&*manager, request).await.unwrap();
     }
     for n in 0..shoal_daemon_base::alerts::MAX_UNREAD {

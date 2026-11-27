@@ -14,6 +14,7 @@ use super::{
     state::{MeasuredKind, OneShotWork, WaitingOneShot},
     store::{
         Awaits, ENTRY_COLUMNS, Launch, LaunchRequest, ensure_recordable, entry, insert_launch,
+        planned_start,
     },
     worker::Replacement,
 };
@@ -56,8 +57,10 @@ impl Agents {
         request: QueueRequest,
         awaits: Awaits,
     ) -> Result<QueueAdmission> {
+        let planned = &request.start.launch;
+        let (now, caller_starts, replace) = (planned.now, planned.here, planned.replace);
         ensure!(
-            !request.now || request.blockers.is_empty(),
+            !now || request.blockers.is_empty(),
             "a launch that starts now cannot be blocked"
         );
         let space = daemon.space(&request.space).await?;
@@ -66,9 +69,8 @@ impl Agents {
             Some(repository) => daemon.launch_priority(&request, repository).await?,
             None => None,
         };
-        let (caller_starts, replace) = (request.starts_in_caller, request.replace);
         let id = QueueEntryId::generate();
-        let state = if request.now {
+        let state = if now {
             QueueState::Starting
         } else {
             QueueState::Queued
@@ -96,7 +98,6 @@ impl Agents {
             scope: None,
             awaits,
         };
-        let now = launch.request.now;
         let launch = std::sync::Arc::new(launch);
         if replace {
             self.prepare_replacement(daemon, &space, &launch).await?;
@@ -278,21 +279,25 @@ impl Agents {
         let id = id.to_owned();
         self.store
             .run(move |db| {
-                let (entry, plan): (QueueEntry, Option<String>) = db
+                let (entry, start) = db
                     .query_row(
                         &format!("SELECT {ENTRY_COLUMNS},plan FROM agent_queue WHERE id=?1"),
                         [&id],
-                        |row| Ok((entry(row)?, row.get("plan")?)),
+                        |row| {
+                            let entry = entry(row)?;
+                            let launch = entry.kind == QueueKind::Launch;
+                            Ok((entry, launch.then(|| planned_start(row)).transpose()?))
+                        },
                     )
                     .optional()?
                     .context("queue entry no longer exists")?;
-                let plan = plan.context("queue entry restores an agent; it has no launch plan")?;
+                let start = start.context("queue entry is no launch; it has no launch plan")?;
                 ensure!(
                     entry.state == QueueState::Starting,
                     "queue entry {} is still waiting for a heavy slot",
                     entry.name
                 );
-                Ok(QueuedPlan { entry, plan })
+                Ok(QueuedPlan { entry, start })
             })
             .await
     }

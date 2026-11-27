@@ -36,10 +36,11 @@ async fn a_light_agent_holds_no_slot_and_starts_beside_full_limits() {
     assert!(!admitted(&add(&fixture, "heavy").await));
     // A light launch is admitted past the waiting heavy one.
     let free = fixture.workspace("free").await;
-    let request = QueueRequest {
+    let triage = QueuedLaunch {
         mode: Some("triage".into()),
-        ..launch_in(&free, false)
+        ..claude()
     };
+    let request = queued_in(&free, triage);
     let admission = fixture.agents.queue_add(daemon, request).await.unwrap();
     assert_eq!(admission.entry.unwrap().state, QueueState::Starting);
 }

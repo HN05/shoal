@@ -8,8 +8,9 @@ use crate::{
     client::connection::CommandPaths,
     config::Effective,
     env,
+    model::QueuedStart,
     protocol::ConfigTarget,
-    start_plan::{PlacePlan, QueuedStart},
+    start_plan::PlacePlan,
     workers::{Worker, internal_command},
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
@@ -21,7 +22,6 @@ use shoal_protocol::space_names::SpaceSelector;
 /// way. The space's settings decide, a worktree's file included.
 pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<()> {
     let queued = queue::plan(paths, entry.clone()).await?;
-    let start = QueuedStart::of(&queued.plan)?;
     let space = (queued.entry.space()).context("the queued launch names no space")?;
     let spaces = crate::client::spaces::list(paths).await?;
     let space = (spaces.find(&SpaceSelector::id(space)))
@@ -29,7 +29,7 @@ pub(super) async fn start(paths: &CommandPaths, entry: &QueueEntryId) -> Result<
     let target = ConfigTarget::Space(SpaceSelector::id(&space.id));
     let settings = crate::settings::of(paths, target).await?;
     let mut plan = PlacePlan::new(&space.id, Some(entry));
-    if runs_its_own_way(&settings, &start) {
+    if runs_its_own_way(&settings, &queued.start) {
         return run_place_worker(paths, &plan).await;
     }
     crate::places::queued::start_place(paths, &settings, &mut plan, &space).await
