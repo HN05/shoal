@@ -242,7 +242,7 @@ pub async fn configure(manager: &Manager, text: &str) {
 pub async fn away_on_offline_machine(manager: &Manager, parent: Option<&SpaceId>) {
     configure(manager, "[machine.hub]\nenabled = true\n").await;
     let away = serde_json::json!({
-        "id": "away", "number": 90, "name": "away", "kind": "chat",
+        "name": "away", "kind": "chat",
         "status": "working", "agent": true, "parent": parent,
     });
     (manager.store)
@@ -253,8 +253,8 @@ pub async fn away_on_offline_machine(manager: &Manager, parent: Option<&SpaceId>
                 [],
             )?;
             tx.execute(
-                "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
-                    VALUES ('away', 'desk', ?1, 0)",
+                "INSERT INTO hub_spaces(space_id, member_id, number, summary, reported_at)
+                    VALUES ('away', 'desk', 90, ?1, 0)",
                 [away.to_string()],
             )?;
             Ok(())

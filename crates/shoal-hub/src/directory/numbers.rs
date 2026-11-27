@@ -153,7 +153,7 @@ fn listed_number(tx: &Transaction<'_>, id: &SpaceId) -> Result<SpaceNumber> {
 fn of_listed(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> {
     Ok(tx
         .query_row(
-            "SELECT json_extract(summary,'$.number') FROM hub_spaces WHERE space_id=?1",
+            "SELECT number FROM hub_spaces WHERE space_id=?1",
             [id],
             |row| row.get(0),
         )
@@ -172,7 +172,7 @@ fn held_elsewhere(
 ) -> Result<bool> {
     Ok(tx.query_row(
         "SELECT EXISTS(SELECT 1 FROM hub_spaces
-                WHERE json_extract(summary,'$.number')=?1 AND member_id<>?2 AND space_id<>?3
+                WHERE number=?1 AND member_id<>?2 AND space_id<>?3
                     AND space_id NOT IN (SELECT space_id FROM hub_numbers
                         WHERE space_id IS NOT NULL))
             OR EXISTS(SELECT 1 FROM hub_numbers
@@ -189,7 +189,7 @@ fn held_elsewhere(
 fn smallest_free(tx: &Transaction<'_>) -> Result<SpaceNumber> {
     Ok(tx.query_row(
         "WITH held(number) AS (
-            SELECT json_extract(summary,'$.number') FROM hub_spaces
+            SELECT number FROM hub_spaces
             UNION ALL SELECT number FROM hub_numbers
             UNION ALL SELECT number FROM hub_held_numbers)
         SELECT MIN(n) FROM (SELECT 1 AS n UNION ALL SELECT number+1 FROM held)

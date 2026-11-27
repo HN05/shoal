@@ -7,7 +7,8 @@ fn a_renumbered_alert_leaves_no_lower_spare_for_a_later_one() {
     let tx = db.transaction().unwrap();
     tx.execute_batch(
         "INSERT INTO alerts(id,created_at,kind,sender,message) VALUES (6,0,'message','user','hi');
-         INSERT INTO hub_alert_numbering(id,spares,taken,seen) VALUES (1,'[111,112]',0,0);
+         INSERT INTO hub_alert_numbering(id,taken,seen) VALUES (1,0,0);
+         INSERT INTO hub_alert_numbering_spares(number) VALUES (111),(112);
          INSERT INTO hub_unconfirmed_alerts(number) VALUES (6);",
     )
     .unwrap();

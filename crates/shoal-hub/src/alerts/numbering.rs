@@ -29,10 +29,10 @@ pub(crate) fn reported(db: &Transaction<'_>) -> Result<AlertsReport> {
     }
     let spares = numbers(
         db,
-        "SELECT spare.value FROM hub_alert_numbering, json_each(hub_alert_numbering.spares) AS spare
-            WHERE spare.value > hub_alert_numbering.taken
-                AND spare.value NOT IN (SELECT id FROM alerts)
-            ORDER BY spare.value",
+        "SELECT spare.number FROM hub_alert_numbering, hub_alert_numbering_spares AS spare
+            WHERE spare.number > hub_alert_numbering.taken
+                AND spare.number NOT IN (SELECT id FROM alerts)
+            ORDER BY spare.number",
     )?;
     let unconfirmed = numbers(
         db,
@@ -75,7 +75,10 @@ pub(crate) fn take(
 /// Stop numbering from a hub's sequence, as once this machine neither
 /// takes the hub role nor is a member of a hub.
 pub(crate) fn forget(tx: &Transaction<'_>) -> Result<()> {
-    tx.execute_batch("DELETE FROM hub_alert_numbering; DELETE FROM hub_unconfirmed_alerts;")?;
+    tx.execute_batch(
+        "DELETE FROM hub_alert_numbering; DELETE FROM hub_alert_numbering_spares;
+        DELETE FROM hub_unconfirmed_alerts;",
+    )?;
     Ok(())
 }
 
@@ -90,12 +93,16 @@ fn numbered_by_hub(db: &Connection) -> Result<bool> {
 /// Keep `spares` as the numbers new alerts take, each above every number
 /// an alert here holds once the hub first numbers them.
 fn keep_spares(tx: &Transaction<'_>, spares: &[i64]) -> Result<()> {
-    tx.execute(
-        "INSERT INTO hub_alert_numbering(id, spares, taken, seen)
-            VALUES (1, ?1, (SELECT COALESCE(MAX(id), 0) FROM alerts), 0)
-         ON CONFLICT(id) DO UPDATE SET spares=excluded.spares",
-        [serde_json::to_string(spares)?],
+    tx.execute_batch(
+        "INSERT OR IGNORE INTO hub_alert_numbering(id, taken, seen)
+            VALUES (1, (SELECT COALESCE(MAX(id), 0) FROM alerts), 0);
+        DELETE FROM hub_alert_numbering_spares;",
     )?;
+    let mut insert =
+        tx.prepare("INSERT OR IGNORE INTO hub_alert_numbering_spares(number) VALUES (?1)")?;
+    for spare in spares {
+        insert.execute([spare])?;
+    }
     Ok(())
 }
 

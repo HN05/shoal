@@ -242,6 +242,7 @@ fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
 mod alert_attachments;
 mod conversion_columns;
 mod github_activity;
+mod hub_numbers;
 mod item_activity_states;
 mod journal_columns;
 mod journal_shapes;
@@ -391,7 +392,7 @@ fn a_resolving_pick_answers_the_latest_choices_of_either_side() -> Result<()> {
 #[test]
 fn the_hub_s_requests_and_summaries_take_the_new_shape_too() -> Result<()> {
     let mut db = at_floor()?;
-    let summary = serde_json::json!({"threads": [{
+    let summary = serde_json::json!({"id": "w1", "number": 1, "threads": [{
         "posts": [
             {"id": 1, "side": "holder", "text": "Which?", "choices": ["A", "B"]},
             {"id": 2, "side": "opener", "text": "B", "choice": 2},

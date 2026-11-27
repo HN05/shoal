@@ -9,7 +9,7 @@ use shoal_protocol::hub::directory::{
     Conflict, Keeps, Kept, KeptRemoved, Listed, Report, SpaceSummary,
 };
 
-use super::{super::members, numbers, repositories};
+use super::{super::members, numbers, repositories, stored::Stored};
 use crate::packages::takeovers;
 use crate::time::UnixTime;
 
@@ -60,18 +60,22 @@ pub(crate) fn forget(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
 /// the directory leaves out.
 pub(super) fn read(tx: &Transaction<'_>) -> Result<(Vec<Listed>, Vec<Conflict>)> {
     let mut statement = tx.prepare(
-        "SELECT member_id, summary, reported_at FROM hub_spaces ORDER BY member_id, space_id",
+        "SELECT member_id, space_id, number, summary, reported_at FROM hub_spaces
+            ORDER BY member_id, space_id",
     )?;
     let listed = statement.query_map([], |row| {
-        Ok((row.get(0)?, row.get::<_, String>(1)?, row.get(2)?))
+        let stored = Stored {
+            number: row.get(2)?,
+            summary: row.get(3)?,
+        };
+        Ok((row.get(0)?, row.get::<_, SpaceId>(1)?, stored, row.get(4)?))
     })?;
     let mut spaces = Vec::new();
     for row in listed {
-        let (machine, summary, reported_at) = row?;
-        let space = summary_of(&summary)?;
+        let (machine, id, stored, reported_at) = row?;
         spaces.push(Listed {
             machine,
-            space,
+            space: stored.summary(&id)?,
             reported_at,
         });
     }
@@ -143,7 +147,7 @@ fn record(
     space: &SpaceSummary,
     now: UnixTime,
 ) -> Result<Option<Conflict>> {
-    let summary = serde_json::to_string(space).context("write a space summary")?;
+    let summary = Stored::of(space).context("write a space summary")?;
     match owner(tx, &space.id)? {
         Some(owner) if &owner != member && take_claim(tx, &space.id, member)? => {
             hand_over(tx, &space.id, now)?;
@@ -184,14 +188,15 @@ fn keep_copy(
     tx: &Transaction<'_>,
     member: &MemberId,
     id: &SpaceId,
-    summary: &str,
+    summary: &Stored,
     now: UnixTime,
 ) -> Result<()> {
     tx.execute(
-        "INSERT INTO hub_space_copies(space_id, member_id, summary, since)
-         VALUES (?1,?2,?3,?4)
-         ON CONFLICT(space_id, member_id) DO UPDATE SET summary=excluded.summary",
-        params![id, member, summary, now],
+        "INSERT INTO hub_space_copies(space_id, member_id, number, summary, since)
+         VALUES (?1,?2,?3,?4,?5)
+         ON CONFLICT(space_id, member_id) DO UPDATE
+            SET number=excluded.number, summary=excluded.summary",
+        params![id, member, summary.number, summary.summary, now],
     )?;
     Ok(())
 }
@@ -202,16 +207,17 @@ fn own(
     tx: &Transaction<'_>,
     member: &MemberId,
     id: &SpaceId,
-    summary: &str,
+    summary: &Stored,
     now: UnixTime,
 ) -> Result<()> {
     drop_copy(tx, member, id)?;
     tx.execute(
-        "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
-         VALUES (?1,?2,?3,?4)
+        "INSERT INTO hub_spaces(space_id, member_id, number, summary, reported_at)
+         VALUES (?1,?2,?3,?4,?5)
          ON CONFLICT(space_id) DO UPDATE SET member_id=excluded.member_id,
-            summary=excluded.summary, reported_at=excluded.reported_at",
-        params![id, member, summary, now],
+            number=excluded.number, summary=excluded.summary,
+            reported_at=excluded.reported_at",
+        params![id, member, summary.number, summary.summary, now],
     )?;
     numbers::settle(tx, member, id)
 }
@@ -264,10 +270,10 @@ fn take_claim(tx: &Transaction<'_>, id: &SpaceId, member: &MemberId) -> Result<b
 /// ends there, and never takes the ID back.
 fn hand_over(tx: &Transaction<'_>, id: &SpaceId, now: UnixTime) -> Result<()> {
     tx.execute(
-        "INSERT INTO hub_space_copies(space_id, member_id, summary, since, handed_over)
-         SELECT space_id, member_id, summary, ?2, 1 FROM hub_spaces WHERE space_id=?1
+        "INSERT INTO hub_space_copies(space_id, member_id, number, summary, since, handed_over)
+         SELECT space_id, member_id, number, summary, ?2, 1 FROM hub_spaces WHERE space_id=?1
          ON CONFLICT(space_id, member_id) DO UPDATE
-            SET summary=excluded.summary, handed_over=1",
+            SET number=excluded.number, summary=excluded.summary, handed_over=1",
         params![id, now],
     )?;
     Ok(())
@@ -326,13 +332,19 @@ fn drop_copy(tx: &Transaction<'_>, member: &MemberId, id: &SpaceId) -> Result<()
 /// owner's. A copy its machine handed over does not count, since that
 /// machine retires it.
 fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
-    let earliest: Option<(MemberId, String, UnixTime)> = tx
+    let earliest: Option<(MemberId, Stored, UnixTime)> = tx
         .query_row(
-            "SELECT member_id, summary, since FROM hub_space_copies
+            "SELECT member_id, number, summary, since FROM hub_space_copies
              WHERE space_id=?1 AND NOT handed_over
              ORDER BY since, member_id LIMIT 1",
             [id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| {
+                let stored = Stored {
+                    number: row.get(1)?,
+                    summary: row.get(2)?,
+                };
+                Ok((row.get(0)?, stored, row.get(3)?))
+            },
         )
         .optional()?;
     if let Some((copy, summary, since)) = earliest {
@@ -346,25 +358,29 @@ fn promote_earliest_copy(tx: &Transaction<'_>, id: &SpaceId) -> Result<()> {
 /// machine retires, with the machine that owns its ID.
 fn conflicts(tx: &Transaction<'_>) -> Result<Vec<Conflict>> {
     let mut statement = tx.prepare(
-        "SELECT c.space_id, c.member_id, c.summary, c.since, s.member_id
+        "SELECT c.space_id, c.member_id, c.number, c.summary, c.since, s.member_id
          FROM hub_space_copies c JOIN hub_spaces s USING (space_id)
          WHERE NOT c.handed_over ORDER BY c.since, c.space_id",
     )?;
     let rows = statement.query_map([], |row| {
+        let stored = Stored {
+            number: row.get(2)?,
+            summary: row.get(3)?,
+        };
         Ok((
-            row.get(0)?,
+            row.get::<_, SpaceId>(0)?,
             row.get(1)?,
-            row.get::<_, String>(2)?,
-            row.get(3)?,
+            stored,
             row.get(4)?,
+            row.get(5)?,
         ))
     })?;
     let mut conflicts = Vec::new();
     for row in rows {
-        let (space, copy, summary, since, owner) = row?;
+        let (space, copy, stored, since, owner) = row?;
         conflicts.push(Conflict {
+            name: stored.summary(&space)?.name,
             space,
-            name: summary_of(&summary)?.name,
             owner,
             copy,
             since,
@@ -381,10 +397,6 @@ fn ensure_admitted(tx: &Transaction<'_>, member: &MemberId) -> Result<()> {
         "the hub revoked this machine's credential"
     );
     Ok(())
-}
-
-fn summary_of(text: &str) -> Result<SpaceSummary> {
-    serde_json::from_str(text).context("read a space summary the hub kept")
 }
 
 #[cfg(test)]

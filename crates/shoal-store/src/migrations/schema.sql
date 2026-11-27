@@ -565,21 +565,6 @@ CREATE TABLE removal_directories (
     identity TEXT NOT NULL
 );
 
-CREATE TABLE hub_spaces (
-    space_id TEXT PRIMARY KEY,
-    member_id TEXT NOT NULL REFERENCES hub_members(id),
-    summary TEXT NOT NULL,
-    reported_at INTEGER NOT NULL
-);
-
-CREATE TABLE hub_space_copies (
-    space_id TEXT NOT NULL,
-    member_id TEXT NOT NULL REFERENCES hub_members(id),
-    summary TEXT NOT NULL,
-    since INTEGER NOT NULL, handed_over INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY(space_id, member_id)
-);
-
 CREATE TABLE hub_space_claims (
     space_id TEXT PRIMARY KEY,
     member_id TEXT NOT NULL REFERENCES hub_members(id)
@@ -598,9 +583,7 @@ CREATE TABLE hub_reserved_numbers (
 );
 
 CREATE TABLE hub_numbering (
-    id INTEGER PRIMARY KEY CHECK(id = 1),
-    spares TEXT NOT NULL
-);
+    id INTEGER PRIMARY KEY CHECK(id = 1));
 
 CREATE TABLE hub_kept_numbers (
     space_id TEXT PRIMARY KEY,
@@ -1019,7 +1002,6 @@ CREATE TABLE hub_kept_removed (
 
 CREATE TABLE hub_alert_numbering (
     id INTEGER PRIMARY KEY CHECK(id = 1),
-    spares TEXT NOT NULL,
     taken INTEGER NOT NULL,
     seen INTEGER NOT NULL
 );
@@ -1156,6 +1138,28 @@ CREATE TABLE alert_attachments (
     PRIMARY KEY(alert_id, position)
 );
 
+CREATE TABLE "hub_spaces" (
+    space_id TEXT PRIMARY KEY,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    number INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    reported_at INTEGER NOT NULL
+);
+
+CREATE TABLE "hub_space_copies" (
+    space_id TEXT NOT NULL,
+    member_id TEXT NOT NULL REFERENCES hub_members(id),
+    number INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    since INTEGER NOT NULL,
+    handed_over INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(space_id, member_id)
+);
+
+CREATE TABLE hub_numbering_spares (number INTEGER PRIMARY KEY);
+
+CREATE TABLE hub_alert_numbering_spares (number INTEGER PRIMARY KEY);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
@@ -1213,8 +1217,6 @@ CREATE INDEX resource_lease_acquirers ON resource_leases(acquirer_id)
 CREATE INDEX trigger_runs_by_trigger ON trigger_runs(scope, name, id);
 
 CREATE INDEX reply_times_space ON reply_times(space_id, id);
-
-CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
 
 CREATE INDEX hub_numbers_member ON hub_numbers(member_id);
 
@@ -1280,6 +1282,8 @@ CREATE INDEX run_usage_runs ON run_usage(repository_id, kind, key, ended_at);
 
 CREATE INDEX alert_attachments_path ON alert_attachments(path);
 
+CREATE INDEX hub_spaces_member ON hub_spaces(member_id);
+
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL
     UNION ALL SELECT space_number FROM access_requests WHERE space_id IS NULL;
@@ -1290,8 +1294,7 @@ CREATE VIEW free_space_number AS
 
 CREATE VIEW hub_held_numbers AS
     SELECT member_id, number, NULL AS space_id FROM hub_reserved_numbers
-    UNION ALL SELECT member_id, json_extract(summary,'$.number'), space_id
-        FROM hub_space_copies;
+    UNION ALL SELECT member_id, number, space_id FROM hub_space_copies;
 
 INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
@@ -1420,17 +1423,6 @@ END;
 CREATE TRIGGER thread_removal_forgotten AFTER DELETE ON removed_spaces BEGIN
     DELETE FROM threads WHERE space_id=OLD.space_id
         AND NOT EXISTS (SELECT 1 FROM spaces WHERE id=OLD.space_id);
-END;
-
-CREATE TRIGGER hub_packages_ended AFTER DELETE ON hub_spaces BEGIN
-    DELETE FROM hub_packages
-        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
-END;
-
-CREATE TRIGGER hub_packages_handed_over AFTER UPDATE OF member_id ON hub_spaces
-    WHEN OLD.member_id <> NEW.member_id BEGIN
-    DELETE FROM hub_packages
-        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
 END;
 
 CREATE TRIGGER hub_package_states_removed AFTER DELETE ON spaces BEGIN
@@ -1705,4 +1697,15 @@ WHEN NEW.bulk BEGIN
         SELECT id FROM space_events WHERE space_id=NEW.space_id AND bulk
             ORDER BY id DESC LIMIT 1 OFFSET 500
     );
+END;
+
+CREATE TRIGGER hub_packages_ended AFTER DELETE ON hub_spaces BEGIN
+    DELETE FROM hub_packages
+        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
+END;
+
+CREATE TRIGGER hub_packages_handed_over AFTER UPDATE OF member_id ON hub_spaces
+    WHEN OLD.member_id <> NEW.member_id BEGIN
+    DELETE FROM hub_packages
+        WHERE space_id=OLD.space_id AND member_id=OLD.member_id;
 END;

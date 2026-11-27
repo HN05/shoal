@@ -19,6 +19,7 @@ mod fences;
 mod numbers;
 mod records;
 mod repositories;
+mod stored;
 
 pub(super) use records::{forget, owner};
 

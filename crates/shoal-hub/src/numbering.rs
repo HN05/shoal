@@ -118,8 +118,8 @@ fn numbered_by_hub(tx: &Transaction<'_>) -> Result<bool> {
 /// holds.
 fn free_spare(tx: &Transaction<'_>) -> Result<Option<SpaceNumber>> {
     Ok(tx.query_row(
-        "SELECT MIN(spare.value) FROM hub_numbering, json_each(hub_numbering.spares) AS spare
-            WHERE spare.value NOT IN (SELECT number FROM space_numbers)",
+        "SELECT MIN(number) FROM hub_numbering_spares
+            WHERE number NOT IN (SELECT number FROM space_numbers)",
         [],
         |row| row.get(0),
     )?)
@@ -161,10 +161,15 @@ fn take_kept(tx: &Transaction<'_>, id: &SpaceId) -> Result<Option<SpaceNumber>> 
 
 /// Keep the spares `numbering` brings as those new spaces here take.
 pub fn keep_spares(tx: &Transaction<'_>, numbering: &Numbering) -> Result<()> {
-    tx.execute(
-        "INSERT OR REPLACE INTO hub_numbering(id, spares) VALUES (1, ?1)",
-        [serde_json::to_string(&numbering.spares)?],
+    tx.execute_batch(
+        "INSERT OR IGNORE INTO hub_numbering(id) VALUES (1);
+        DELETE FROM hub_numbering_spares;",
     )?;
+    let mut insert =
+        tx.prepare("INSERT OR IGNORE INTO hub_numbering_spares(number) VALUES (?1)")?;
+    for spare in &numbering.spares {
+        insert.execute([spare])?;
+    }
     Ok(())
 }
 
@@ -221,7 +226,7 @@ pub fn forget_unless_joined(tx: &Transaction<'_>) -> Result<bool> {
         |row| row.get(0),
     )?;
     if !joined {
-        tx.execute("DELETE FROM hub_numbering", [])?;
+        tx.execute_batch("DELETE FROM hub_numbering; DELETE FROM hub_numbering_spares;")?;
         crate::alerts::numbering::forget(tx)?;
     }
     Ok(!joined)

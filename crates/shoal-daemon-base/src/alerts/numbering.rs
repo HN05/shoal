@@ -53,20 +53,22 @@ struct Numbering {
 
 fn load(tx: &Transaction<'_>) -> Result<Option<Numbering>> {
     let row = tx
-        .query_row(
-            "SELECT spares, taken, seen FROM hub_alert_numbering",
-            [],
-            |row| Ok((row.get::<_, String>(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()?;
-    row.map(|(spares, taken, seen)| {
-        Ok(Numbering {
-            spares: serde_json::from_str(&spares)?,
-            taken,
-            seen,
+        .query_row("SELECT taken, seen FROM hub_alert_numbering", [], |row| {
+            Ok((row.get(0)?, row.get(1)?))
         })
-    })
-    .transpose()
+        .optional()?;
+    let Some((taken, seen)) = row else {
+        return Ok(None);
+    };
+    let spares = tx
+        .prepare("SELECT number FROM hub_alert_numbering_spares ORDER BY number")?
+        .query_map([], |row| row.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(Some(Numbering {
+        spares,
+        taken,
+        seen,
+    }))
 }
 
 /// The smallest spare above the highest number taken that no alert here

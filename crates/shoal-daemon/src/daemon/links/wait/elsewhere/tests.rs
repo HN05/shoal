@@ -48,7 +48,7 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
     .await
     .unwrap();
     let away = json!({
-        "id": "away", "number": 90, "name": "away", "kind": "chat",
+        "name": "away", "kind": "chat",
         "status": "working", "agent": true,
     });
     let id = child.id.clone();
@@ -61,8 +61,8 @@ async fn below_elsewhere(manager: &Manager, root: &std::path::Path) -> (Workspac
                 [KEY],
             )?;
             tx.execute(
-                "INSERT INTO hub_spaces(space_id, member_id, summary, reported_at)
-                    VALUES ('away', 'desk', ?1, 0)",
+                "INSERT INTO hub_spaces(space_id, member_id, number, summary, reported_at)
+                    VALUES ('away', 'desk', 90, ?1, 0)",
                 [away.to_string()],
             )?;
             Ok(())

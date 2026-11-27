@@ -21,9 +21,15 @@ fn record(tx: &Transaction<'_>) -> Result<i64> {
 /// Keep `spares` as the hub gave them, with `taken` and `seen`.
 fn numbered(tx: &Transaction<'_>, spares: &[i64], taken: i64, seen: i64) -> Result<()> {
     tx.execute(
-        "INSERT INTO hub_alert_numbering(id, spares, taken, seen) VALUES (1, ?1, ?2, ?3)",
-        params![serde_json::to_string(spares)?, taken, seen],
+        "INSERT INTO hub_alert_numbering(id, taken, seen) VALUES (1, ?1, ?2)",
+        params![taken, seen],
     )?;
+    for spare in spares {
+        tx.execute(
+            "INSERT INTO hub_alert_numbering_spares(number) VALUES (?1)",
+            [spare],
+        )?;
+    }
     Ok(())
 }
 
