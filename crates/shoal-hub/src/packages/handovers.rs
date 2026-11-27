@@ -190,7 +190,8 @@ impl Hub {
     /// The machine placement chooses for the space `id`, which `from` handed
     /// over for `start` and the hub keeps since no machine could take it,
     /// placing it again as each machine reports its capacity. None once
-    /// `from` stays after all, which keeps the space, as the user hears.
+    /// `from` stays after all, which keeps the space, as the user hears,
+    /// even while a placement was under way.
     async fn place_when_room(
         &self,
         daemon: &dyn Daemon,
@@ -205,11 +206,10 @@ impl Hub {
                 return None;
             }
             match self.place_elsewhere(daemon, from, start.clone()).await {
-                Ok(Some(decision)) => {
-                    self.handovers.placed_later(id, decision.clone());
+                Ok(Some(decision)) if self.handovers.placed_later(id, from, decision.clone()) => {
                     return Some(decision);
                 }
-                Ok(None) => {}
+                Ok(_) => {}
                 Err(error) => log!("hub: could not place space {id}, which it keeps: {error:#}"),
             }
             let changed = tokio::select! {

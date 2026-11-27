@@ -82,17 +82,24 @@ impl Handovers {
     /// to it, for want of a machine.
     pub(in crate::packages) fn keeps(&self, id: &SpaceId, from: &MemberId) -> bool {
         let placed = self.placed.lock().unwrap();
-        placed.get(id).is_some_and(|placed| {
-            &placed.from == from && placed.released && placed.destination == Destination::Hub
-        })
+        placed.get(id).is_some_and(|placed| kept_from(placed, from))
     }
 
-    /// Record that the space `id`, which the hub kept, goes where
-    /// `decision` says, as the chats in its worktree do.
-    pub(in crate::packages) fn placed_later(&self, id: &SpaceId, decision: Decision) {
-        if let Some(placed) = self.placed.lock().unwrap().get_mut(id) {
-            placed.destination = Destination::Machine(decision);
-        }
+    /// Record that the space `id`, which the hub keeps for `from`, goes where
+    /// `decision` says, as the chats in its worktree do. False, recording
+    /// nothing, once the hub no longer keeps it, as once `from` stayed.
+    pub(in crate::packages) fn placed_later(
+        &self,
+        id: &SpaceId,
+        from: &MemberId,
+        decision: Decision,
+    ) -> bool {
+        let mut placed = self.placed.lock().unwrap();
+        let Some(placed) = placed.get_mut(id).filter(|placed| kept_from(placed, from)) else {
+            return false;
+        };
+        placed.destination = Destination::Machine(decision);
+        true
     }
 
     /// Record that `member` hands spaces over for its shutdown.
@@ -185,4 +192,10 @@ impl Handovers {
     pub(super) fn end(&self, id: &SpaceId) {
         self.claims.lock().unwrap().remove(id);
     }
+}
+
+/// Whether the hub keeps `placed`, which `from` released to it, for want of
+/// a machine.
+fn kept_from(placed: &Placed, from: &MemberId) -> bool {
+    &placed.from == from && placed.released && placed.destination == Destination::Hub
 }

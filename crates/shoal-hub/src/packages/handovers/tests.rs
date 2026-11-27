@@ -245,11 +245,22 @@ async fn a_space_the_hub_keeps_stays_on_its_machine_once_that_machine_is_back() 
     let hub = hub(&root, "", &["laptop"]).await;
     report(&hub, "laptop", &["plan"]).await;
     keep_on_hub(&hub).await;
-    hub.hear_stay(&MemberId::from("laptop".to_owned()));
+    let (laptop, plan) = (
+        MemberId::from("laptop".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    hub.hear_stay(&laptop);
     let stays = alerted(&hub, AlertKind::HandoverFailed).await;
     assert!(stays.contains("laptop is back"), "{stays}");
-    assert!(
-        !hub.handovers
-            .keeps(&SpaceId::from("plan".to_owned()), &"laptop".into())
-    );
+    assert!(!hub.handovers.keeps(&plan, &laptop));
+    // A placement that ends after the laptop came back sends it nowhere.
+    let desk = Decision {
+        machine: "desk".into(),
+        name: "desk".into(),
+        reason: Reason::Local,
+        policy: shoal_schedule::placement::Policy::Balanced,
+        unanswered: None,
+        skipped: Vec::new(),
+    };
+    assert!(!hub.handovers.placed_later(&plan, &laptop, desk));
 }
