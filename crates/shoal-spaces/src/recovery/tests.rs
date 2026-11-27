@@ -4,6 +4,7 @@ use crate::state::ExecutionState;
 use crate::state::WorkspaceState;
 use anyhow::Result;
 use shoal_core::test_support::{git, repository};
+use shoal_store::test_support::seeds;
 
 use anyhow::Context;
 use shoal_protocol::space_names::SpaceSelector;
@@ -32,14 +33,12 @@ async fn recovery_reads_only_its_executions_without_inspection_details() -> Resu
                     "INSERT INTO space_completion(space_id,record) VALUES (?1,'invalid')",
                     [&id],
                 )?;
+                seeds::bare_execution(db, "unknown", &id, ExecutionState::Unknown)?;
+                seeds::bare_execution(db, "other", &other.id, ExecutionState::Running)?;
+                // A wrapper the daemon cannot read.
                 db.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
-                    [&id],
-                )?;
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state,wrapper)
-                     VALUES ('other',?1,'running','invalid')",
-                    [&other.id],
+                    "UPDATE executions SET wrapper='invalid' WHERE id='other'",
+                    [],
                 )?;
                 Ok(())
             })

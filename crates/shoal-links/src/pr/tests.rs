@@ -1,3 +1,4 @@
+use shoal_store::test_support::seeds;
 use std::sync::Arc;
 
 use shoal_core::test_support::{global_config, repository};
@@ -61,14 +62,7 @@ async fn watching_a_related_pr_replaces_its_link_and_keeps_its_cursor() {
     let service = links.clone();
     let counts = (links.store)
         .write(move |tx| {
-            tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-                [],
-            )?;
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo','watch')",
-                [&id],
-            )?;
+            seeds::ready_workspace(tx, "repo", id.as_str(), "watch")?;
             service.record(tx, &id, Relation::Related, LinkKind::Pr, url, None)?;
             tx.execute(
                 "INSERT INTO pr_activity(space_id,url,record) VALUES (?1,?2,'{}')",

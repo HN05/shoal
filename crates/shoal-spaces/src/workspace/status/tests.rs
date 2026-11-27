@@ -1,6 +1,7 @@
 use crate::stand_in::Fixture;
 use crate::workspace::status::*;
 use anyhow::Result;
+use shoal_store::test_support::seeds;
 
 use shoal_protocol::space_names::SpaceSelector;
 
@@ -76,13 +77,12 @@ async fn status_reports_git_checks_that_stall_as_unavailable() {
 #[test]
 fn setup_finished_reads_the_workspace_s_record() -> Result<()> {
     let db = shoal_store::test_support::migrated()?;
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO spaces(id,kind,repository_id,name)
-             VALUES ('finished','workspace','repo','finished'),('pending','workspace','repo','pending');
-         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir,setup_finished) VALUES
-             ('finished','/finished','finished','ready','abc','/admin',1),
-             ('pending','/pending','pending','failed','abc','/admin',0);",
+    for id in ["finished", "pending"] {
+        seeds::ready_workspace(&db, "repo", id, id)?;
+    }
+    db.execute(
+        "UPDATE workspaces SET setup_finished=1 WHERE id='finished'",
+        [],
     )?;
     assert!(setup_finished(&db, &"finished".into())?);
     assert!(!setup_finished(&db, &"pending".into())?);

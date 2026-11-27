@@ -5,6 +5,8 @@ use shoal_core::test_support::repository;
 use shoal_daemon_base::callers::{Access, ScopedExecution};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::assignments::Done;
+use shoal_protocol::state::ExecutionState;
+use shoal_store::test_support::seeds;
 
 use crate::model::Workspace;
 use crate::workspace_files::{Attacher, KeptCopy};
@@ -87,12 +89,8 @@ async fn deleting_every_workspaces_files_spares_active_ones() {
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running'),
-                    ('command',?2,'unknown')",
-                [active_id, unresolved_id],
-            )?;
-            Ok(())
+            seeds::bare_execution(db, "agent", &active_id, ExecutionState::Running)?;
+            seeds::bare_execution(db, "command", &unresolved_id, ExecutionState::Unknown)
         })
         .await
         .unwrap();

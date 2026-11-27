@@ -3,6 +3,7 @@ use rusqlite::{Connection, OptionalExtension, Params, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::resources::{Definition, LockMode, Scope};
+use shoal_store::test_support::seeds;
 
 use super::routing::decide;
 use super::store::{
@@ -34,17 +35,8 @@ fn resource(mode: LockMode) -> Specification {
 }
 
 fn owners(db: &Connection) -> Result<()> {
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
-            BEGIN;
-            INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                VALUES ('owner','/work','worker','ready','abc','/admin'),
-                ('other','/other','other','ready','abc','/admin');
-            INSERT INTO spaces(id,kind,repository_id,name)
-                VALUES ('owner','workspace','repo','worker'),
-                ('other','workspace','repo','other');
-            COMMIT;",
-    )?;
+    seeds::ready_workspace(db, "repo", "owner", "worker")?;
+    seeds::ready_workspace(db, "repo", "other", "other")?;
     Ok(())
 }
 
@@ -557,17 +549,23 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
     let store = store::Store::open(root.path().join("state.db"))
         .await
         .unwrap();
-    store.run(|db| {
-            db.execute_batch("INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
-                INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('owner','workspace','repo','worker');
-                INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                    VALUES ('owner','/work','worker','ready','abc','/admin');")?;
+    store
+        .run(|db| {
+            seeds::ready_workspace(db, "repo", "owner", "worker")?;
             for lifetime in [Lifetime::Lease, Lifetime::Workspace] {
                 let tx = db.transaction()?;
-                let target = Target::Resource { scope: Scope::Global, pool: "lock".into() };
-                let request = ApprovalRequest::new(&SpaceId::from("owner"), target, "default",
-                    resource(LockMode::Read), lifetime, Some("read shared data"));
+                let target = Target::Resource {
+                    scope: Scope::Global,
+                    pool: "lock".into(),
+                };
+                let request = ApprovalRequest::new(
+                    &SpaceId::from("owner"),
+                    target,
+                    "default",
+                    resource(LockMode::Read),
+                    lifetime,
+                    Some("read shared data"),
+                );
                 let pending = check(&tx, request.clone())?.unwrap();
                 assert_eq!(check(&tx, request.clone())?.unwrap().number, pending.number);
                 assert_eq!(list(&tx, Some(&SpaceId::from("owner")))?.len(), 1);
@@ -576,12 +574,26 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
                 assert!(check(&tx, changed).is_err());
                 let mut decision = pending.clone();
                 decision.status = DecisionStatus::Denied;
-                tx.execute("UPDATE access_requests SET record=?2 WHERE id=?1", params![decision.key,serde_json::to_string(&decision)?])?;
-                assert_eq!(check(&tx, request.clone())?.unwrap().status, DecisionStatus::Denied);
+                tx.execute(
+                    "UPDATE access_requests SET record=?2 WHERE id=?1",
+                    params![decision.key, serde_json::to_string(&decision)?],
+                )?;
+                assert_eq!(
+                    check(&tx, request.clone())?.unwrap().status,
+                    DecisionStatus::Denied
+                );
                 decision.status = DecisionStatus::Approved;
-                tx.execute("UPDATE access_requests SET record=?2 WHERE id=?1", params![decision.key,serde_json::to_string(&decision)?])?;
+                tx.execute(
+                    "UPDATE access_requests SET record=?2 WHERE id=?1",
+                    params![decision.key, serde_json::to_string(&decision)?],
+                )?;
                 assert!(check(&tx, request.clone())?.is_none());
-                assert!(release(&tx, &SpaceId::from("owner"), &request.target, "default")?);
+                assert!(release(
+                    &tx,
+                    &SpaceId::from("owner"),
+                    &request.target,
+                    "default"
+                )?);
                 let result = check(&tx, request.clone())?;
                 assert_eq!(result.is_some(), lifetime == Lifetime::Lease);
                 if lifetime == Lifetime::Workspace {
@@ -596,7 +608,9 @@ async fn decisions_bind_settings_and_release_obeys_configured_lifetime() {
             assert!(serde_json::from_str::<DecisionStatus>("\"unknown\"").is_err());
             assert!(serde_json::from_str::<Lifetime>("\"forever\"").is_err());
             Ok(())
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 }
 
 fn unrelated_history(db: &Connection, count: i64) -> Result<()> {

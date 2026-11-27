@@ -2,6 +2,8 @@ use crate::lifecycle::worktree::removal_options;
 use crate::lifecycle::*;
 use crate::stand_in::Fixture;
 use shoal_core::test_support::{git, install_test_script, repository};
+use shoal_protocol::state::ExecutionState;
+use shoal_store::test_support::seeds;
 
 use crate::model::EventCause;
 use crate::paths::StateFiles;
@@ -330,13 +332,7 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
         let other_id = other.id;
         manager
             .store
-            .run(move |db| {
-                db.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES ('other',?1,'running')",
-                    [other_id],
-                )?;
-                Ok(())
-            })
+            .run(move |db| seeds::bare_execution(db, "other", &other_id, ExecutionState::Running))
             .await
             .unwrap();
         let check = manager
@@ -355,10 +351,12 @@ async fn removal_check_counts_only_its_executions_without_inspection_details() {
         manager
             .store
             .run(move |db| {
+                seeds::bare_execution(db, "running", &id, ExecutionState::Running)?;
+                seeds::bare_execution(db, "unknown", &id, ExecutionState::Unknown)?;
+                // A wrapper the daemon cannot read counts as running.
                 db.execute(
-                    "INSERT INTO executions(id,space_id,state,wrapper) VALUES
-                     ('running',?1,'running','invalid'), ('unknown',?1,'unknown',NULL)",
-                    [id],
+                    "UPDATE executions SET wrapper='invalid' WHERE id='running'",
+                    [],
                 )?;
                 Ok(())
             })
@@ -387,13 +385,7 @@ async fn deleted_removal_checks_executions_without_inspection_details() {
             let id = workspace.id.clone();
             manager
                 .store
-                .run(move |db| {
-                    db.execute(
-                        "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
-                        [id],
-                    )?;
-                    Ok(())
-                })
+                .run(move |db| seeds::bare_execution(db, "unknown", &id, ExecutionState::Unknown))
                 .await
                 .unwrap();
         }
@@ -491,13 +483,7 @@ async fn the_users_removal_takes_a_workspace_whose_setup_never_started() {
     let id = workspace.id.clone();
     manager
         .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('setup',?1,'running')",
-                [id],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "setup", &id, ExecutionState::Running))
         .await
         .unwrap();
     let selected = SpaceSelector::id(&workspace.id);

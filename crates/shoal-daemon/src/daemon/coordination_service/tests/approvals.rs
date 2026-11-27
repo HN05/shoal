@@ -13,6 +13,7 @@ use shoal_coordination::approvals::*;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::config::repo::Lifetime;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::seeds;
 
 fn resource(mode: LockMode) -> Specification {
     let definition = Definition {
@@ -32,17 +33,8 @@ fn resource(mode: LockMode) -> Specification {
 }
 
 fn owners(db: &Connection) -> Result<()> {
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used,workspaces_dir) VALUES ('repo','/repo','/repo',1,'/shoal/repo');
-            BEGIN;
-            INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                VALUES ('owner','/work','worker','ready','abc','/admin'),
-                ('other','/other','other','ready','abc','/admin');
-            INSERT INTO spaces(id,kind,repository_id,name)
-                VALUES ('owner','workspace','repo','worker'),
-                ('other','workspace','repo','other');
-            COMMIT;",
-    )?;
+    seeds::ready_workspace(db, "repo", "owner", "worker")?;
+    seeds::ready_workspace(db, "repo", "other", "other")?;
     Ok(())
 }
 

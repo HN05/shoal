@@ -8,6 +8,8 @@ use crate::time::UnixTime;
 use shoal_core::test_support::{commit, git, repository};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::state::ExecutionState;
+use shoal_store::test_support::seeds;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -143,13 +145,7 @@ async fn saved_agents_do_not_hide_active_commands_from_merged_cleanup() {
     let id = f.workspace.id.clone();
     f.manager
         .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('unknown',?1,'unknown')",
-                [id],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "unknown", &id, ExecutionState::Unknown))
         .await
         .unwrap();
     assert!(f.kept_after(5).await);

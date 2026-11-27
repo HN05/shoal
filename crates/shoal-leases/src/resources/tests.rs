@@ -10,6 +10,7 @@ use rusqlite::{Connection, params};
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::acquirers::Acquirer;
 use shoal_store::test_support::queries::{check_owner_query, populated_database};
+use shoal_store::test_support::seeds;
 use std::collections::BTreeSet;
 use uuid::Uuid;
 
@@ -131,15 +132,13 @@ fn leases_use_named_columns() -> Result<()> {
 #[test]
 fn allocation_reads_only_the_named_lease_and_selected_pool() -> Result<()> {
     let mut db = shoal_store::test_support::migrated()?;
+    for owner in ["a", "b"] {
+        seeds::ready_workspace(&db, owner, owner, owner)?;
+    }
     db.execute_batch(
-            "INSERT INTO repositories(id,path,source,last_used) VALUES ('a','/a','a',0),('b','/b','b',0);
-             INSERT INTO spaces(id,kind,repository_id,name) VALUES
-             ('a','workspace','a','a'),('b','workspace','b','b');
-             INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES
-             ('a','/a/w','a','ready','abc','/admin'),('b','/b/w','b','ready','abc','/admin');
-             INSERT INTO resource_pools VALUES ('global','target','{}'),('repo/a','target','{}'),
+        "INSERT INTO resource_pools VALUES ('global','target','{}'),('repo/a','target','{}'),
              ('repo/b','target','{}'),('global','other','{}');",
-        )?;
+    )?;
     for (id, owner, scope, pool, member, mode) in [
         ("one", "a", "global", "target", "z", "permit"),
         ("two", "b", "global", "target", "a", "read"),

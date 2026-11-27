@@ -1,16 +1,12 @@
 use super::*;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
 use std::path::Path;
 
 fn database() -> Result<Connection> {
     let db = shoal_store::test_support::migrated()?;
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES
-            ('repo','/repo','/repo',0), ('other','/other','/other',0);
-         INSERT INTO spaces(id,kind,repository_id,name)
-             VALUES ('owner','workspace','repo','worker');
-         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-             VALUES ('owner','/worker','topic','ready','abc','/admin');",
-    )?;
+    seeds::ready_workspace(&db, "repo", "owner", "topic")?;
+    seeds::repository(&db, &test_support::repository("other", Path::new("/other")))?;
     Ok(db)
 }
 
@@ -32,12 +28,12 @@ fn a_branch_belongs_to_one_workspace_of_its_repository() -> Result<()> {
 #[test]
 fn a_chosen_directory_name_belongs_to_one_workspace_of_any_repository() -> Result<()> {
     let db = database()?;
-    // The owner's directory, `/worker`, has the name in another repository's directory too.
-    let error = ensure_directory_free(&db, Path::new("/other/worker")).unwrap_err();
+    // The owner's directory, `/work/owner`, has the name in another repository's directory too.
+    let error = ensure_directory_free(&db, Path::new("/other/owner")).unwrap_err();
     assert!(
         error.to_string().contains("run the command again"),
         "{error:#}"
     );
-    ensure_directory_free(&db, Path::new("/other/worker-2"))?;
+    ensure_directory_free(&db, Path::new("/other/owner-2"))?;
     Ok(())
 }

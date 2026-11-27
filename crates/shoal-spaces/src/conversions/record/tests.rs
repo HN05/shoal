@@ -1,5 +1,6 @@
 use crate::conversions::record::ChatRow;
 use crate::stand_in::Fixture;
+use shoal_store::test_support::seeds;
 
 #[test]
 fn a_chat_row_keeps_its_scope_token_typed_and_out_of_its_debug() {
@@ -28,11 +29,9 @@ async fn a_workspace_becoming_a_chat_keeps_its_threads_and_requests_to_take_acti
     let records = manager.spaces.records.clone();
     let kept: Vec<(String, String)> = (manager.store)
         .write(move |tx| {
+            seeds::ready_workspace(tx, "repo", "w", "fix")?;
             tx.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-                 INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','fix');
-                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('w','/work','fix','ready','abc','/admin');
-                 INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener,
+                "INSERT INTO threads(space_number,number,space_id,kind,name,created_at,opener,
                          opener_id)
                      VALUES (1,1,'w','question','Which?',1,'space','w');
                  INSERT INTO access_requests(id,space_id,target_key,name,record,space_number,number)
