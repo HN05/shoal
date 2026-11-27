@@ -19,7 +19,26 @@ pub fn point(state: &Path) -> io::Result<()> {
         Some(path) => path.to_owned(),
         None => crate::process::executable::invoked_executable()?,
     };
-    replace(&path(state), &target)
+    aim(&path(state), &target)
+}
+
+/// Point `link` at `target`, unless `target` is the link itself, as for a
+/// process started through it: the link then keeps the installation it
+/// names instead of naming itself.
+fn aim(link: &Path, target: &Path) -> io::Result<()> {
+    if names(target, link) {
+        return Ok(());
+    }
+    replace(link, target)
+}
+
+/// Whether `path` is `link`, through whatever symlinks its directories take.
+fn names(path: &Path, link: &Path) -> bool {
+    let resolved = |path: &Path| {
+        let directory = fs::canonicalize(path.parent()?).ok()?;
+        Some(directory.join(path.file_name()?))
+    };
+    path == link || resolved(path).is_some_and(|path| Some(path) == resolved(link))
 }
 
 /// Replace the link at `link` with one to `target` in one rename, so a
