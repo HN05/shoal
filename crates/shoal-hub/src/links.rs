@@ -122,6 +122,23 @@ impl Links {
         open.get(member).and_then(|open| open.calls.clone())
     }
 
+    /// Which link of `member` is open, none while none is.
+    pub fn token(&self, member: &MemberId) -> Option<u64> {
+        self.open.lock().unwrap().get(member).map(|open| open.token)
+    }
+
+    /// Which link of `member` is open, while it sends the hub's calls
+    /// through `calls`; none once another link replaced it.
+    pub fn serving(&self, member: &MemberId, calls: &Calls) -> Option<u64> {
+        let open = self.open.lock().unwrap();
+        let open = open.get(member)?;
+        let serves = open
+            .calls
+            .as_deref()
+            .is_some_and(|serving| std::ptr::eq(serving, calls));
+        serves.then_some(open.token)
+    }
+
     pub fn connected(&self) -> HashSet<MemberId> {
         self.open.lock().unwrap().keys().cloned().collect()
     }

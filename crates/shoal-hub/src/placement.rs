@@ -32,25 +32,31 @@ pub use placer::Registration;
 /// reported their capacity since their link opened.
 const DESCRIBED_WITHIN: Duration = Duration::from_secs(2);
 
-/// The capacity each machine last reported.
+/// The capacity each machine last reported, with the link it reported on,
+/// none for the hub's own machine, which has no link.
 #[derive(Default)]
 pub(crate) struct Capacities {
-    reported: Mutex<HashMap<MemberId, Capacity>>,
+    reported: Mutex<HashMap<MemberId, (Option<u64>, Capacity)>>,
     /// Counts the reports kept, for those who wait for one.
     kept: watch::Sender<u64>,
 }
 
 impl Capacities {
     /// Keep `capacity` as what the machine `member` reported with
-    /// `report`: a whole report, which a machine sends as its link opens,
-    /// replaces what the hub had, so one that has not measured since has
-    /// none; a report of changes without one keeps it.
-    pub fn keep(&self, member: &MemberId, report: &Report, capacity: Option<Capacity>) {
+    /// `report` on its link `link`: a whole report, which a machine sends as
+    /// its link opens, replaces what the hub had, so one that has not
+    /// measured since has none; a report of changes without one keeps it.
+    pub fn keep(
+        &self,
+        (member, link): (&MemberId, Option<u64>),
+        report: &Report,
+        capacity: Option<Capacity>,
+    ) {
         let mut capacities = self.reported.lock().unwrap();
         self.kept.send_modify(|kept| *kept += 1);
         match (capacity, report) {
             (Some(capacity), _) => {
-                capacities.insert(member.clone(), capacity);
+                capacities.insert(member.clone(), (link, capacity));
             }
             (None, Report::Whole(_)) => {
                 capacities.remove(member);
@@ -59,10 +65,13 @@ impl Capacities {
         }
     }
 
-    /// What the machine `member` reported last, none before it reported.
-    pub fn of(&self, member: &MemberId) -> Option<Capacity> {
+    /// What the machine `member` reported last on its link `link`, none
+    /// before it reported there. So a machine whose link opened again is
+    /// undescribed until its first report on it.
+    pub fn of(&self, member: &MemberId, link: Option<u64>) -> Option<Capacity> {
         let capacities = self.reported.lock().unwrap();
-        capacities.get(member).cloned()
+        let reported = capacities.get(member).filter(|(on, _)| *on == link);
+        reported.map(|(_, capacity)| capacity.clone())
     }
 
     /// Changes as each report is kept.
@@ -183,7 +192,7 @@ impl Hub {
     /// reported.
     pub(super) fn with_capacity(&self, members: &mut [Member]) {
         for member in members.iter_mut().filter(|member| member.connected) {
-            member.capacity = self.capacities.of(&member.id);
+            member.capacity = self.capacities.of(&member.id, self.links.token(&member.id));
         }
     }
 }

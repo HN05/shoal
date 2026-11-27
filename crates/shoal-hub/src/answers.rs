@@ -108,7 +108,11 @@ impl Hub {
                 ensure_machine(member)?;
                 let report = report.on_hub_clock(arrived(sent_at));
                 self.sleeps.powered(&member.id, power);
-                self.capacities.keep(&member.id, &report, capacity);
+                // A report from a link another replaced describes nothing.
+                if let Some(link) = self.links.serving(&member.id, calls) {
+                    self.capacities
+                        .keep((&member.id, Some(link)), &report, capacity);
+                }
                 let held = directory::Held { reserved, kept };
                 let held = (held, repositories);
                 Reply::Reported(

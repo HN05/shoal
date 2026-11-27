@@ -227,7 +227,7 @@ impl Hub {
         let Measured { capacity, power } = measured;
         let numbering = match sink {
             Sink::Hub(own) => {
-                self.capacities.keep(own, &report, capacity);
+                self.capacities.keep((own, None), &report, capacity);
                 let held = (held, repositories);
                 self.record_report(daemon, own, report, held).await?
             }

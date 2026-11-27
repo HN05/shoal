@@ -232,7 +232,8 @@ async fn the_hub_keeps_a_space_no_machine_can_take_until_one_connects() {
         changed: Vec::new(),
         removed: Vec::new(),
     };
-    hub.capacities.keep(&desk, &changes, Some(room));
+    let link = hub.links.token(&desk);
+    hub.capacities.keep((&desk, link), &changes, Some(room));
     // The stand-in link continues nothing, so the user hears the hub tried
     // the desk.
     let failed = alerted(&hub, AlertKind::HandoverFailed).await;

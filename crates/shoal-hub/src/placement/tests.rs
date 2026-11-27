@@ -138,3 +138,21 @@ fn the_log_names_where_a_start_goes_and_each_machine_it_skips() {
     let line = logged(&snapshot.request, &Placement::default(), Policy::Local, &[]);
     assert!(line.contains("goes to no machine"), "{line}");
 }
+
+#[tokio::test]
+async fn a_machine_whose_link_opened_again_is_undescribed_until_it_reports_there() {
+    use shoal_core::config::Config;
+
+    use crate::stand_in;
+
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::default()).await;
+    let desk = shoal_ids::member_ids::MemberId::from("desk".to_owned());
+    let first = hub.links.register(&desk, "desk").unwrap();
+    stand_in::describe(&hub, &desk, &["claude"]);
+    assert!(hub.capacities.of(&desk, hub.links.token(&desk)).is_some());
+    // The same installation opens a new link, which replaces the first.
+    let _second = hub.links.register(&desk, "desk").unwrap();
+    drop(first);
+    assert!(hub.capacities.of(&desk, hub.links.token(&desk)).is_none());
+}
