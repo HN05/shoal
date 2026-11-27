@@ -4,6 +4,11 @@ use rusqlite::{OptionalExtension, params};
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::repository_ids::RepositoryId;
 
+mod plans;
+
+use plans::PlannedColumns;
+pub use plans::planned_start;
+
 use super::blockers;
 use crate::daemon::{Records, Removals};
 use crate::model::QueueEntry;
@@ -294,8 +299,7 @@ pub fn insert_launch(
         super::failures::replace(tx, space)?;
     }
     let request = &launch.request;
-    let planned = &request.start.launch;
-    let issue = planned.issue.as_ref();
+    let planned = PlannedColumns::of(&request.start)?;
     let now = UnixTime::now();
     tx.execute(
         "INSERT INTO agent_queue(id,kind,repository_id,name,agent,issue_title,plan,env,state,created_at,seen_at,opens_workspace_id,mode,narrowing,scope_space_id,priority,issue_labels,source,starts_at_once,space_id)
@@ -306,19 +310,19 @@ pub fn insert_launch(
             launch.repository,
             request.name,
             planned.agent,
-            issue.map(|issue| &issue.title),
-            serde_json::to_string(&request.start)?,
+            planned.issue_title,
+            planned.plan,
             serde_json::to_string(&request.env)?,
             launch.state,
             now,
             (launch.state == QueueState::Starting).then_some(now),
             launch.opens,
             planned.mode,
-            shoal_store::narrowing_column(&planned.narrowing)?,
+            planned.narrowing,
             launch.scope,
             request.priority,
-            serde_json::to_string(issue.map_or(&[][..], |issue| &issue.labels))?,
-            (planned.source.as_ref()).map(serde_json::to_string).transpose()?,
+            planned.issue_labels,
+            planned.source,
             at_once,
             launch.chat,
         ],
@@ -476,17 +480,6 @@ pub fn last_seq(db: &rusqlite::Connection) -> Result<i64> {
 }
 
 pub const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,space_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
-
-/// The start the launch's `row` plans, which a restore's or a job's lacks.
-pub fn planned_start(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueuedStart> {
-    shoal_store::json_column(row, "plan")?.ok_or_else(|| {
-        rusqlite::Error::InvalidColumnType(
-            row.as_ref().column_index("plan").unwrap_or_default(),
-            "plan".into(),
-            rusqlite::types::Type::Null,
-        )
-    })
-}
 
 pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {

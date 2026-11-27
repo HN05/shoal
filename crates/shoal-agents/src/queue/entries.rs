@@ -281,7 +281,10 @@ impl Agents {
             .run(move |db| {
                 let (entry, start) = db
                     .query_row(
-                        &format!("SELECT {ENTRY_COLUMNS},plan FROM agent_queue WHERE id=?1"),
+                        &format!(
+                            "SELECT {ENTRY_COLUMNS},plan,issue_labels,source
+                             FROM agent_queue WHERE id=?1"
+                        ),
                         [&id],
                         |row| {
                             let entry = entry(row)?;

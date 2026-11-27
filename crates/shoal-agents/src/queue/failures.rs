@@ -74,18 +74,12 @@ fn keep(tx: &Transaction<'_>, id: &QueueEntryId, space: &SpaceId, error: &str) -
     Ok(kept == 1)
 }
 
-/// Give the failed launch `id` the permissions its entry's `column` and
-/// its plan's `planned` JSON record, refusing one no longer failed.
-pub fn give(
-    tx: &Transaction<'_>,
-    id: &QueueEntryId,
-    column: &Option<String>,
-    planned: &str,
-) -> Result<()> {
+/// Give the failed launch `id` the permissions its row's `column`
+/// records, refusing one no longer failed.
+pub fn give(tx: &Transaction<'_>, id: &QueueEntryId, column: &Option<String>) -> Result<()> {
     let updated = tx.execute(
-        "UPDATE failed_launches SET narrowing=?2,plan=json_set(plan,'$.launch.narrowing',json(?3))
-         WHERE id=?1 AND json_valid(plan)",
-        params![id, column, planned],
+        "UPDATE failed_launches SET narrowing=?2 WHERE id=?1",
+        params![id, column],
     )?;
     anyhow::ensure!(updated == 1, "{id} no longer waits to be restored");
     Ok(())

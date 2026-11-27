@@ -1,0 +1,2 @@
+-- A launch's plan leaves out what its row's columns hold, which the
+-- migration's preparation dropped from the older plans.

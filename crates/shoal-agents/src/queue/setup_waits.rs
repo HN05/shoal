@@ -88,8 +88,7 @@ impl Agents {
     }
 
     /// Give the permissions beside it to each launch `waiting` names and each
-    /// failed launch `failed` names, in its plan and in the entry the queue
-    /// shows, in one transaction. Refuses them all when one no longer waits to
+    /// failed launch `failed` names, in one transaction. Refuses them all when one no longer waits to
     /// open its workspace or to be restored.
     pub async fn give_launches(
         &self,
@@ -99,17 +98,16 @@ impl Agents {
         let (waiting, failed) = (given_columns(waiting)?, given_columns(failed)?);
         self.store
             .write(move |tx| {
-                for (id, column, planned) in waiting {
+                for (id, column) in waiting {
                     let updated = tx.execute(
-                        "UPDATE agent_queue SET narrowing=?2,plan=json_set(plan,'$.launch.narrowing',json(?3))
-                         WHERE id=?1 AND state=?4 AND json_valid(plan)
-                            AND opens_workspace_id IS NOT NULL",
-                        params![id, column, planned, QueueState::Queued],
+                        "UPDATE agent_queue SET narrowing=?2
+                         WHERE id=?1 AND state=?3 AND opens_workspace_id IS NOT NULL",
+                        params![id, column, QueueState::Queued],
                     )?;
                     ensure!(updated == 1, "{id} no longer waits to open its workspace");
                 }
-                for (id, column, planned) in failed {
-                    super::failures::give(tx, &id, &column, &planned)?;
+                for (id, column) in failed {
+                    super::failures::give(tx, &id, &column)?;
                 }
                 Ok(())
             })
@@ -117,17 +115,13 @@ impl Agents {
     }
 }
 
-/// The permissions `given` each launch, as its entry's column and its
-/// plan's JSON record them.
-type GivenColumns = Vec<(QueueEntryId, Option<String>, String)>;
+/// The permissions `given` each launch, as its row's column records them.
+type GivenColumns = Vec<(QueueEntryId, Option<String>)>;
 
 /// [`GivenColumns`] of the permissions `given` each launch.
 fn given_columns(given: Vec<(QueueEntryId, PermissionsConfig)>) -> Result<GivenColumns> {
     (given.into_iter())
-        .map(|(id, given)| {
-            let column = shoal_store::narrowing_column(&given)?;
-            Ok((id, column, serde_json::to_string(&given)?))
-        })
+        .map(|(id, given)| Ok((id, shoal_store::narrowing_column(&given)?)))
         .collect()
 }
 

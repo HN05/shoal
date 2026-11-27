@@ -254,6 +254,7 @@ mod journal_shapes;
 mod move_destination_kind;
 mod pending_plan_columns;
 mod post_files;
+mod queued_plans;
 mod removed_space_columns;
 mod review_targets;
 mod schema;

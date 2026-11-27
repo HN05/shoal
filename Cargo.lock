@@ -2737,6 +2737,7 @@ dependencies = [
  "futures-util",
  "libc",
  "rusqlite",
+ "serde",
  "serde_json",
  "shoal-core",
  "shoal-daemon-base",

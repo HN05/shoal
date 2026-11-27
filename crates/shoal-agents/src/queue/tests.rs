@@ -1000,22 +1000,18 @@ async fn a_launch_waiting_for_setup_takes_a_permission_change() {
 
     let ready = fixture.workspace("ready").await;
     let change = PermissionChange::assigned("merge=direct").unwrap();
-    // The agent starts under the narrowing its plan keeps.
+    // The agent starts under the narrowing its planned start gives.
     let narrowing = async || {
         let id = entry.id.clone();
-        let plan: String = (fixture.agents.store)
+        (fixture.agents.store)
             .run(move |db| {
-                Ok(
-                    db.query_row("SELECT plan FROM agent_queue WHERE id=?1", [id], |row| {
-                        row.get(0)
-                    })?,
-                )
+                let row = "SELECT * FROM agent_queue WHERE id=?1";
+                Ok(db.query_row(row, [id], super::store::planned_start)?)
             })
             .await
-            .unwrap();
-        let plan: serde_json::Value = serde_json::from_str(&plan).unwrap();
-        serde_json::from_value::<PermissionsConfig>(plan["launch"]["narrowing"].clone())
-            .unwrap_or_default()
+            .unwrap()
+            .launch
+            .narrowing
     };
     let change_for = async |launches: &[SpaceSelector]| {
         let targets = PermissionTargets {

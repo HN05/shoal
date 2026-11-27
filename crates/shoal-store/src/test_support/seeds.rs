@@ -218,14 +218,15 @@ impl QueueEntry {
 /// starts Claude Code, as a job's starts no agent.
 pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
     let (agent, plan) = match entry.kind {
-        QueueKind::Launch => ("claude", Some("{}")),
+        QueueKind::Launch => ("claude", Some(r#"{"launch":{}}"#)),
         QueueKind::Restore => ("claude", None),
         QueueKind::Job => ("", None),
         QueueKind::Command | QueueKind::SeedBuild => bail!("the queue keeps these in memory"),
     };
     db.execute(
         "INSERT INTO agent_queue(id,kind,state,repository_id,space_id,execution_id,name,job,
-            automatic,created_at,agent,plan,env) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?12)",
+            automatic,created_at,agent,plan,env)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
         params![
             entry.id,
             entry.kind,
@@ -239,6 +240,7 @@ pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
             entry.created_at,
             agent,
             plan,
+            plan.map(|_| "{}"),
         ],
     )?;
     Ok(())
