@@ -49,3 +49,10 @@ fn a_move_whose_destination_has_no_kind_is_refused() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn a_move_to_an_unknown_kind_of_destination_is_refused() -> Result<()> {
+    let mut db = at_floor_with(r#"{"kind":"other"}"#)?;
+    assert!(migrate(&mut db).is_err());
+    Ok(())
+}

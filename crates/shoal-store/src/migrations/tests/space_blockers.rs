@@ -67,3 +67,11 @@ fn a_blocker_without_a_reason_is_refused() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn a_blocker_of_an_unknown_kind_is_refused() -> Result<()> {
+    let mut db =
+        at_floor_with(r#"{"blockers":[{"kind":"other","target":"u","name":"u","reason":"r"}]}"#)?;
+    assert!(migrate(&mut db).is_err());
+    Ok(())
+}

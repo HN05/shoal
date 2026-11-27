@@ -2,7 +2,7 @@
 //! a row's JSON object, whose fields they take out, refusing a row that is
 //! malformed or lacks one.
 use anyhow::{Context, Result, bail};
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
 
 /// The JSON object a row of `table` holds, named by `key` in errors.
@@ -22,7 +22,7 @@ impl JsonRow {
     }
 
     /// Takes out the field at `path` as a `T`; refuses a row that lacks it
-    /// or holds another type there.
+    /// or holds a value `T` does not take.
     pub(super) fn take<T: DeserializeOwned>(&mut self, path: &[&str]) -> Result<T> {
         let value = self.take_optional(path)?;
         value.with_context(|| format!("{} row {} lacks {}", self.table, self.key, path.join(".")))
@@ -30,7 +30,7 @@ impl JsonRow {
 
     /// Takes out the field at `path` as a `T`, absent where it or a parent
     /// is, or where it is null. Refuses a parent that is no object, and a
-    /// field of another type.
+    /// value `T` does not take.
     pub(super) fn take_optional<T: DeserializeOwned>(
         &mut self,
         path: &[&str],
@@ -41,7 +41,7 @@ impl JsonRow {
         let field = path.join(".");
         serde_json::from_value(value).with_context(|| {
             format!(
-                "{} row {}: {field} holds the wrong type",
+                "{} row {}: {field} holds no value it takes",
                 self.table, self.key
             )
         })
@@ -80,5 +80,13 @@ impl JsonRow {
 
     pub(super) fn text(&self) -> String {
         Value::Object(self.object.clone()).to_string()
+    }
+}
+
+/// The name a value of a closed set has in JSON, which its column keeps.
+pub(super) fn spelling<T: Serialize>(value: &T) -> Result<String> {
+    match serde_json::to_value(value)? {
+        Value::String(name) => Ok(name),
+        other => bail!("{other} is no name"),
     }
 }

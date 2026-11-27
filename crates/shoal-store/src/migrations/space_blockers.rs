@@ -2,15 +2,15 @@
 //! row of `space_blockers`.
 use anyhow::Result;
 use rusqlite::{Connection, params};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use super::json_rows::JsonRow;
+use super::json_rows::{JsonRow, spelling};
 
 /// A blocker as plans stored it.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Blocker {
-    kind: String,
+    kind: Kind,
     target: String,
     name: String,
     reason: String,
@@ -18,6 +18,18 @@ struct Blocker {
     lookup_failed: Option<String>,
     #[serde(default)]
     step: Option<Step>,
+}
+
+/// The kinds of blocker this migration knows.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Kind {
+    Space,
+    Launch,
+    Issue,
+    Pr,
+    CiRun,
+    Setup,
 }
 
 #[derive(Deserialize)]
@@ -49,7 +61,7 @@ pub(super) fn move_blockers(db: &Connection) -> Result<()> {
                 params![
                     id,
                     position,
-                    blocker.kind,
+                    spelling(&blocker.kind)?,
                     blocker.target,
                     blocker.name,
                     blocker.reason,

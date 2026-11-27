@@ -87,3 +87,14 @@ fn a_plan_whose_checkpoint_is_no_number_is_refused() -> Result<()> {
     assert!(migrate(&mut db).is_err());
     Ok(())
 }
+
+#[test]
+fn a_plan_of_an_unknown_source_kind_is_refused() -> Result<()> {
+    let mut db = at_floor_with(&[("w", r#"{"source":{"kind":"other"}}"#)])?;
+    let error = migrate(&mut db).unwrap_err();
+    assert!(
+        format!("{error:#}").contains("source.kind holds no value it takes"),
+        "{error:#}"
+    );
+    Ok(())
+}

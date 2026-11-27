@@ -2,8 +2,21 @@
 //! the checkpoint it names move from its plan into columns.
 use anyhow::Result;
 use rusqlite::{Connection, params};
+use serde::{Deserialize, Serialize};
 
-use super::json_rows::JsonRow;
+use super::json_rows::{JsonRow, spelling};
+
+/// The kinds of pending source this migration knows.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Source {
+    New,
+    Existing,
+    Commit,
+    Copy,
+    Restore,
+    Outside,
+}
 
 pub(super) fn move_source_fields(db: &Connection) -> Result<()> {
     let plans = db
@@ -14,12 +27,12 @@ pub(super) fn move_source_fields(db: &Connection) -> Result<()> {
         .collect::<rusqlite::Result<Vec<_>>>()?;
     for (id, text) in plans {
         let mut plan = JsonRow::parse("workspaces", id.as_str(), &text)?;
-        let source: String = plan.take(&["source", "kind"])?;
+        let source: Source = plan.take(&["source", "kind"])?;
         let checkpoint: Option<i64> = plan.take_optional(&["source", "checkpoint"])?;
         db.execute(
             "UPDATE workspaces SET pending_plan=?2,pending_source=?3,pending_checkpoint=?4
                 WHERE id=?1",
-            params![id, plan.text(), source, checkpoint],
+            params![id, plan.text(), spelling(&source)?, checkpoint],
         )?;
     }
     Ok(())
