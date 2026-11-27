@@ -1,0 +1,2 @@
+-- A review's JSON target no longer names its PR's URL, which the
+-- migration's preparation moved into `target_url`.

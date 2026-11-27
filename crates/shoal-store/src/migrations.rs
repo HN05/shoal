@@ -7,9 +7,10 @@ use rusqlite::Connection;
 mod github_activity;
 mod journal_shapes;
 mod post_surfaces;
+mod review_targets;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 308;
+pub const SCHEMA_VERSION: i64 = 310;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -84,6 +85,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         308,
         include_str!("migrations/0308_placement_lifetime.sql"),
         None,
+    ),
+    (
+        309,
+        include_str!("migrations/0309_review_target_urls.sql"),
+        None,
+    ),
+    (
+        310,
+        include_str!("migrations/0310_review_target_columns.sql"),
+        Some(review_targets::move_urls),
     ),
 ];
 

@@ -1106,7 +1106,7 @@ CREATE TABLE "reviews" (
     -- Whether protection stopped its run, so it waits for healthy readings
     -- before it runs again, through a daemon restart too.
     waits_for_recovery INTEGER NOT NULL DEFAULT 0,
-    session TEXT,
+    session TEXT, target_url TEXT,
     CHECK((state='failed') = (failure IS NOT NULL)),
     CHECK((opener='shoal') = (agent IS NOT NULL)),
     CHECK((opener='space') = (opener_id IS NOT NULL)),

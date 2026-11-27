@@ -978,7 +978,7 @@ async fn finding(fixture: &Fixture, workspace: &Workspace) -> Thread {
         .write(move |tx| {
             tx.execute(
                 "INSERT INTO reviews(workspace_id,target,opener,agent,state,created_at)
-                    VALUES (?1,'{}','shoal','claude','finished',1)",
+                    VALUES (?1,'{\"kind\":\"workspace\"}','shoal','claude','finished',1)",
                 [&id],
             )?;
             let review = ReviewId(tx.last_insert_rowid());

@@ -16,6 +16,8 @@ use shoal_ids::agent_session_ids::AgentSessionId;
 use shoal_protocol::threads::{Sender, ThreadSpace};
 use shoal_protocol::{space_names::SpaceName, time::UnixTime};
 
+mod target;
+
 /// What queueing a review found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Queued {
@@ -51,21 +53,59 @@ pub fn queue(
         );
         return Ok(Queued::Existing(id));
     }
+    let opener = Opener::Shoal { agent, model };
+    let id = insert(db, workspace_id, target, &opener, ReviewState::Queued, now)?;
+    Ok(Queued::New(id))
+}
+
+/// Who opens a new review.
+pub(crate) enum Opener<'a> {
+    /// Shoal, whose reviewer runs `agent` with `model`.
+    Shoal {
+        agent: &'a Agent,
+        model: &'a ModelChoice,
+    },
+    User,
+    Space(&'a SpaceId),
+}
+
+/// Record a new review of `target` in the workspace `workspace_id`, which
+/// `opener` opens in `state`.
+pub(crate) fn insert(
+    db: &Connection,
+    workspace_id: &SpaceId,
+    target: &ReviewTarget,
+    opener: &Opener,
+    state: ReviewState,
+    now: UnixTime,
+) -> Result<ReviewId> {
+    let (url, target) = target::columns(target)?;
+    let (sender, opener_id, agent, model) = match opener {
+        Opener::Shoal { agent, model } => {
+            let model = (!model.is_empty())
+                .then(|| serde_json::to_string(model))
+                .transpose()?;
+            (Sender::Shoal, None, Some(*agent), model)
+        }
+        Opener::User => (Sender::User, None, None, None),
+        Opener::Space(id) => (Sender::Space, Some(*id), None, None),
+    };
     db.execute(
-        "INSERT INTO reviews(workspace_id,target,opener,agent,model,state,created_at)
-            VALUES (?1,?2,'shoal',?3,?4,?5,?6)",
+        "INSERT INTO reviews(workspace_id,target_url,target,opener,opener_id,agent,model,state,
+            created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
         params![
             workspace_id,
-            serde_json::to_string(target)?,
+            url,
+            target,
+            sender,
+            opener_id,
             agent,
-            (!model.is_empty())
-                .then(|| serde_json::to_string(model))
-                .transpose()?,
-            ReviewState::Queued,
+            model,
+            state,
             now
         ],
     )?;
-    Ok(Queued::New(ReviewId(db.last_insert_rowid())))
+    Ok(ReviewId(db.last_insert_rowid()))
 }
 
 /// The workspace's queued or running review.
@@ -344,7 +384,7 @@ fn subject_session(
             &format!(
                 "SELECT earlier.id,earlier.reviewer,earlier.session FROM reviews earlier
                     JOIN reviews this ON this.workspace_id=earlier.workspace_id
-                    AND json_extract(this.target,'$.url') IS json_extract(earlier.target,'$.url')
+                    AND this.target_url IS earlier.target_url
                     WHERE this.id=?1 AND {which} AND earlier.session IS NOT NULL
                     ORDER BY earlier.id DESC LIMIT 1"
             ),
@@ -428,7 +468,7 @@ pub fn set_posted(db: &Connection, id: ReviewId, posted: &Posted) -> Result<()> 
 }
 
 const COLUMNS: &str = "id,workspace_id,target,agent,reviewer,state,failure,head,base,created_at,
-    started_at,ended_at,summary,verdict,posted,model,opener,opener_id";
+    started_at,ended_at,summary,verdict,posted,model,opener,opener_id,target_url";
 
 /// Review `id` with its threads.
 pub fn load(db: &Connection, records: &dyn Records, id: ReviewId) -> Result<Option<Review>> {
@@ -578,13 +618,16 @@ pub fn earlier(
 
 fn review(row: &Row) -> rusqlite::Result<Review> {
     let target: String = row.get(2)?;
+    let target = target::read(row.get(18)?, &target).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, error.into())
+    })?;
     let posted: Option<String> = row.get(14)?;
     Ok(Review {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
         // Read from the spaces' records by [`named`].
         workspace: SpaceName::from(String::new()),
-        target: json(2, &target)?,
+        target,
         author: author(row)?,
         reviewer: row.get(4)?,
         state: row.get(5)?,

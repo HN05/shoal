@@ -189,8 +189,8 @@ fn reviews_keep_their_ids_and_reopens_once_they_can_fail_unsubmitted() -> Result
         INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,holder_id)
             VALUES (1,'workspace',1,1,'review','Still',1,'shoal','workspace');
         INSERT INTO reviews(id,workspace_id,target,opener,agent,state,created_at)
-            VALUES (1,'workspace','{}','shoal','codex','finished',1),
-                (2,'workspace','{}','shoal','codex','cancelled',2);
+            VALUES (1,'workspace','{\"kind\":\"workspace\"}','shoal','codex','finished',1),
+                (2,'workspace','{\"kind\":\"workspace\"}','shoal','codex','cancelled',2);
         INSERT INTO review_reopens(review_id,thread_id) VALUES (1,1);
         DELETE FROM reviews WHERE id=2;",
     )?;
@@ -203,7 +203,7 @@ fn reviews_keep_their_ids_and_reopens_once_they_can_fail_unsubmitted() -> Result
     assert_eq!(reopened, (1, 1));
     db.execute(
         "INSERT INTO reviews(workspace_id,target,opener,agent,state,failure,created_at)
-            VALUES ('workspace','{}','shoal','codex','failed','not-submitted',3)",
+            VALUES ('workspace','{\"kind\":\"workspace\"}','shoal','codex','failed','not-submitted',3)",
         [],
     )?;
     assert_eq!(db.last_insert_rowid(), 3);
@@ -242,6 +242,7 @@ fn ci_job_runs_move_to_the_runs_as_whole_runs_of_their_job() -> Result<()> {
 mod github_activity;
 mod journal_columns;
 mod journal_shapes;
+mod review_targets;
 mod schema;
 
 /// A thread at the floor where the holder offered choices twice, the user

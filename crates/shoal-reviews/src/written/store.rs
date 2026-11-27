@@ -9,6 +9,7 @@ use shoal_refs::CommitId;
 
 use super::Writer;
 use crate::reviews::{ReviewId, ReviewState, ReviewTarget, Verdict};
+use crate::store::Opener;
 
 /// The columns that name a writer: who writes, and the space that does.
 fn columns(writer: &Writer) -> (Sender, Option<&SpaceId>) {
@@ -29,20 +30,12 @@ pub fn start(
     if let Some(id) = pending_of(db, workspace, writer)? {
         return Ok(id);
     }
-    let (opener, opener_id) = columns(writer);
-    db.execute(
-        "INSERT INTO reviews(workspace_id,target,opener,opener_id,state,created_at)
-            VALUES (?1,?2,?3,?4,?5,?6)",
-        params![
-            workspace,
-            serde_json::to_string(&ReviewTarget::Workspace)?,
-            opener,
-            opener_id,
-            ReviewState::Pending,
-            now
-        ],
-    )?;
-    Ok(ReviewId(db.last_insert_rowid()))
+    let opener = match writer {
+        Writer::User => Opener::User,
+        Writer::Space(id) => Opener::Space(id),
+    };
+    let target = &ReviewTarget::Workspace;
+    crate::store::insert(db, workspace, target, &opener, ReviewState::Pending, now)
 }
 
 /// `writer`'s pending review of the workspace `workspace`.
