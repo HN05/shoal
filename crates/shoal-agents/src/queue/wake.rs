@@ -127,6 +127,12 @@ impl Stopped {
         }
     }
 
+    /// Whether its restore waits for healthy readings once nothing else
+    /// holds it.
+    pub fn waits_for_recovery(self) -> bool {
+        matches!(self, Self::ForLoad | Self::OomKilled { .. })
+    }
+
     /// Whether the agent stopped between turns, so that its restore waits
     /// for an update.
     fn between_turns(self) -> bool {

@@ -14,6 +14,7 @@ use anyhow::{Context as _, Result, ensure};
 use rusqlite::{Connection, params};
 
 use super::Start;
+use super::wake::Stopped;
 use crate::Agents;
 use crate::daemon::Daemon;
 use crate::execution::recovery;
@@ -643,7 +644,13 @@ impl Agents {
         if self.config.current().machine.overload.recovery.enabled {
             return Ok(());
         }
-        let left = self.load_restores(QueueState::Queued).await?;
+        let left = (self.restores_in(QueueState::Queued))
+            .await?
+            .into_iter()
+            .filter(|restore| {
+                self.stopped_as(&restore.space, &restore.execution) == Stopped::ForLoad
+            })
+            .collect::<Vec<_>>();
         if left.is_empty() {
             return Ok(());
         }
@@ -655,30 +662,28 @@ impl Agents {
         Ok(())
     }
 
-    /// Return the starting restores the daemon starts of agents load or disk
-    /// space stopped mid-turn to their place in the queue as the daemon
-    /// starts: the healthy readings that admitted them were the previous
-    /// daemon's, so they wait for this one's, as a reattaching wrapper's
-    /// restore does.
+    /// Return the starting restores the daemon starts that healthy readings
+    /// admitted, of agents load, disk space or the OOM killer stopped, to
+    /// their place in the queue as the daemon starts: the readings were the
+    /// previous daemon's, so they wait for this one's, as a reattaching
+    /// wrapper's restore does.
     pub async fn return_recovery_starts(&self) -> Result<()> {
-        let ids: Vec<_> = (self.load_restores(QueueState::Starting).await?.into_iter())
+        let ids: Vec<_> = (self.restores_in(QueueState::Starting).await?)
+            .into_iter()
+            .filter(|restore| {
+                (self.stopped_as(&restore.space, &restore.execution)).waits_for_recovery()
+            })
             .map(|restore| restore.id)
             .collect();
         self.store.run(move |db| requeue_starts(db, &ids)).await
     }
 
-    /// The restores in `state` the daemon starts of agents load or disk
-    /// space stopped mid-turn, which Shoal queued on its own.
-    async fn load_restores(&self, state: QueueState) -> Result<Vec<AutomaticRestore>> {
-        let restores = self
-            .store
+    /// The restores in `state` the daemon starts, which Shoal queued on its
+    /// own.
+    async fn restores_in(&self, state: QueueState) -> Result<Vec<AutomaticRestore>> {
+        self.store
             .run(move |db| automatic_restores(db, state))
-            .await?;
-        Ok((restores.into_iter())
-            .filter(|restore| {
-                self.stopped_as(&restore.space, &restore.execution) == super::wake::Stopped::ForLoad
-            })
-            .collect())
+            .await
     }
 
     /// Tell the space of `restore`, which recovery no longer restores, that

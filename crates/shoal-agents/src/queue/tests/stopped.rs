@@ -263,15 +263,15 @@ async fn readings_withdrawn_before_a_daemon_started_load_restore_runs_return_it(
     );
 }
 
-/// A daemon restart returns a restore the daemon starts after a load stop,
-/// which the previous daemon's healthy readings admitted, to its place,
-/// where it waits for the new daemon's.
-#[tokio::test]
-async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
+/// A daemon restart returns a restore the daemon starts of the agent
+/// `record` saves, which the previous daemon's healthy readings admitted, to
+/// its place, where it waits for the new daemon's.
+async fn a_daemon_restart_returns_an_admitted_restore_to_its_place(record: &str) {
     let fixture = Fixture::new().await;
     limit_globally(&fixture, 4);
     let loaded = fixture.workspace("loaded").await;
-    load_stops(&fixture, &[&loaded]);
+    signal_stop(&fixture, &loaded.id, "loaded-agent");
+    stop(&fixture, &loaded.id, "loaded-agent", record);
     publish_recovery(&fixture);
     dispatch(&fixture).await;
     let admitted = entry(&fixture, "loaded-agent").await;
@@ -294,6 +294,17 @@ async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
     publish_recovery(&restarted);
     dispatch(&restarted).await;
     assert_eq!(entry(&restarted, "loaded-agent").await.state, Starting);
+}
+
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_load_restore_to_its_place() {
+    a_daemon_restart_returns_an_admitted_restore_to_its_place(LOAD_STOPPED).await;
+}
+
+#[tokio::test]
+async fn a_daemon_restart_returns_an_admitted_oom_restore_to_its_place() {
+    let killed = r#"{"agent":"claude","mode":"worker","stage":"stopped","oom_kills":1}"#;
+    a_daemon_restart_returns_an_admitted_restore_to_its_place(killed).await;
 }
 
 /// Disabling recovery leaves a restore the daemon would start after a load
