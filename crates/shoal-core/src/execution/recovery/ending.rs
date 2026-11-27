@@ -61,22 +61,36 @@ impl Ending<'_> {
     }
 }
 
+/// The stop reason of an agent the OOM killer ended, which its restore tells
+/// it whenever it stopped.
+pub const OOM_REASON: &str = "the OOM killer ended it";
+
+/// What an agent the OOM killer ended is told to do about it.
+const OOM_ADVICE: &str = "Use less memory, such as by running builds through `shoal run`.";
+
 /// What a restored session is told, if anything: when it ended mid-turn,
 /// why and when it stopped when known and to continue, then `handoff`;
-/// otherwise `handoff` alone, so that it waits for what comes next.
+/// otherwise `handoff` alone, so that it waits for what comes next. One the
+/// OOM killer ended is told of it either way.
 pub fn resumed_prompt(ending: Ending<'_>, handoff: Option<&str>) -> Option<String> {
-    if !ending.mid_turn() {
-        return handoff.map(str::to_owned);
+    let oom = (ending.stop).filter(|stop| stop.reason.as_deref() == Some(OOM_REASON));
+    let told = match (ending.mid_turn(), ending.stop) {
+        (true, stop) => {
+            let stop = stop.map(|stop| format!("{} ", stop.describe()));
+            let advice = oom.map(|_| format!("{OOM_ADVICE} "));
+            let next = "Continue working on the unfinished assignment from where you left off.";
+            Some(format!(
+                "{}{}{next}",
+                stop.unwrap_or_default(),
+                advice.unwrap_or_default()
+            ))
+        }
+        (false, _) => oom.map(|stop| format!("{} {OOM_ADVICE}", stop.describe())),
+    };
+    match (told, handoff) {
+        (Some(told), Some(handoff)) => Some(format!("{told}\n\n{handoff}")),
+        (told, handoff) => told.or_else(|| handoff.map(str::to_owned)),
     }
-    let mut prompt = (ending.stop)
-        .map(|stop| format!("{} ", stop.describe()))
-        .unwrap_or_default();
-    prompt.push_str("Continue working on the unfinished assignment from where you left off.");
-    if let Some(handoff) = handoff {
-        prompt.push_str("\n\n");
-        prompt.push_str(handoff);
-    }
-    Some(prompt)
 }
 
 /// Whether an agent that reported `turn` last was between turns, with no

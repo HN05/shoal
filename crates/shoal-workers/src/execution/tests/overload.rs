@@ -712,6 +712,40 @@ async fn an_agent_whose_terminal_closes_is_saved_as_stopped() {
     serving.abort();
 }
 
+/// An agent a SIGKILL from outside Shoal ends, as the OOM killer's, did not
+/// choose to quit: it is saved for the agent queue to restore, not kept as a
+/// last session.
+#[tokio::test]
+async fn an_agent_killed_from_outside_is_saved_for_its_restore() {
+    use shoal_core::execution::recovery::{LastSession, Record, record_path, restore_requests};
+    let (_root, manager, workspace, serving) = fixture().await;
+    let agent = launch(&manager, &workspace);
+    wait_started(&manager, &workspace).await;
+    report_session(&manager, &workspace, "killed-session").await;
+    let execution = manager
+        .spaces
+        .inspect_workspace(&*manager, &SpaceSelector::id(&workspace.id))
+        .await
+        .unwrap()
+        .executions
+        .remove(0);
+    // SAFETY: the agent's own process group, which the wrapper does not stop.
+    unsafe {
+        libc::kill(-(execution.group_id.unwrap() as i32), libc::SIGKILL);
+    }
+    assert_eq!(bounded(agent).await.unwrap().unwrap(), 128 + libc::SIGKILL);
+    assert_eq!(LastSession::all(&manager.paths, &workspace.id).unwrap(), []);
+    let path = record_path(&manager.paths, &workspace.id, &execution.id);
+    let record = Record::load(&path).unwrap().unwrap();
+    assert_eq!(record.session, Some("killed-session".into()));
+    let requested: Vec<_> = (restore_requests(&manager.paths, &workspace.id).unwrap())
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(requested, [execution.id]);
+    serving.abort();
+}
+
 /// A shutdown terminates the wrapper and may kill it before its agent exits,
 /// so the record is saved before the agent is stopped.
 #[tokio::test]

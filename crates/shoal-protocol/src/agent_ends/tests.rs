@@ -26,3 +26,17 @@ fn causes_keep_their_persisted_shape() {
         assert_eq!(serde_json::from_value::<StopCause>(stored).unwrap(), cause);
     }
 }
+
+/// A SIGKILL is the OOM killer's only once the agent's scope counted a kill.
+#[test]
+fn a_kill_is_the_oom_killers_once_its_scope_counted_one() {
+    let end = |signal| SessionEnd {
+        signal,
+        reached: SignalTarget::Agent,
+    };
+    let kill = end(EndingSignal::Kill);
+    assert_eq!(StopCause::ended(kill, 1), StopCause::OomKill);
+    assert_eq!(StopCause::ended(kill, 0), StopCause::Signal(kill));
+    let terminate = end(EndingSignal::Terminate);
+    assert_eq!(StopCause::ended(terminate, 1), StopCause::Signal(terminate));
+}

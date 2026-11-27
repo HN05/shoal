@@ -23,7 +23,7 @@ mod stopped;
 pub use claim::{RecoveryClaim, claim, claim_last_session, claim_record, forget_saved};
 use ending::idle;
 pub(crate) use ending::saved_at;
-pub use ending::{Ending, StopExt, resumed_prompt};
+pub use ending::{Ending, OOM_REASON, StopExt, resumed_prompt};
 pub use last_session::{LastSessionExt, StagedLastSession};
 pub use permissions::{ClaimedChange, change_permission};
 use record::write_record;

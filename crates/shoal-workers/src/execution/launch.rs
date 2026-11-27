@@ -201,12 +201,20 @@ impl TrackedLaunch {
         ran: Duration,
     ) -> Result<Option<i32>> {
         match outcome {
-            Outcome::Exited(code) | Outcome::Interrupted(code)
+            Outcome::Exited(code) | Outcome::Killed(code) | Outcome::Interrupted(code)
                 if matches!(mode, Mode::Demo { .. }) =>
             {
                 self.restart_demo(code, restarts.after(ran)).await
             }
-            Outcome::Exited(code) | Outcome::Interrupted(code) => Ok(Some(code)),
+            // An agent killed from outside, as by the OOM killer, did not
+            // choose to quit, so it sleeps as one a signal ended does.
+            Outcome::Killed(code) if self.recovery.is_some() => {
+                let restored = self.resolve_pause(paths, mode, &Halt::killed()).await?;
+                Ok((!restored).then_some(code))
+            }
+            Outcome::Exited(code) | Outcome::Killed(code) | Outcome::Interrupted(code) => {
+                Ok(Some(code))
+            }
             Outcome::Stopped { code, reason } => {
                 self.report_stopped(&reason);
                 Ok(Some(code))

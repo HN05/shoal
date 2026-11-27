@@ -776,3 +776,24 @@ fn a_permission_change_reaches_each_saved_agent_and_keeps_the_rest() {
     let other_last = LastSession::all(&paths, &other).unwrap();
     assert_eq!(other_last[0].narrowing, agent.narrowing);
 }
+
+/// An agent the OOM killer ended is told of it, between turns too, before
+/// its handoff.
+#[test]
+fn a_session_the_oom_killer_ended_is_told_of_it() {
+    let stop = Stop {
+        reason: Some(OOM_REASON.into()),
+        at: None,
+    };
+    for turn in [AgentState::Idle, AgentState::Working] {
+        let ending = Ending {
+            stop: Some(&stop),
+            turn: Some(turn),
+        };
+        let prompt = resumed_prompt(ending, Some("handoff")).unwrap();
+        assert!(prompt.contains(OOM_REASON), "{prompt}");
+        assert!(prompt.contains("shoal run"), "{prompt}");
+        assert!(prompt.ends_with("\n\nhandoff"), "{prompt}");
+        assert_eq!(prompt.contains("Continue"), turn == AgentState::Working);
+    }
+}

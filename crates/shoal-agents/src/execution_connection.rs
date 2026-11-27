@@ -599,9 +599,11 @@ async fn relay(
                 if let Some(tracked) = agent {
                     // The wrapper reports the signal that ended its session,
                     // which stopped the agent whatever the daemon sent.
+                    let oom_kills = reported.map_or(0, |memory| memory.oom_kills);
+                    let ended = ended.map(|end| StopCause::ended(end, oom_kills));
                     let stopped = AgentEvent {
-                        oom_kills: reported.map_or(0, |memory| memory.oom_kills),
-                        cause: ended.map(StopCause::Signal).or_else(|| stop_cause.clone()),
+                        oom_kills,
+                        cause: ended.or_else(|| stop_cause.clone()),
                         ..agent_event(tracked, execution_id, None)
                     };
                     (shoal_daemon_base::events::record_agent(

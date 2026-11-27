@@ -63,6 +63,8 @@ pub(super) async fn pause_agent(
     stop: &Halt,
     memory: Option<ScopeMemory>,
 ) -> Result<AfterPause> {
+    let oom_killed = stop.killed_for_memory(memory);
+    let stop = oom_killed.as_ref().unwrap_or(stop);
     let automatic = recovery.automatic && stop.recovers();
     let restorer = restorer(recovery, stop, automatic);
     let queued = matches!(restorer, Restorer::Queue(_));
@@ -360,6 +362,32 @@ impl Halt {
         };
         let end = SessionEnd { signal, reached };
         Some(Self::Ended { reason, end })
+    }
+
+    /// The halt of an agent killed by a SIGKILL neither the wrapper nor the
+    /// daemon sent.
+    pub(super) fn killed() -> Self {
+        let end = SessionEnd {
+            signal: EndingSignal::Kill,
+            reached: SignalTarget::Agent,
+        };
+        Self::Ended {
+            reason: "it was killed",
+            end,
+        }
+    }
+
+    /// This halt naming the OOM killer, for an agent killed while its scope
+    /// counted an OOM kill in `memory`.
+    fn killed_for_memory(&self, memory: Option<ScopeMemory>) -> Option<Self> {
+        let Self::Ended { end, .. } = self else {
+            return None;
+        };
+        let counted = memory.is_some_and(|memory| memory.oom_kills > 0);
+        (end.signal == EndingSignal::Kill && counted).then_some(Self::Ended {
+            reason: recovery::OOM_REASON,
+            end: *end,
+        })
     }
 
     /// The signal that ended the session, which the daemon did not send.

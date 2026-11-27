@@ -73,3 +73,15 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
         Restorer::User
     ));
 }
+
+/// A SIGKILL from outside names the OOM killer only when the agent's scope
+/// counted an OOM kill.
+#[test]
+fn a_kill_names_the_oom_killer_once_the_scope_counted_one() {
+    let memory = |oom_kills| Some(ScopeMemory { oom_kills, peak: 0 });
+    let killed = Halt::killed();
+    let oom = killed.killed_for_memory(memory(1)).unwrap();
+    assert_eq!(oom.saved_reason(), Some(recovery::OOM_REASON));
+    assert!(killed.killed_for_memory(memory(0)).is_none());
+    assert!(killed.killed_for_memory(None).is_none());
+}

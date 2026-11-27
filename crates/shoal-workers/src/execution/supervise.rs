@@ -37,6 +37,9 @@ use shoal_protocol::protocol::ScopeMemory;
 #[derive(Debug)]
 pub(super) enum Outcome {
     Exited(i32),
+    /// The command died of SIGKILL, which neither this wrapper nor the
+    /// daemon sent, as the OOM killer sends it.
+    Killed(i32),
     /// The wrapper stopped the command, as an interrupt, a cancellation or
     /// protection's stop of an admitted command has it do.
     Interrupted(i32),
@@ -56,6 +59,7 @@ impl Outcome {
     pub(super) fn code(&self) -> i32 {
         match self {
             Self::Exited(code)
+            | Self::Killed(code)
             | Self::Interrupted(code)
             | Self::Stopped { code, .. }
             | Self::Paused { code, .. } => *code,
@@ -69,6 +73,7 @@ impl Outcome {
         let code = exit_code(status);
         match (halt, status.signal()) {
             (Some(stop), _) => Self::Paused { code, stop },
+            (None, Some(libc::SIGKILL)) => Self::Killed(code),
             (None, Some(_)) => Self::Interrupted(code),
             (None, None) => Self::Exited(code),
         }

@@ -65,6 +65,17 @@ states!(
     }
 );
 
+impl StopCause {
+    /// The cause of a stop the signal that `end`ed the agent's session made:
+    /// the OOM killer's for a SIGKILL while its scope counted `oom_kills`.
+    pub fn ended(end: SessionEnd, oom_kills: u64) -> Self {
+        match end.signal {
+            EndingSignal::Kill if oom_kills > 0 => Self::OomKill,
+            _ => Self::Signal(end),
+        }
+    }
+}
+
 impl fmt::Display for StopCause {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
