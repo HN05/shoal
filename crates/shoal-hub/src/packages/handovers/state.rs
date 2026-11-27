@@ -87,17 +87,25 @@ impl Handovers {
         placed.get(id).is_some_and(|placed| kept_from(placed, from))
     }
 
-    /// Record that another machine took over the space `id`, so the hub keeps
-    /// it no longer.
-    pub(crate) fn taken_over(&self, id: &SpaceId) {
+    /// Take `claimer`'s claim of the space `id`, which the hub did not hand
+    /// to it: refused while the hub hands the space to another machine. Once
+    /// taken, the hub keeps the space no longer, even should the claim then
+    /// fail. Under the lock [`Self::placed_later`] takes, so a claim and a
+    /// later placement never both go ahead.
+    pub(crate) fn take_over(&self, id: &SpaceId, claimer: &MemberId) -> Result<()> {
         let mut placed = self.placed.lock().unwrap();
+        if let Some(to) = (self.claims.lock().unwrap().get(id)).filter(|to| *to != claimer) {
+            bail!("the hub hands space {id} over to machine {to}, which claims it");
+        }
         if placed
-            .remove(id)
+            .get(id)
             .is_some_and(|placed| placed.destination == Destination::Hub)
         {
+            placed.remove(id);
             self.taken_over.lock().unwrap().insert(id.clone());
             self.stayed.send_modify(|stayed| *stayed += 1);
         }
+        Ok(())
     }
 
     /// Whether another machine took over the space `id` while the hub kept
@@ -107,8 +115,9 @@ impl Handovers {
     }
 
     /// Record that the space `id`, which the hub keeps for `from`, goes where
-    /// `decision` says, as the chats in its worktree do. False, recording
-    /// nothing, once the hub no longer keeps it, as once `from` stayed.
+    /// `decision` says, as the chats in its worktree do, and that the machine
+    /// it names may claim it. False, recording nothing, once the hub no
+    /// longer keeps it, as once `from` stayed or another machine took it.
     pub(in crate::packages) fn placed_later(
         &self,
         id: &SpaceId,
@@ -119,6 +128,7 @@ impl Handovers {
         let Some(placed) = placed.get_mut(id).filter(|placed| kept_from(placed, from)) else {
             return false;
         };
+        (self.claims.lock().unwrap()).insert(id.clone(), decision.machine.clone());
         placed.destination = Destination::Machine(decision);
         true
     }

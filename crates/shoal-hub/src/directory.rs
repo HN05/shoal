@@ -99,9 +99,10 @@ impl Hub {
         let (member, id, ticket) = (member.clone(), id.clone(), ticket.cloned());
         let connected = self.connected_machines().await;
         let handed = self.handovers.handed_to(&id, &member);
-        let claimed = id.clone();
-        let number = self
-            .store
+        if !handed {
+            self.handovers.take_over(&id, &member)?;
+        }
+        self.store
             .write(move |tx| {
                 if let Some(ticket) = &ticket {
                     fences::ensure_unsettled(tx, ticket)?;
@@ -112,12 +113,7 @@ impl Hub {
                 records::claim(tx, &member, &id)?;
                 numbers::keep_for_claim(tx, &member, &id)
             })
-            .await?;
-        // A space the hub kept for want of a machine is this one's now.
-        if !handed {
-            self.handovers.taken_over(&claimed);
-        }
-        Ok(number)
+            .await
     }
 
     /// Settle the move `ticket` of the space `id` to the machine `member`:

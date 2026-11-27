@@ -290,3 +290,29 @@ async fn a_space_the_hub_keeps_is_kept_no_longer_once_another_machine_takes_it_o
         .unwrap();
     assert!(!hub.handovers.keeps(&plan, &laptop));
 }
+
+#[tokio::test]
+async fn another_machine_s_claim_is_refused_once_the_hub_placed_a_space_it_kept() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop", "desk", "server"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    keep_on_hub(&hub).await;
+    let (laptop, server, plan) = (
+        MemberId::from("laptop".to_owned()),
+        MemberId::from("server".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    let desk = Decision {
+        machine: "desk".into(),
+        name: "desk".into(),
+        reason: Reason::Local,
+        policy: shoal_schedule::placement::Policy::Balanced,
+        unanswered: None,
+        skipped: Vec::new(),
+    };
+    assert!(hub.handovers.placed_later(&plan, &laptop, desk));
+    // A restore on the server while the desk continues it.
+    let claimed = hub.record_space_claim(&server, &plan, (None, true)).await;
+    assert!(claimed.is_err());
+    assert!(hub.handovers.handed_to(&plan, &"desk".into()));
+}
