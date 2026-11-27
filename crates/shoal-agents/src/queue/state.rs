@@ -84,6 +84,15 @@ struct OneShot {
     stop: Option<StopRun>,
 }
 
+impl OneShot {
+    /// Whether it still waits for admission. Cancelling a waiting run takes
+    /// its stop, which keeps admission from starting it before its
+    /// connection learns of the cancel.
+    fn waits(&self) -> bool {
+        self.admitted.borrow().is_none() && self.stop.is_some()
+    }
+}
+
 /// What a one-shot run runs, which decides how admission weighs it and
 /// where protection stops it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -412,7 +421,7 @@ impl AgentQueue {
             .unwrap()
             .runs
             .iter()
-            .filter(|(_, run)| run.admitted.borrow().is_none())
+            .filter(|(_, run)| run.waits())
             .map(|(number, run)| WaitingOneShot {
                 id: oneshot_id(*number),
                 repository: run.repository.clone(),
@@ -489,7 +498,7 @@ impl AgentQueue {
             return false;
         };
         let stop = (self.oneshots.lock().unwrap().runs.get_mut(&number))
-            .filter(|run| run.admitted.borrow().is_none())
+            .filter(|run| run.waits())
             .and_then(|run| run.stop.take());
         stop.map(|stop| stop(reason)).is_some()
     }
@@ -500,8 +509,7 @@ impl AgentQueue {
         let stops: Vec<StopRun> = {
             let mut oneshots = self.oneshots.lock().unwrap();
             (oneshots.runs.values_mut())
-                .filter(|run| matches!(run.work, OneShotWork::Measured(_)))
-                .filter(|run| run.admitted.borrow().is_none())
+                .filter(|run| matches!(run.work, OneShotWork::Measured(_)) && run.waits())
                 .filter(|run| {
                     run.serving
                         .as_ref()
@@ -544,16 +552,16 @@ impl AgentQueue {
         stop.map(|stop| stop(reason)).is_some()
     }
 
-    /// Admit the one-shot request with queue ID `id`; false when
-    /// `id` names no one-shot request.
-    pub fn admit_oneshot(&self, id: &QueueEntryId) -> bool {
-        let Some(number) = oneshot_number(id) else {
-            return false;
+    /// Admit the one-shot request with queue ID `id`, returning whether it
+    /// still waited; none when `id` names no one-shot request.
+    pub fn admit_oneshot(&self, id: &QueueEntryId) -> Option<bool> {
+        let number = oneshot_number(id)?;
+        let oneshots = self.oneshots.lock().unwrap();
+        let Some(run) = oneshots.runs.get(&number).filter(|run| run.waits()) else {
+            return Some(false);
         };
-        if let Some(run) = self.oneshots.lock().unwrap().runs.get(&number) {
-            run.admitted.send_replace(Some(Instant::now()));
-        }
-        true
+        run.admitted.send_replace(Some(Instant::now()));
+        Some(true)
     }
 
     /// Hold back admission while the system shuts down, so nothing the

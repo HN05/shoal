@@ -303,7 +303,7 @@ impl Agents {
         Some(
             admitted
                 .into_iter()
-                .filter(|id| !self.agent_queue.admit_oneshot(id))
+                .filter(|id| self.agent_queue.admit_oneshot(id).is_none())
                 .collect(),
         )
     }

@@ -138,7 +138,7 @@ impl Agents {
     ) -> Result<QueueEntry> {
         if matches!(entry.kind, QueueKind::Command | QueueKind::SeedBuild) {
             ensure!(
-                self.agent_queue.admit_oneshot(&entry.id),
+                self.agent_queue.admit_oneshot(&entry.id) == Some(true),
                 "{} is no longer waiting",
                 entry.name
             );

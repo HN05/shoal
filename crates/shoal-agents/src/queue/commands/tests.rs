@@ -167,13 +167,22 @@ async fn a_stop_of_its_space_cancels_a_waiting_command() {
         fixture.workspace("web").await,
     );
     let mut stopped = admit(&fixture, &api, false).await;
-    let _waiting = admit(&fixture, &web, false).await;
+    let mut waiting = admit(&fixture, &web, false).await;
     let queue = fixture.agents.agent_queue();
-    while queue.waiting_oneshots().len() < 2 {
+    // An admission pass that read the queue before the stop.
+    let pass = loop {
+        let waiting = queue.waiting_oneshots();
+        if waiting.len() == 2 {
+            break waiting;
+        }
         tokio::task::yield_now().await;
-    }
+    };
     assert_eq!(queue.cancel_waiting_in(&api.id, "its space was stopped"), 1);
+    for entry in &pass {
+        queue.admit_oneshot(&entry.id);
+    }
     assert!(matches!(stopped.frame().await, AdmissionFrame::Stop { .. }));
+    assert_eq!(waiting.frame().await, AdmissionFrame::Admitted);
 }
 
 /// Record the running command `id` in `workspace`, whose wrapper is the
