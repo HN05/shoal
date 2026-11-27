@@ -71,6 +71,20 @@ async fn interrupted(
     child: Option<&Identity>,
     stage: Option<Stage>,
 ) {
+    interrupted_agent(locked, id, wrapper, child, stage, None).await;
+}
+
+/// Record an execution as [`interrupted`] does, whose wrapper registered
+/// `agent` when it gives one.
+async fn interrupted_agent(
+    locked: &Locked,
+    id: &str,
+    wrapper: &Identity,
+    child: Option<&Identity>,
+    stage: Option<Stage>,
+    agent: Option<&str>,
+) {
+    let agent = agent.map(crate::agent::Agent::from);
     let (id, workspace_id) = (ExecutionId::from(id), locked.workspace.id.clone());
     let (wrapper, child) = (wrapper.clone(), child.cloned());
     let group = child.as_ref().map(|child| child.pid);
@@ -81,6 +95,9 @@ async fn interrupted(
                 shoal_protocol::test_support::execution(id.as_str(), workspace_id.as_str());
             recorded.state = ExecutionState::Unknown;
             (recorded.wrapper, recorded.child, recorded.group_id) = (Some(wrapper), child, group);
+            if agent.is_some() {
+                recorded.agent = agent;
+            }
             seeds::execution(db, &recorded, None)
         })
         .await
@@ -163,11 +180,11 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     let rebooted = record_path(paths, &workspace.id, &"rebooted".into());
     let saved = fs::read_to_string(&rebooted).unwrap();
     fs::write(&rebooted, saved.replace("\"fixture\"", "\"claude\"")).unwrap();
-    interrupted(&locked, "unrecorded", &earlier, None, None).await;
+    interrupted_agent(&locked, "unrecorded", &earlier, None, None, Some("claude")).await;
     // A save the previous pass left after its restore request.
-    interrupted(&locked, "half-saved", &earlier, None, None).await;
+    interrupted_agent(&locked, "half-saved", &earlier, None, None, Some("claude")).await;
     // Its tool has no resume arguments, so its restore needs a picker.
-    interrupted(&locked, "picked", &earlier, None, None).await;
+    interrupted_agent(&locked, "picked", &earlier, None, None, Some("fixture")).await;
     // A wrapper that finished saving chose its agent's restore itself.
     let stopped = Some(Stage::Stopped);
     interrupted(&locked, "stopped", &earlier, None, stopped).await;
@@ -177,20 +194,6 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     for id in ["unrecorded", "half-saved", "picked", "this-boot"] {
         fs::remove_file(record_path(paths, &workspace.id, &id.into())).unwrap();
     }
-    (locked.fixture.agents.store)
-        .run(|db| {
-            db.execute(
-                "UPDATE executions SET agent='claude' WHERE id IN ('unrecorded','half-saved')",
-                [],
-            )?;
-            db.execute(
-                "UPDATE executions SET agent='fixture' WHERE id='picked'",
-                [],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
     let env = std::collections::BTreeMap::new();
     crate::execution::recovery::request_restore(paths, &workspace.id, &"half-saved".into(), &env)
         .unwrap();
