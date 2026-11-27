@@ -76,6 +76,30 @@ fn the_installer_line_passes_the_url_and_code_as_one_word_each() {
 }
 
 #[test]
+fn the_join_command_passes_the_code_as_one_word() {
+    let code = PairingCode {
+        url: url("https://host/a&b'c"),
+        key: PublicKey::try_from([7u8; 32].as_slice())
+            .unwrap()
+            .fingerprint(),
+        code: "ABC".into(),
+    };
+    let words = shlex::split(&code.join_command()).unwrap();
+    assert_eq!(words, ["shoal", "hub", "join", &code.to_string()]);
+}
+
+#[test]
+fn a_refused_pairing_code_says_the_code_is_the_whole_url() {
+    for text in [
+        "ABCDEFGHJK0123456789",
+        "https://hub.example.com/pair#code=ABCDEFGHJK0123456789",
+    ] {
+        let error = text.parse::<PairingCode>().unwrap_err().to_string();
+        assert!(error.contains("the whole URL"), "{error}");
+    }
+}
+
+#[test]
 fn a_pairing_code_needs_its_code_and_key() {
     let key = PublicKey::try_from([7u8; 32].as_slice())
         .unwrap()

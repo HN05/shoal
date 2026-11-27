@@ -11,6 +11,8 @@ use crate::output::outputs;
 pub struct Paired {
     #[serde(flatten)]
     pub pairing: Pairing,
+    /// The command that joins a machine with Shoal with the code.
+    pub join: String,
     /// The command that installs the hub's version on a computer without
     /// Shoal and joins it with the code.
     pub installer: String,

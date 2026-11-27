@@ -38,7 +38,11 @@ impl FromStr for PairingCode {
     type Err = anyhow::Error;
 
     fn from_str(text: &str) -> Result<Self> {
-        let invalid = || format!("{text} is not a pairing code from shoal hub pair");
+        let invalid = || {
+            format!(
+                "{text} is not a pairing code: the code is the whole URL shoal hub pair printed, in quotes, as in shoal hub join '<hub url>{PATH}#code=…&key=…'"
+            )
+        };
         let (page, fragment) = text.split_once('#').with_context(invalid)?;
         let url = page.strip_suffix(PATH).with_context(invalid)?;
         let (mut code, mut key) = (None, None);
@@ -64,6 +68,11 @@ impl FromStr for PairingCode {
 }
 
 impl PairingCode {
+    /// The command that joins a machine with Shoal with this code.
+    pub fn join_command(&self) -> String {
+        format!("shoal hub join {}", quoted(&self.to_string()))
+    }
+
     /// The command that installs the hub's version on a computer without
     /// Shoal and joins it with this code.
     pub fn installer(&self) -> String {

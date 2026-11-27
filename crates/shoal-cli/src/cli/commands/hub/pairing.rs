@@ -20,20 +20,21 @@ pub(super) async fn pair(ctx: &Context) -> Result<i32> {
         })
         .into_iter()
         .collect();
-    let code = pairing.code.to_string();
+    let join = pairing.code.join_command();
     let installer = pairing.code.installer();
     let paired = Paired {
         pairing,
+        join,
         installer,
         warnings,
     };
     ctx.show(&paired, |paired| {
         let palette = Palette::stdout(false);
-        outln!("{}", palette.paint(Style::Heading, &code));
         outln!(
-            "Run shoal hub join with this code on the machine to join, by {}; it admits one join.",
+            "On the machine to join, run this by {}; it admits one join:",
             paired.pairing.expires_at.local_minutes()
         );
+        outln!("  {}", palette.paint(Style::Heading, &paired.join));
         outln!("On a computer without Shoal, run instead:");
         outln!("  {}", paired.installer);
         for warning in &paired.warnings {
