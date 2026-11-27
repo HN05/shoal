@@ -345,7 +345,14 @@ A restore waits for what the agent's stop calls for:
 | The space was blocked | nothing blocking the space |
 | Idle | an update for the agent |
 | Load or disk space, mid-turn | the recovery interval's healthy readings |
+| The OOM killer | its backoff, then what its stop calls for and healthy readings |
 | Any other stop mid-turn, such as a signal | a free slot, or room for its load |
+
+An agent the OOM killer ended waits as the [load reference](load.md#signals-to-an-agent)
+says: for healthy readings besides an update for one killed between turns,
+and after a second kill before a finished turn, for a backoff too. With
+`[machine.overload.recovery]` disabled, it waits for a free slot instead of
+healthy readings.
 
 The restored agent takes the slot over once it runs.
 

@@ -13,11 +13,14 @@ for arrives. These stops put an agent to sleep:
 - [overload and disk protection](load.md),
 - an [idle stop](#idle-sleep),
 - a blocked space,
-- a signal that ended the agent's session,
+- a SIGHUP, SIGTERM or SIGKILL Shoal did not send that ended the agent's
+  session or killed the agent, the OOM killer's included,
+- its machine crashing, losing power or never waking from a suspend,
 - [making room](#making-room) for queued work.
 
-An agent that `shoal stop` stopped, or that quit on its own, is stopped
-instead. It stays down until `shoal resume`.
+An agent that `shoal stop` stopped, or that quit on its own, exiting with a
+status of its own, is stopped instead. So is one that crashed, such as with
+SIGSEGV, or that the keys of its terminal ended with SIGINT or SIGQUIT. It stays down until `shoal resume`.
 
 An asleep agent [keeps its leases](resources.md#leases-while-asleep).
 

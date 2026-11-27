@@ -275,6 +275,14 @@ The daemon marks a load or disk stop mid-turn in the recovery record before the
 stop. Its restore waits for the recovery interval's healthy readings, and one
 such restore starts per interval.
 
+The daemon counts an agent's OOM kills until it finishes a turn, in the store
+rather than the recovery record: each restore consumes its record, while the
+count must last across the restores that the OOM killer ends again. A kill
+the daemon did not hear of, such as one while it was down, counts once from the
+stop's recovery record. While the count stands, the restore also waits for the
+count's backoff and then for healthy readings, which bind its admission, after
+any update it waits for.
+
 ### Restores that wait for an update
 
 An agent stopped between turns has nothing to do until an update arrives. Its

@@ -11,10 +11,24 @@ An agent Shoal stopped on its own, and will bring back on its own, is asleep.
 An agent that waits for `shoal resume` is stopped. The two states let the user
 tell an agent that comes back from one that needs them.
 
-Every stop that queues a restore Shoal starts on its own puts the agent to
-sleep: protection, idle and blocked stops, signal stops and making room.
-`shoal stop` stops an agent, and so does the agent quitting on its own. The
-agent of a removed or converted space is stopped too.
+Only the user's choice leaves an agent stopped: `shoal stop`, or the agent
+exiting with a status of its own. The agent of a removed or converted space is
+stopped too. Every other end puts it to sleep, since the agent did not choose
+it: protection, idle and blocked stops, making room, a signal Shoal did not
+send, including the OOM killer's SIGKILL, and its machine crashing, losing
+power or never waking from a suspend.
+
+The signals from outside are SIGHUP, SIGTERM and SIGKILL. SIGINT and SIGQUIT,
+which the keys of the agent's terminal send, are the user's choice, and a
+crash signal such as SIGSEGV is the agent's own end, as an exit status is:
+restoring an agent that crashes would only crash it again.
+
+A SIGKILL counts only when it kills the agent itself. The OOM killer may kill
+one of its children, such as a compiler, and the agent keeps running; if it
+then exits, that exit is its own.
+
+Each stop records its cause on the agent's `agent_stopped` event and in the
+daemon's log, so a missed wake can be traced to the stop before it.
 
 A stop that lasts until `shoal resume` stops the spaces below first. A parent
 may sleep before its children, since their reports wake it.
@@ -53,6 +67,19 @@ agent once its resume command is configured. Restores wait in the
 
 An agent stopped between turns has nothing to do until an update arrives for
 it. That update restores it, and until then its restore holds no heavy slot.
+Once the update has come, the restore still waits for a slot or room for its
+load, as a launch does, and status names that hold instead of the update.
+
+### OOM kills
+
+An agent the OOM killer ended comes back without the user, but not into the
+pressure that killed it. Its restore waits for memory to recover, as one
+memory protection stopped does, besides the update one killed between turns
+waits for. A kill again before the agent finishes a turn makes each further
+restore also wait out a delay: 5, 10, 20 and 40 minutes, doubling up to 2
+hours. A finished turn resets it. The values are built in: the backoff only
+spaces the retries of an agent that keeps running out of memory, and nothing
+gives up on it or asks the user to act. `shoal resume` restores it at once.
 
 A woken agent reports no idle turn until it has worked one. It thus never
 sleeps again before it acts on what woke it.
@@ -70,7 +97,8 @@ so they keep it.
 A restore of an agent stopped mid-turn, or whose turn is unknown, prompts it to
 continue its unfinished assignment. The prompt says when and why it stopped,
 and that its subagents and background commands ended. Every stop that saves an
-agent records when and why, and a last session keeps it.
+agent records when and why, and a last session keeps it. An agent the OOM
+killer ended is told so between turns too, so that it can use less memory.
 
 An agent that stopped or exited on its own between turns is not told to
 continue. Its session opens with only the handoff it needs, with the wake
@@ -252,9 +280,12 @@ select disconnected survivors.
 
 An unknown execution whose wrapper, and child when recorded, ran in an earlier
 boot needs no evidence. Restarting the machine ended its processes, while its
-recorded process group may now name another's. The daemon forgets it and keeps
-its record, or else the session its agent reported, as a last session. The
-daemon records each execution's agent name for this.
+recorded process group may now name another's. The daemon forgets it and saves
+its agent as a shutdown's stop does: with a request for the agent queue to
+restore it, so the agent comes back as after a system shutdown. A record a stop
+left half done gets the request too, so a crash in the middle of a shutdown
+also comes back. An agent without a session to resume waits for
+`shoal resume`. The daemon records each execution's agent name for this.
 
 ### Executions that never started
 

@@ -487,11 +487,27 @@ reports such a workspace as failed.
 A hangup or terminate signal to an agent's wrapper or agent process saves the
 agent as stopped work, with the signal as its stop reason. Closing its
 terminal, logging out and shutting down send such signals. The wrapper saves
-the agent before it stops it.
+the agent before it stops it. So does a SIGKILL that kills the agent itself,
+which the wrapper cannot catch: the agent did not quit, though its exit code is
+137. The agent's stop in [`shoal log`](log.md) names the signal and what it
+reached, or the OOM killer when the agent's scope counted an OOM kill.
 
 Once its execution has ended, the agent's restore waits in the
 [agent queue](queue.md#restores-without-a-wrapper). The agent thus comes back after a reboot without a
 command. Run `shoal stop --all` first to keep agents down.
+
+An agent the OOM killer ended also waits for memory to recover. Killed again
+before it finishes a turn, it waits out a delay as well, 5 minutes after the
+second kill and doubling with each further one, up to 2 hours. `shoal list`
+and `shoal status` show it asleep with its kills and when it next tries, such
+as `OOM-killed 3 times; wakes once memory recovers after 16:40`. Its first
+message says the OOM killer ended it. `shoal resume` restores it at once.
+
+### A machine that went down
+
+When the machine crashed, lost power or never woke from a suspend, the daemon
+saves the agents of that boot on the next one as a shutdown's stop saves them,
+and their restores wait in the agent queue as below.
 
 ### System shutdown
 
@@ -522,6 +538,8 @@ the alert names where each went.
 
 - An agent that was idle comes back only when an update arrives for it, unless
   processes it started outside its process group were still running.
+- An agent that was working comes back once the daemon runs, told to continue
+  its turn.
 - An agent whose restore needs a session picker, or whose assignment is done,
   waits for `shoal resume`.
 - Other commands just end.
