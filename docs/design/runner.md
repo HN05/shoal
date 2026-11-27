@@ -101,8 +101,9 @@ The delay never keeps a job from running:
 - The best-ranked machine claims at once, and so does one that is the only
   machine able to run the job.
 - A machine that cannot reach the hub, or is in none, claims at once. So does
-  one whose hub's policy is `local`, which keeps work where it is found. An
-  `external` placer places starts, not jobs.
+  one whose hub does not answer within a few seconds, and one whose hub's
+  policy is `local`, which keeps work where it is found. An `external` placer
+  places starts, not jobs.
 - Once its delay passes, the job goes to whichever machine admits it.
 - A daemon restart forgets the delays, and its waiting jobs are claimed at
   once.

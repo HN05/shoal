@@ -90,7 +90,7 @@ impl Fixture {
             admitted: Mutex::default(),
             executions: Mutex::default(),
             handed: Mutex::default(),
-            rank: Mutex::new(Ok(0)),
+            rank: Mutex::new(Some(Ok(0))),
         });
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
@@ -236,8 +236,9 @@ pub(crate) struct StandIn {
     /// The CI jobs cut off that the hub keeps, none for a machine in no
     /// hub.
     pub(crate) handed: Mutex<Option<Vec<CutOffJob>>>,
-    /// This machine's rank for every job, or why the hub cannot give it.
-    pub(crate) rank: Mutex<Result<usize, String>>,
+    /// This machine's rank for every job, or why the hub cannot give it;
+    /// none for a hub that never answers.
+    pub(crate) rank: Mutex<Option<Result<usize, String>>>,
 }
 
 impl StandIn {
@@ -404,7 +405,12 @@ impl crate::daemon::Hub for StandIn {
 
     fn rank_job<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<usize>> {
         let rank = self.rank.lock().unwrap().clone();
-        Box::pin(async move { rank.map_err(anyhow::Error::msg) })
+        Box::pin(async move {
+            match rank {
+                Some(rank) => rank.map_err(anyhow::Error::msg),
+                None => std::future::pending().await,
+            }
+        })
     }
 }
 

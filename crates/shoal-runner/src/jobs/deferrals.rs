@@ -17,6 +17,10 @@ use crate::{Runner, daemon::Daemon, log};
 /// How long a claim waits for each machine ranked ahead of this one.
 pub const STEP: Duration = Duration::from_secs(15);
 
+/// How long the runner waits for the hub to rank this machine before it
+/// claims at once, so a hub that stops answering holds no poll up.
+pub const RANK_WAIT: Duration = Duration::from_secs(3);
+
 /// A held-back claim: until when it waits, and how many machines rank
 /// ahead of this one.
 #[derive(Clone, Copy)]
@@ -80,20 +84,19 @@ impl Deferrals {
 }
 
 impl Runner {
-    /// Hold back the claim of `repository`'s job `handle`, which the runner
-    /// sees for the first time, by this machine's rank for it among the
-    /// hub's machines. One whose rank the hub cannot give is claimed at
-    /// once.
-    pub async fn defer_by_rank(&self, daemon: &dyn Daemon, repository: &Repository, handle: &str) {
-        let ahead = match daemon.rank_job(repository).await {
-            Ok(rank) => rank,
-            Err(error) => {
-                let name = repository.display_name();
-                log!("runner: claiming a job of {name} at once, unranked: {error:#}");
-                0
-            }
+    /// This machine's rank among the hub's machines for a job of
+    /// `repository`: 0, which claims at once, where the hub cannot give it
+    /// within [`RANK_WAIT`].
+    pub async fn job_rank(&self, daemon: &dyn Daemon, repository: &Repository) -> usize {
+        let ranked = tokio::time::timeout(RANK_WAIT, daemon.rank_job(repository)).await;
+        let error = match ranked {
+            Ok(Ok(rank)) => return rank,
+            Ok(Err(error)) => format!("{error:#}"),
+            Err(_) => format!("the hub did not answer within {RANK_WAIT:?}"),
         };
-        self.jobs.deferrals.defer(&repository.id, handle, ahead);
+        let name = repository.display_name();
+        log!("runner: claiming the jobs of {name} at once, unranked: {error}");
+        0
     }
 
     /// Have admission look again at the jobs whose claim no longer waits.

@@ -312,8 +312,9 @@ On a machine joined to a [hub](hub.md#placement), a job waits 15 seconds for
 each machine its hub's placement ranks ahead of this one, since that machine
 may claim it first. The queue shows it held by `N machines rank ahead`. The
 best-ranked machine claims at once, an `intermittent` one with room before an
-`always_on` one. A job waits for no machine when the hub cannot be reached,
-under the `local` placement policy, and after a daemon restart.
+`always_on` one. A job waits for no machine when the hub cannot be reached or
+does not answer within 3 seconds, under the `local` placement policy, and after
+a daemon restart.
 
 ### Run a job
 

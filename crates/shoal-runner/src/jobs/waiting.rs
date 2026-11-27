@@ -78,11 +78,14 @@ impl Runner {
         let default_branch = default_branch::resolve(&repository.path, DefaultBranchLookup::Cached)
             .await
             .ok();
+        // Asked once a poll, so a hub that does not answer holds it up once.
+        let rank = tokio::sync::OnceCell::new();
         for job in waiting {
             if known.contains(&job.handle) {
                 continue;
             }
-            self.defer_by_rank(daemon, repository, &job.handle).await;
+            let ahead = *rank.get_or_init(|| self.job_rank(daemon, repository)).await;
+            (self.jobs.deferrals).defer(&repository.id, &job.handle, ahead);
             let run = forge.job_run(&account, job.run).await?;
             let linked = self.link_job(daemon, &forge, &repository.id, job, run);
             let mut job = linked.await?;
