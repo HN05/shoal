@@ -159,6 +159,18 @@ pub struct Record {
     /// out.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub for_load: bool,
+    /// How many times the kernel's OOM killer ended the agent since it last
+    /// finished a turn, this stop included; zero when this stop was no OOM
+    /// kill.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub oom_kills: u32,
+    /// The earliest time its restore starts, after repeated OOM kills.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub restores_after: Option<crate::time::UnixTime>,
+}
+
+fn is_zero(count: &u32) -> bool {
+    *count == 0
 }
 
 /// What the first session of an agent tool that takes a space's work over
@@ -192,6 +204,9 @@ pub struct Stop {
     /// When its recovery record was saved.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<crate::time::UnixTime>,
+    /// The kernel's OOM killer ended the agent.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub oom_killed: bool,
 }
 
 /// An agent stopped in a removed workspace, which `shoal restore` saves

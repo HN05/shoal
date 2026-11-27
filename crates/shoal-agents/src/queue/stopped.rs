@@ -326,6 +326,9 @@ fn resolved_restores(
 /// Why the agent whose stop saved `record` is asleep and what wakes it, for a
 /// restore Shoal queues on its own.
 fn asleep(record: &recovery::Record) -> Asleep {
+    if record.oom_kills > 0 {
+        return oom_killed(record);
+    }
     let reason = record.stop_reason.as_deref();
     let between_turns = record.between_turns() || reason == Some(crate::control::BLOCKED_REASON);
     let wakes_when = match between_turns {
@@ -336,6 +339,39 @@ fn asleep(record: &recovery::Record) -> Asleep {
         reason: reason.unwrap_or(UNKNOWN_STOP).to_owned(),
         wakes_when: wakes_when.to_owned(),
         keeps: Vec::new(),
+    }
+}
+
+/// Why the agent of `record`, which the OOM killer ended, sleeps, and what
+/// wakes it, such as `OOM-killed 3 times` and `16:40 has passed and memory
+/// recovers`.
+fn oom_killed(record: &recovery::Record) -> Asleep {
+    let reason = match record.oom_kills {
+        1 => "OOM-killed once".to_owned(),
+        kills => format!("OOM-killed {kills} times"),
+    };
+    let update = record
+        .between_turns()
+        .then_some(crate::control::WAKES_ON_UPDATE);
+    let after =
+        (record.restores_after).map(|after| format!("{} has passed", after.local_minutes()));
+    let conditions: Vec<String> = (update.map(str::to_owned).into_iter())
+        .chain(after)
+        .chain(["memory recovers".to_owned()])
+        .collect();
+    Asleep {
+        reason,
+        wakes_when: and_list(&conditions),
+        keeps: Vec::new(),
+    }
+}
+
+/// `items` joined as a sentence lists them, the last after "and".
+fn and_list(items: &[String]) -> String {
+    match items.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
     }
 }
 

@@ -16,6 +16,7 @@ use crate::execution::recovery;
 use crate::state::QueueKind;
 use crate::state::QueueState;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_protocol::time::UnixTime;
 
 /// What admitted a restore.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +97,13 @@ pub enum Stopped {
     /// Mid-turn for load or free disk space: the restore waits for healthy
     /// readings.
     ForLoad,
+    /// By the OOM killer: the restore waits for healthy readings, for an
+    /// update first when it was `between_turns`, and until `restores_after`
+    /// after repeated kills.
+    OomKilled {
+        between_turns: bool,
+        restores_after: Option<UnixTime>,
+    },
     /// Mid-turn otherwise, such as by a signal or a shutdown, or with no
     /// readable record: the restore waits for a free slot.
     MidTurn,
@@ -109,16 +117,42 @@ impl Stopped {
             {
                 Self::Blocked
             }
+            Some(record) if record.oom_kills > 0 => Self::OomKilled {
+                between_turns: record.between_turns(),
+                restores_after: record.restores_after,
+            },
             Some(record) if record.between_turns() => Self::BetweenTurns,
             Some(record) if record.for_load => Self::ForLoad,
             Some(_) | None => Self::MidTurn,
         }
     }
 
+    /// Whether the agent stopped between turns, so that its restore waits
+    /// for an update.
+    fn between_turns(self) -> bool {
+        matches!(
+            self,
+            Self::BetweenTurns
+                | Self::OomKilled {
+                    between_turns: true,
+                    ..
+                }
+        )
+    }
+
     /// Whether the restore waits for an update, or for nothing to block
     /// its space.
     fn waits_for_update(self) -> bool {
-        matches!(self, Self::Blocked | Self::BetweenTurns)
+        self == Self::Blocked || self.between_turns()
+    }
+}
+
+/// What the restore of an agent the OOM killer ended waits for: healthy
+/// readings once nothing else `waits`, so that it holds no slot before.
+fn oom_wake(waits: bool) -> Wake {
+    match waits {
+        true => Wake::Update { due: false },
+        false => Wake::Recovery,
     }
 }
 
@@ -142,7 +176,9 @@ impl Agents {
                     && carriers
                         .of(restore.started_here, &restore.execution)
                         .is_some()
-                    && self.stopped_as(workspace_id, &restore.execution) == Stopped::BetweenTurns
+                    && self
+                        .stopped_as(workspace_id, &restore.execution)
+                        .between_turns()
             })
             .map(|restore| restore.execution)
             .collect();
@@ -161,7 +197,10 @@ impl Agents {
     pub async fn restores_waiting_for_updates(&self) -> Result<HashSet<QueueEntryId>> {
         let restores = self.store.run(|db| restore_rows(db)).await?;
         Ok((restores.into_iter())
-            .filter(|row| self.stopped_as(&row.workspace, &row.execution) == Stopped::BetweenTurns)
+            .filter(|row| {
+                self.stopped_as(&row.workspace, &row.execution)
+                    .between_turns()
+            })
             .map(|row| row.id)
             .collect())
     }
@@ -187,6 +226,15 @@ impl Agents {
             Stopped::Blocked | Stopped::BetweenTurns => Ok(Wake::Update {
                 due: self.restore_due(daemon, id, execution).await?,
             }),
+            Stopped::OomKilled {
+                between_turns,
+                restores_after,
+            } => {
+                let held = restores_after.is_some_and(|after| after > UnixTime::now());
+                let waits =
+                    held || (between_turns && !self.restore_due(daemon, id, execution).await?);
+                Ok(oom_wake(waits))
+            }
         }
     }
 

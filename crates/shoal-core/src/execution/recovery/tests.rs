@@ -573,6 +573,7 @@ fn a_stopped_agent_kept_as_a_last_session_keeps_its_session_and_stop() {
             stop: Some(Stop {
                 reason: Some("its terminal closed".into()),
                 at: Some(UnixTime::from_seconds(1_800_000_000)),
+                oom_killed: false,
             }),
             turn: None,
             converted: false,
@@ -625,6 +626,7 @@ fn a_restored_session_learns_why_and_when_it_stopped_and_what_the_stop_ended() {
         Stop {
             reason: Some("critical memory pressure".into()),
             at: Some(UnixTime::from_seconds(1_800_000_000)),
+            oom_killed: false,
         }
     );
     // A stop whose turn is unknown came mid-turn.
@@ -662,6 +664,30 @@ fn a_session_that_ended_between_turns_is_told_only_its_handoff() {
         };
         assert!(resumed_prompt(working, None).is_some());
     }
+}
+
+#[test]
+fn an_agent_the_oom_killer_ended_between_turns_is_told_so() {
+    let stop = Stop {
+        reason: Some("the OOM killer ended it".into()),
+        at: None,
+        oom_killed: true,
+    };
+    let between = Ending {
+        stop: Some(&stop),
+        turn: Some(AgentState::Idle),
+    };
+    let prompt = resumed_prompt(between, Some("handoff")).unwrap();
+    assert!(prompt.contains("shoal run"), "{prompt}");
+    assert!(!prompt.contains("Continue"), "{prompt}");
+    assert!(prompt.ends_with("\n\nhandoff"), "{prompt}");
+    let working = Ending {
+        stop: Some(&stop),
+        turn: Some(AgentState::Working),
+    };
+    let prompt = resumed_prompt(working, None).unwrap();
+    assert!(prompt.contains("shoal run"), "{prompt}");
+    assert!(prompt.ends_with("from where you left off."), "{prompt}");
 }
 
 #[test]

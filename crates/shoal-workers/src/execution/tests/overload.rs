@@ -466,6 +466,7 @@ async fn built_in_restore_child() {
     let stop = shoal_core::execution::recovery::Stop {
         reason: Some("critical memory pressure".into()),
         at: None,
+        oom_killed: false,
     };
     let mut ending = shoal_core::execution::recovery::Ending {
         stop: Some(&stop),

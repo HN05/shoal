@@ -1175,6 +1175,11 @@ CREATE TABLE "simulator_clean_requests" (
     workspace_id TEXT NOT NULL, status TEXT NOT NULL, record TEXT NOT NULL
 );
 
+CREATE TABLE space_oom_kills (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    kills INTEGER NOT NULL CHECK(kills > 0)
+) WITHOUT ROWID;
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);

@@ -189,6 +189,8 @@ impl RecordExt for Record {
             mode: agent.mode.clone(),
             narrowing: agent.narrowing,
             for_load: false,
+            oom_kills: 0,
+            restores_after: None,
         }
     }
 
@@ -303,6 +305,27 @@ pub fn save_turn(
     write_record(paths, space_id, id, record).map(drop)
 }
 
+/// Keep in the recovery record of `id` that `kills` OOM kills in a row
+/// ended its agent, and the earliest time its restore starts, `after`. An
+/// execution that saved no record has nothing to restore.
+pub fn save_oom_kills(
+    paths: &Paths,
+    space_id: &SpaceId,
+    id: &ExecutionId,
+    kills: u32,
+    after: Option<crate::time::UnixTime>,
+) -> Result<()> {
+    let Some(record) = Record::load(&record_path(paths, space_id, id))? else {
+        return Ok(());
+    };
+    let record = Record {
+        oom_kills: kills,
+        restores_after: after,
+        ..record
+    };
+    write_record(paths, space_id, id, record).map(drop)
+}
+
 pub(super) fn write_record(
     paths: &Paths,
     space_id: &SpaceId,
@@ -325,6 +348,10 @@ pub(super) fn write_record(
         record.session = record.session.or(saved.session);
         record.turn = record.turn.or(saved.turn);
         record.for_load |= saved.for_load;
+        if record.oom_kills == 0 {
+            record.oom_kills = saved.oom_kills;
+            record.restores_after = saved.restores_after;
+        }
         if saved.stage == Some(Stage::Stopped) {
             record.stage = saved.stage;
         }

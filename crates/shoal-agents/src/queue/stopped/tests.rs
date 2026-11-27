@@ -66,3 +66,38 @@ async fn a_conversions_or_a_starting_restore_moves_the_agent() {
     queue_restore(&fixture, "starting", true, false).await;
     assert!(moves().await.unwrap());
 }
+
+#[test]
+fn an_oom_killed_agent_sleeps_with_its_kills_and_when_it_next_tries() {
+    use crate::execution::recovery::{Record, Stage};
+    use crate::state::AgentState;
+    let agent = shoal_protocol::executions::TrackedAgent::named("claude");
+    let after = crate::time::UnixTime::from_seconds(1_800_000_000);
+    let killed = |turn| Record {
+        oom_kills: 3,
+        restores_after: Some(after),
+        turn: Some(turn),
+        ..Record::new(
+            &agent,
+            Some("the OOM killer ended it"),
+            Stage::Stopped,
+            None,
+        )
+    };
+    let idle = asleep(&killed(AgentState::Idle));
+    assert!(idle.reason.contains('3'), "{}", idle.reason);
+    let at = after.local_minutes();
+    assert!(idle.wakes_when.contains(&at), "{}", idle.wakes_when);
+    assert!(
+        idle.wakes_when.contains(crate::control::WAKES_ON_UPDATE),
+        "{}",
+        idle.wakes_when
+    );
+    // One killed mid-turn needs no update.
+    let working = asleep(&killed(AgentState::Working));
+    assert!(
+        !working.wakes_when.contains(crate::control::WAKES_ON_UPDATE),
+        "{}",
+        working.wakes_when
+    );
+}

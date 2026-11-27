@@ -20,7 +20,7 @@ mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 327;
+pub const SCHEMA_VERSION: i64 = 328;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -190,6 +190,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         327,
         include_str!("migrations/0327_clean_request_columns.sql"),
         Some(clean_request_columns::move_fields),
+    ),
+    (
+        328,
+        include_str!("migrations/0328_space_oom_kills.sql"),
+        None,
     ),
 ];
 

@@ -757,6 +757,7 @@ fn save(
     crate::turn_retry::follow_state(tx, &report.space, report.state)?;
     crate::idle_wakes::sleep::follow_state(tx, &report.space, previous, report.state)?;
     crate::engagement::follow_state(tx, &report.space, previous, report.state, report.at)?;
+    crate::oom_kills::follow_state(tx, &report.space, previous, report.state)?;
     if report.state == AgentState::Idle {
         // No hook reports the end of a command an idle agent left.
         records.end_commands(tx, &report.space)?;

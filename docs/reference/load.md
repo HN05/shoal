@@ -502,6 +502,21 @@ Once its execution has ended, the agent's restore waits in the
 [agent queue](queue.md#restores-without-a-wrapper). The agent thus comes back after a reboot without a
 command. Run `shoal stop --all` first to keep agents down.
 
+### Agents the OOM killer ended
+
+An agent the OOM killer ended restores once memory recovers, as one memory
+protection stopped does. One it ended between turns also waits for an update.
+
+When the restored agent is killed again before it finishes a turn, each
+further restore also waits out a delay: 5, 10, 20 and 40 minutes, then 2 hours.
+A finished turn resets the delay. The restore never gives up.
+
+`shoal list` and `shoal status` show the agent asleep with its kills and when
+it next tries, such as
+`OOM-killed 3 times; wakes once 16:40 has passed and memory recovers`. Each
+kill's `agent_stopped` entry in the space's log names the OOM kill. The restored
+agent is told that the OOM killer ended it, so that it can use less memory.
+
 ### System shutdown
 
 On Linux the daemon holds a systemd-logind shutdown delay lock while it runs.

@@ -144,6 +144,8 @@ fn running_record(execution: &Execution, carried: recovery::carried::Carried) ->
             handoff: None,
             turn: None,
             for_load: false,
+            oom_kills: 0,
+            restores_after: None,
             model: execution.model.clone(),
             mode: execution
                 .mode

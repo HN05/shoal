@@ -27,6 +27,8 @@ pub fn clear_load_mark(paths: &Paths, space_id: &SpaceId, id: &ExecutionId) -> R
             &path,
             &Record {
                 for_load: false,
+                oom_kills: 0,
+                restores_after: None,
                 ..record
             },
         ),

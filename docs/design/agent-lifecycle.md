@@ -63,6 +63,21 @@ it. That update restores it, and until then its restore holds no heavy slot.
 A woken agent reports no idle turn until it has worked one. It thus never
 sleeps again before it acts on what woke it.
 
+### OOM kills
+
+The OOM killer ends an agent for what the machine runs as a whole, so its
+agent sleeps rather than waits for the user. Its restore waits for memory to
+recover, as a memory stop's does, since restoring it at once would likely end
+the same way.
+
+An agent killed again before it finishes a turn may be what fills memory. Each
+further restore then waits out a doubling delay, so a loop of kills costs the
+other agents little. A finished turn shows the agent can work, so it resets
+the delay. The values are built in: the user has no better ones to give.
+
+Only the agent's own death counts. The OOM killer often kills a child instead,
+such as a compiler, and the agent then carries on.
+
 ### Done spaces
 
 A done assignment needs no agent, so only a resume that names a done space

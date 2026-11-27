@@ -18,6 +18,7 @@ impl StopExt for Stop {
         Self {
             reason: record.stop_reason.clone(),
             at: saved_at(path),
+            oom_killed: record.oom_kills > 0,
         }
     }
 
@@ -31,7 +32,13 @@ impl StopExt for Stop {
             .as_deref()
             .map(|reason| format!(" ({reason})"))
             .unwrap_or_default();
-        format!("This session stopped{at}{reason}; its subagents and background commands ended.")
+        let stopped = format!(
+            "This session stopped{at}{reason}; its subagents and background commands ended."
+        );
+        match self.oom_killed {
+            true => format!("{stopped} {OOM_ADVICE}"),
+            false => stopped,
+        }
     }
 }
 
@@ -61,22 +68,32 @@ impl Ending<'_> {
     }
 }
 
+/// What the OOM killer's victim is told, so that it uses less memory.
+const OOM_ADVICE: &str = "The kernel's OOM killer ended it, so go easier on memory, such as by \
+    running builds and tests through `shoal run`, one at a time.";
+
 /// What a restored session is told, if anything: when it ended mid-turn,
 /// why and when it stopped when known and to continue, then `handoff`;
-/// otherwise `handoff` alone, so that it waits for what comes next.
+/// otherwise `handoff` alone, so that it waits for what comes next, after
+/// why and when it stopped when the OOM killer ended it.
 pub fn resumed_prompt(ending: Ending<'_>, handoff: Option<&str>) -> Option<String> {
-    if !ending.mid_turn() {
-        return handoff.map(str::to_owned);
-    }
     let mut prompt = (ending.stop)
-        .map(|stop| format!("{} ", stop.describe()))
-        .unwrap_or_default();
-    prompt.push_str("Continue working on the unfinished assignment from where you left off.");
-    if let Some(handoff) = handoff {
-        prompt.push_str("\n\n");
-        prompt.push_str(handoff);
+        .filter(|stop| ending.mid_turn() || stop.oom_killed)
+        .map(|stop| stop.describe());
+    if ending.mid_turn() {
+        let continued = "Continue working on the unfinished assignment from where you left off.";
+        prompt = Some(prompt.map_or_else(
+            || continued.to_owned(),
+            |told| format!("{told} {continued}"),
+        ));
     }
-    Some(prompt)
+    let Some(handoff) = handoff else {
+        return prompt;
+    };
+    Some(match prompt {
+        Some(prompt) => format!("{prompt}\n\n{handoff}"),
+        None => handoff.to_owned(),
+    })
 }
 
 /// Whether an agent that reported `turn` last was between turns, with no

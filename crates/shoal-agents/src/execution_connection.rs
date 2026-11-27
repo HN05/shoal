@@ -600,6 +600,9 @@ async fn relay(
                         ..agent_event(tracked, execution_id, None)
                     };
                     record_stop(agents, space, stopped).await;
+                    if cause == Some(StopCause::OomKill) {
+                        agents.record_oom_kill(&space.id, execution_id).await;
+                    }
                 }
                 // A wrapper whose own session ended saves its agent unasked,
                 // which stops the agent as a requested pause does.
