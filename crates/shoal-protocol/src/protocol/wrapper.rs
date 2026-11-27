@@ -91,6 +91,10 @@ pub enum ExecutionEvent {
         /// one of its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         memory: Option<ScopeMemory>,
+        /// The signal that ended the session the agent ran in, when one
+        /// paused it rather than the daemon.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ended: Option<crate::agent_ends::SessionEnd>,
     },
     /// The user woke the agent whose restore the wrapper waits for: start
     /// that restore now, whatever the limits. Ignored while no restore of it

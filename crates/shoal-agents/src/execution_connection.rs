@@ -436,7 +436,10 @@ async fn relay(
     let mut restored_record = None;
     loop {
         let event = if std::mem::take(&mut resumed_pause) {
-            ExecutionEvent::Paused { memory: None }
+            ExecutionEvent::Paused {
+                memory: None,
+                ended: None,
+            }
         } else if awaiting_started {
             incoming.recv().await.context("execution disconnected")??
         } else {
@@ -585,15 +588,20 @@ async fn relay(
                 controls.send(&control).await?;
                 *unattachable = Some(operation);
             }
-            ExecutionEvent::Paused { memory: reported } => {
+            ExecutionEvent::Paused {
+                memory: reported,
+                ended,
+            } => {
                 *handoff_claimed = true;
                 // Named again by the stop's alert once the wrapper finishes
                 // without a restore; a restored run reports its own.
                 memory.paused(reported);
                 if let Some(tracked) = agent {
+                    // The wrapper reports the signal that ended its session,
+                    // which stopped the agent whatever the daemon sent.
                     let stopped = AgentEvent {
                         oom_kills: reported.map_or(0, |memory| memory.oom_kills),
-                        cause: stop_cause.clone(),
+                        cause: ended.map(StopCause::Signal).or_else(|| stop_cause.clone()),
                         ..agent_event(tracked, execution_id, None)
                     };
                     (shoal_daemon_base::events::record_agent(

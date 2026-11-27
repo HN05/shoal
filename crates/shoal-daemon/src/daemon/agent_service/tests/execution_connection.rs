@@ -6,6 +6,7 @@ use crate::protocol::{
     self, Body, Control, ErrorCode, ExecutionEvent, Reattach, Response, ScopeMemory,
 };
 use anyhow::Result;
+use shoal_protocol::agent_ends::{EndingSignal, SessionEnd, SignalTarget};
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::ThreadOpening;
@@ -845,6 +846,7 @@ async fn an_agents_pause_records_the_kills_of_the_run_it_stopped() {
             oom_kills: 2,
             peak: 1 << 30,
         }),
+        ended: None,
     };
     run.send(&paused).await;
     let ends = run.finish(&manager).await;
@@ -875,9 +877,33 @@ async fn an_agents_stop_records_the_cause_the_daemon_stopped_it_for() {
         read(&mut run.wrapper_side).await,
         Control::Pause { .. }
     ));
-    run.send(&ExecutionEvent::Paused { memory: None }).await;
+    let paused = ExecutionEvent::Paused {
+        memory: None,
+        ended: None,
+    };
+    run.send(&paused).await;
     let ends = run.finish(&manager).await;
     bounded(stopping).await.unwrap().unwrap();
     let cause = r#"{"kind":"user_stop"}"#.to_owned();
+    assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
+}
+
+/// A wrapper that paused for the signal that ended its session, which the
+/// daemon did not send, has its agent's stop name that signal.
+#[tokio::test]
+async fn an_agents_pause_records_the_signal_that_ended_its_session() {
+    let (root, manager) = manager().await;
+    let mut run = running_agent(&manager, root.path()).await;
+    let ended = SessionEnd {
+        signal: EndingSignal::Terminate,
+        reached: SignalTarget::Agent,
+    };
+    let paused = ExecutionEvent::Paused {
+        memory: None,
+        ended: Some(ended),
+    };
+    run.send(&paused).await;
+    let ends = run.finish(&manager).await;
+    let cause = r#"{"kind":"signal","signal":"SIGTERM","reached":"agent"}"#.to_owned();
     assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
 }

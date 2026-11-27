@@ -1,4 +1,5 @@
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::agent_ends::{EndingSignal, SessionEnd, SignalTarget};
 use std::time::Duration;
 
 use super::*;
@@ -431,7 +432,11 @@ async fn ended_session_child() {
             Outcome::Paused {
                 code: 129,
                 stop: Halt::Ended {
-                    reason: "its terminal closed"
+                    end: SessionEnd {
+                        signal: EndingSignal::Hangup,
+                        reached: SignalTarget::Wrapper,
+                    },
+                    ..
                 },
             }
         ),
@@ -464,7 +469,11 @@ async fn ended_session_child() {
             Outcome::Paused {
                 code: 143,
                 stop: Halt::Ended {
-                    reason: "its session was terminated"
+                    end: SessionEnd {
+                        signal: EndingSignal::Terminate,
+                        reached: SignalTarget::Agent,
+                    },
+                    ..
                 },
             }
         ),

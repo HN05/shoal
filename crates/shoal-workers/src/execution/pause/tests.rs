@@ -43,9 +43,7 @@ fn only_an_ended_session_or_shutdown_of_an_agent_that_restores_unattended_queues
         handoff_delivered: false,
         proxy: None,
     };
-    let closed = Halt::Ended {
-        reason: "its terminal closed",
-    };
+    let closed = Halt::ended_by(libc::SIGHUP, SignalTarget::Wrapper).unwrap();
     assert!(matches!(
         restorer(&recovery(true), &closed, false),
         Restorer::Queue(env) if env.contains_key(crate::env::OUTPUT)

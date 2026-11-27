@@ -7,6 +7,7 @@ use std::{ffi::OsString, io::Write, path::PathBuf};
 
 use anyhow::Result;
 
+use shoal_protocol::agent_ends::{EndingSignal, SessionEnd, SignalTarget};
 use shoal_protocol::protocol::ScopeMemory;
 
 use super::{
@@ -86,7 +87,7 @@ pub(super) async fn pause_agent(
         return Ok(AfterPause::Finish);
     }
     let awaited = stop.protection().filter(|_| automatic);
-    report_pause(link, awaited.clone(), memory).await?;
+    report_pause(link, awaited.clone(), memory, stop.session_end()).await?;
     let Some(protection) = awaited else {
         return Ok(AfterPause::Finish);
     };
@@ -253,18 +254,20 @@ fn agent_place(mode: &Mode) -> Option<crate::sessions::Origin> {
 }
 
 /// Tell the daemon the agent paused, with what its scope recorded of its
-/// `memory`. Awaiting a restore keeps the link armed to reattach; otherwise
-/// the daemon may forget the stopped child.
+/// `memory` and the signal that `ended` its session. Awaiting a restore
+/// keeps the link armed to reattach; otherwise the daemon may forget the
+/// stopped child.
 async fn report_pause(
     link: &mut Link,
     awaited: Option<Protection>,
     memory: Option<ScopeMemory>,
+    ended: Option<SessionEnd>,
 ) -> Result<()> {
     match awaited {
         Some(protection) => link.await_restore(protection),
         None => link.disarm(),
     }
-    link.send(&ExecutionEvent::Paused { memory }).await
+    link.send(&ExecutionEvent::Paused { memory, ended }).await
 }
 
 /// Keep a stopped command for `shoal resume` to report.
@@ -310,7 +313,10 @@ pub(super) enum Halt {
     /// A hangup or terminate signal ended the session the command ran in, as
     /// closing its terminal, logging out or shutting down does; the reason is
     /// saved for `shoal resume`.
-    Ended { reason: &'static str },
+    Ended {
+        reason: &'static str,
+        end: SessionEnd,
+    },
     /// The daemon stopped it before the system shut down; the reason is
     /// saved for `shoal resume`.
     Shutdown { reason: Option<String> },
@@ -339,20 +345,29 @@ impl Halt {
     fn saved_reason(&self) -> Option<&str> {
         match self {
             Self::Protection { reason, .. } => Some(reason),
-            Self::Ended { reason } => Some(reason),
+            Self::Ended { reason, .. } => Some(reason),
             Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
         }
     }
 
-    /// The halt for a session ended by `signal`, which the wrapper received or
-    /// which ended the command before the wrapper's own arrived.
-    pub(super) fn ended_by(signal: i32) -> Option<Self> {
-        let reason = match signal {
-            libc::SIGHUP => "its terminal closed",
-            libc::SIGTERM => "its session was terminated",
+    /// The halt for a session ended by `signal`, which `reached` the wrapper
+    /// or ended the command before the wrapper's own arrived.
+    pub(super) fn ended_by(signal: i32, reached: SignalTarget) -> Option<Self> {
+        let (reason, signal) = match signal {
+            libc::SIGHUP => ("its terminal closed", EndingSignal::Hangup),
+            libc::SIGTERM => ("its session was terminated", EndingSignal::Terminate),
             _ => return None,
         };
-        Some(Self::Ended { reason })
+        let end = SessionEnd { signal, reached };
+        Some(Self::Ended { reason, end })
+    }
+
+    /// The signal that ended the session, which the daemon did not send.
+    fn session_end(&self) -> Option<SessionEnd> {
+        match self {
+            Self::Ended { end, .. } => Some(*end),
+            Self::Protection { .. } | Self::Pause { .. } | Self::Shutdown { .. } => None,
+        }
     }
 
     /// The cause for every line after the stop.
@@ -366,7 +381,7 @@ impl Halt {
             | Self::Shutdown {
                 reason: Some(reason),
             } => format!(": {reason}"),
-            Self::Ended { reason } => format!(": {reason}"),
+            Self::Ended { reason, .. } => format!(": {reason}"),
             Self::Pause { reason: None, .. } | Self::Shutdown { reason: None } => String::new(),
         }
     }
@@ -445,7 +460,7 @@ pub(super) async fn wait(link: &mut Link, place: &mut Place) -> Result<Waited> {
     let signalled = || Ok(Waited::cancelled("interrupted"));
     let ended = |signal| {
         Ok(Waited::Ended(
-            Halt::ended_by(signal).expect("a session signal"),
+            Halt::ended_by(signal, SignalTarget::Wrapper).expect("a session signal"),
         ))
     };
     loop {

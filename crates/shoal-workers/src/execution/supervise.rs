@@ -31,6 +31,7 @@ use crate::{
     protocol::{Control, ExecutionEvent, timing},
 };
 use shoal_core::execution::{DetachedLaunch, Terminal, exit_code, report_launch};
+use shoal_protocol::agent_ends::SignalTarget;
 use shoal_protocol::protocol::ScopeMemory;
 
 #[derive(Debug)]
@@ -356,7 +357,8 @@ async fn wait_for_child(
             () = memory_stop(&mut signals.stopped) => return interrupted(child, group, libc::SIGTERM).await,
             status = child.wait() => {
                 let status = status?;
-                return Ok(Outcome::ended(status, status.signal().and_then(Halt::ended_by)));
+                let halt = status.signal().and_then(|signal| Halt::ended_by(signal, SignalTarget::Agent));
+                return Ok(Outcome::ended(status, halt));
             }
             received = link.recv() => {
                 let control = match received {
@@ -388,7 +390,7 @@ async fn end_session(
     ending: impl Fn(&Halt),
     report: &SignalReport<'_>,
 ) -> Result<Outcome> {
-    let halt = Halt::ended_by(signal);
+    let halt = Halt::ended_by(signal, SignalTarget::Wrapper);
     if let Some(halt) = &halt {
         ending(halt);
     }
