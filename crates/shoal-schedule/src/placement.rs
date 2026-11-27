@@ -108,18 +108,33 @@ states! {
     }
 }
 
-/// The `local` policy: every start stays on the caller's machine.
+/// The `local` policy: every start stays on the caller's machine, unless
+/// the snapshot lists that machine as unable to take it.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Local;
 
 impl Placer for Local {
     fn place(&self, snapshot: &Snapshot) -> Placement {
+        let caller = &snapshot.request.caller;
+        let listed = (snapshot.machines.iter()).find(|machine| &machine.id == caller);
+        if let Some(why) = listed.and_then(|machine| snapshot.request.unfit(machine)) {
+            return Placement {
+                ranked: Vec::new(),
+                skipped: vec![Skipped {
+                    machine: caller.clone(),
+                    why,
+                }],
+            };
+        }
         Placement {
             ranked: vec![Placed {
-                machine: snapshot.request.caller.clone(),
+                machine: caller.clone(),
                 reason: Reason::Local,
             }],
             skipped: Vec::new(),
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

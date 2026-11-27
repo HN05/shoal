@@ -401,13 +401,15 @@ it needs its machine, as
 `--machine` always picks the machine.
 `placement` takes these values:
 
-- `local` keeps every start on the machine it was made on.
+- `local` keeps every start on the machine it was made on. A space a machine
+  hands over goes to the hub's own machine, when that machine can launch its
+  agent.
 - `balanced` sends lasting work to an `always_on` machine with room, and
   disposable work, a start with `--disposable`, to any machine with room,
   `intermittent` ones first. The machine the start was made on comes next,
   then the machine with the most room for the start's weight. The machine
-  must have the start's repository registered, matched by origin, and its
-  agent tool. Without such a machine, the start stays where it was made.
+  must have the start's repository registered, matched by origin, and launch
+  its agent there. Without such a machine, the start stays where it was made.
   Placement never clones a repository; the start reports the machines it
   skipped and why. [Placement](../../../../../../docs/reference/hub.md#placement)
   gives the rules in full.
