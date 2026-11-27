@@ -714,18 +714,19 @@ fn live_source(workspace: Workspace, head: CommitId, files: SourceFiles) -> Sour
 
 pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
     workspace.copied_from = db
-        .prepare_cached(
+        .prepare_cached(&format!(
             "SELECT source.id, source_space.name, source.branch, copy.copied_from_checkpoint,
-                copy.starting_checkpoint, json_extract(start.record, '$.head'),
-                json_extract(start.record, '$.commit'), copy.starting_index
+                copy.starting_checkpoint, copy.starting_index, {}
              FROM workspaces copy
              JOIN checkpoints start
                 ON start.workspace_id=copy.id AND start.number=copy.starting_checkpoint
              LEFT JOIN workspaces source ON source.id=copy.copied_from
              LEFT JOIN spaces source_space ON source_space.id=source.id
              WHERE copy.id=?1",
-        )?
+            super::checkpoints::rows::columns("start")
+        ))?
         .query_row([&workspace.id], |row| {
+            let start = super::checkpoints::rows::checkpoint(row)?;
             let workspace = match row.get::<_, Option<SpaceId>>(0)? {
                 Some(id) => Some(WorkspaceRef {
                     id,
@@ -738,9 +739,9 @@ pub(super) fn load(db: &Connection, workspace: &mut Workspace) -> Result<()> {
                 workspace,
                 checkpoint: row.get(3)?,
                 starting_checkpoint: row.get(4)?,
-                head: row.get(5)?,
-                commit: row.get(6)?,
-                index: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                head: start.head,
+                commit: start.commit,
+                index: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
             })
         })
         .optional()?;

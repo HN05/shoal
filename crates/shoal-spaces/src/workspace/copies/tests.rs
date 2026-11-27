@@ -506,16 +506,18 @@ async fn a_checkpoint_that_kept_head_only_is_refused() {
         .take_checkpoint(&*f.manager, &f.manager.named("topic").await, None)
         .await
         .unwrap();
-    let id = f.source.id.clone();
+    let omitted = crate::model::Checkpoint {
+        files_omitted: true,
+        ..checkpoint.clone()
+    };
     f.manager
         .store
-        .run(move |db| {
-            db.execute(
-                "UPDATE checkpoints SET record=json_set(record, '$.files_omitted', json('true'))
-                    WHERE workspace_id=?1",
-                [id],
+        .write(move |tx| {
+            tx.execute(
+                "DELETE FROM checkpoints WHERE workspace_id=?1 AND number=?2",
+                rusqlite::params![omitted.workspace_id, omitted.number],
             )?;
-            Ok(())
+            crate::workspace::checkpoints::rows::insert(tx, &omitted)
         })
         .await
         .unwrap();

@@ -10,6 +10,7 @@ mod migrations;
 mod ports;
 mod rows;
 pub mod spaces;
+pub mod split;
 mod sql;
 mod store;
 #[cfg(any(test, feature = "test-support"))]

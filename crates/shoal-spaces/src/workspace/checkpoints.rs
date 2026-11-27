@@ -551,30 +551,19 @@ pub fn insert_numbered(
         number,
         ..checkpoint.clone()
     };
-    tx.execute(
-        "INSERT INTO checkpoints(workspace_id,number,repository_id,expires_at,record)
-            VALUES (?1,?2,?3,?4,?5)",
-        params![
-            record.workspace_id,
-            number,
-            record.repository_id,
-            record.expires_at,
-            serde_json::to_string(&record)?,
-        ],
-    )?;
+    rows::insert(tx, &record)?;
     Ok(record.number)
 }
 
 /// False when it expired meanwhile.
 fn extend(db: &Connection, checkpoint: &Checkpoint) -> Result<bool> {
     Ok(db.execute(
-        "UPDATE checkpoints SET expires_at=?3, record=?4
+        "UPDATE checkpoints SET expires_at=?3
             WHERE workspace_id=?1 AND number=?2 AND expires_at > unixepoch()",
         params![
             checkpoint.workspace_id,
             checkpoint.number,
             checkpoint.expires_at,
-            serde_json::to_string(checkpoint)?,
         ],
     )? == 1)
 }
@@ -591,13 +580,9 @@ pub fn reassign(db: &Connection, from: &SpaceId, to: &SpaceId) -> Result<()> {
         [from],
     )?;
     for checkpoint in workspace_checkpoints(db, from)? {
-        let record = Checkpoint {
-            workspace_id: to.to_owned(),
-            ..checkpoint
-        };
         db.execute(
-            "UPDATE checkpoints SET workspace_id=?3, record=?4 WHERE workspace_id=?1 AND number=?2",
-            params![from, record.number, to, serde_json::to_string(&record)?],
+            "UPDATE checkpoints SET workspace_id=?3 WHERE workspace_id=?1 AND number=?2",
+            params![from, checkpoint.number, to],
         )?;
     }
     Ok(())
@@ -636,26 +621,27 @@ fn delete_expired(db: &Connection, repository_id: &RepositoryId) -> Result<()> {
 /// Read at once, so a pass over thousands of refs does not query the store
 /// for each.
 fn kept_commits(db: &Connection, repository_id: &RepositoryId) -> Result<HashSet<String>> {
-    db.prepare("SELECT json_extract(record, '$.commit') FROM checkpoints WHERE repository_id=?1")?
-        .query_map([repository_id], |row| row.get(0))?
-        .map(|commit| Ok(commit?))
-        .collect()
+    db.prepare(&format!(
+        "SELECT {} FROM checkpoints WHERE repository_id=?1",
+        rows::columns("checkpoints")
+    ))?
+    .query_map([repository_id], rows::checkpoint)?
+    .map(|checkpoint| Ok(checkpoint?.commit.to_string()))
+    .collect()
 }
 
 pub fn latest(db: &Connection, workspace_id: &SpaceId) -> Result<Option<Checkpoint>> {
-    let record: Option<String> = db
+    Ok(db
         .query_row(
             &format!(
-                "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT}
-                    ORDER BY number DESC LIMIT 1"
+                "SELECT {} FROM checkpoints WHERE workspace_id=?1 AND {KEPT}
+                    ORDER BY number DESC LIMIT 1",
+                rows::columns("checkpoints")
             ),
             [workspace_id],
-            |row| row.get(0),
+            rows::checkpoint,
         )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
+        .optional()?)
 }
 
 pub(super) fn find(
@@ -663,18 +649,16 @@ pub(super) fn find(
     workspace_id: &SpaceId,
     number: CheckpointNumber,
 ) -> Result<Option<Checkpoint>> {
-    let record: Option<String> = db
+    Ok(db
         .query_row(
             &format!(
-                "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number=?2 AND {KEPT}"
+                "SELECT {} FROM checkpoints WHERE workspace_id=?1 AND number=?2 AND {KEPT}",
+                rows::columns("checkpoints")
             ),
             params![workspace_id, number],
-            |row| row.get(0),
+            rows::checkpoint,
         )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
+        .optional()?)
 }
 
 /// A checkpoint is kept while it has not expired, while it is its
@@ -700,31 +684,35 @@ fn checkpoint_page(
     after: CheckpointNumber,
 ) -> Result<Vec<Checkpoint>> {
     let mut statement = db.prepare(&format!(
-        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND number > ?2 AND {KEPT}
-            ORDER BY number"
+        "SELECT {} FROM checkpoints WHERE workspace_id=?1 AND number > ?2 AND {KEPT}
+            ORDER BY number",
+        rows::columns("checkpoints")
     ))?;
-    let mut rows = statement.query(params![workspace_id, after])?;
+    let mut checkpoints = statement.query(params![workspace_id, after])?;
     let (mut page, mut bytes) = (Vec::new(), 0);
-    while let Some(row) = rows.next()? {
-        let record: String = row.get(0)?;
-        bytes += record.len() + 1;
+    while let Some(row) = checkpoints.next()? {
+        let checkpoint = rows::checkpoint(row)?;
+        bytes += serde_json::to_string(&checkpoint)?.len() + 1;
         if bytes > PAGE_BYTES && !page.is_empty() {
             break;
         }
-        page.push(serde_json::from_str(&record)?);
+        page.push(checkpoint);
     }
     Ok(page)
 }
 
 /// Oldest first.
 pub fn workspace_checkpoints(db: &Connection, workspace_id: &SpaceId) -> Result<Vec<Checkpoint>> {
-    db.prepare(&format!(
-        "SELECT record FROM checkpoints WHERE workspace_id=?1 AND {KEPT} ORDER BY number"
-    ))?
-    .query_map([workspace_id], |row| row.get::<_, String>(0))?
-    .map(|record| Ok(serde_json::from_str(&record?)?))
-    .collect()
+    Ok(db
+        .prepare(&format!(
+            "SELECT {} FROM checkpoints WHERE workspace_id=?1 AND {KEPT} ORDER BY number",
+            rows::columns("checkpoints")
+        ))?
+        .query_map([workspace_id], rows::checkpoint)?
+        .collect::<rusqlite::Result<_>>()?)
 }
+
+pub(crate) mod rows;
 
 #[cfg(test)]
 mod tests;

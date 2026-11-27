@@ -1,0 +1,2 @@
+-- A checkpoint's record leaves out the fields its row keeps in columns,
+-- which the migration's preparation took out of the older records.

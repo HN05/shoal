@@ -362,18 +362,15 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
         return Ok(None);
     };
     let until = UnixTime::now() + RESTORE_CLAIM;
-    for (table, column) in [
-        ("removed_spaces", "space_id"),
-        ("checkpoints", "workspace_id"),
-    ] {
-        tx.execute(
-            &format!(
-                "UPDATE {table} SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
-                 WHERE {column}=?1 AND expires_at < ?2"
-            ),
-            params![removed.space_id, until],
-        )?;
-    }
+    tx.execute(
+        "UPDATE removed_spaces SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
+         WHERE space_id=?1 AND expires_at < ?2",
+        params![removed.space_id, until],
+    )?;
+    tx.execute(
+        "UPDATE checkpoints SET expires_at=?2 WHERE workspace_id=?1 AND expires_at < ?2",
+        params![removed.space_id, until],
+    )?;
     tx.execute(
         "UPDATE removed_spaces
          SET record=json_set(record, '$.checkpoint.expires_at', ?2)

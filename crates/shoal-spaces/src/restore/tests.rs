@@ -151,8 +151,7 @@ async fn a_started_restore_keeps_expiry_from_its_record_checkpoints_and_files() 
                 rusqlite::params![id, soon],
             )?;
             db.execute(
-                "UPDATE checkpoints SET expires_at=?2, record=json_set(record, '$.expires_at', ?2)
-                 WHERE workspace_id=?1",
+                "UPDATE checkpoints SET expires_at=?2 WHERE workspace_id=?1",
                 rusqlite::params![id, soon],
             )?;
             db.execute(

@@ -7,12 +7,14 @@ use rusqlite::Connection;
 mod agent_modes;
 mod alert_attachments;
 mod approval_columns;
+mod checkpoint_columns;
 mod clean_request_columns;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
 mod item_activity_states;
 mod journal_shapes;
+mod json_rows;
 mod post_files;
 mod post_surfaces;
 mod review_targets;
@@ -20,7 +22,7 @@ mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 328;
+pub const SCHEMA_VERSION: i64 = 329;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -195,6 +197,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         328,
         include_str!("migrations/0328_agent_oom_kills.sql"),
         None,
+    ),
+    (
+        329,
+        include_str!("migrations/0329_checkpoint_columns.sql"),
+        Some(checkpoint_columns::drop_column_fields),
     ),
 ];
 
