@@ -9,7 +9,7 @@ mod journal_shapes;
 mod post_surfaces;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 306;
+pub const SCHEMA_VERSION: i64 = 307;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -73,6 +73,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         306,
         include_str!("migrations/0306_seed_build_runs.sql"),
+        None,
+    ),
+    (
+        307,
+        include_str!("migrations/0307_applied_reports.sql"),
         None,
     ),
 ];

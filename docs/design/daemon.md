@@ -325,6 +325,15 @@ Item waits resume for their remaining time. When the replacement speaks a newer
 protocol, they continue by running the installed release with that cursor or
 time.
 
+### Reports sent again
+
+A process sends a report it must not lose, such as a command's run, until the
+daemon acknowledges it. The daemon can stop after it applied the report and
+before it acknowledged it, so the report carries an ID its sender gave it. The
+daemon records that ID in the transaction that applies the report, and skips a
+report whose ID it holds. It keeps each ID for a day, longer than any sender
+goes on sending.
+
 ### Protocol mismatches
 
 An update does not wait for the clients of the previous protocol. The old

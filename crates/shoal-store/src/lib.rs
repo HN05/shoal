@@ -1,6 +1,7 @@
 //! The daemon's SQLite store, its schema and migrations, and the record
 //! functions every subsystem shares.
 pub mod agent_handoffs;
+pub mod applied_reports;
 mod executions;
 mod guards;
 pub mod journal;

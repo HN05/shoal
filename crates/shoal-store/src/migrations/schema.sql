@@ -1143,6 +1143,11 @@ CREATE TABLE "space_events" (
     record TEXT NOT NULL
 );
 
+CREATE TABLE applied_reports (
+    id TEXT PRIMARY KEY,
+    applied_at INTEGER NOT NULL DEFAULT (unixepoch())
+) WITHOUT ROWID;
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
