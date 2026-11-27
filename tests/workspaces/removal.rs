@@ -210,16 +210,22 @@ fn restore_lists_removed_workspaces_beyond_one_protocol_frame() {
     // the 64 KiB frame.
     let db = shoal_store::test_support::open_database(fixture.root.path().join("state/state.db"))
         .unwrap();
-    db.execute(
-        "WITH RECURSIVE copies(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM copies WHERE n < 40)
-         INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
-         SELECT 'copy-' || n, repository_id, chat, 'copy-' || n, expires_at,
-             json_set(record, '$.workspace_id', 'copy-' || n, '$.name', 'copy-' || n,
-                 '$.checkpoint.name', replace(hex(zeroblob(1000)), '0', 'x'))
-         FROM removed_spaces, copies",
-        [],
-    )
-    .unwrap();
+    let text: String = db
+        .query_row("SELECT record FROM removed_spaces", [], |row| row.get(0))
+        .unwrap();
+    let mut record: serde_json::Value = serde_json::from_str(&text).unwrap();
+    record["checkpoint"]["name"] = "x".repeat(2000).into();
+    for n in 1..=40 {
+        db.execute(
+            "INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,
+                chat_workspace_id,checkpoint_expires_at,record)
+             SELECT ?1,repository_id,chat,?1,expires_at,chat_workspace_id,
+                checkpoint_expires_at,?2
+             FROM removed_spaces WHERE name='scratch'",
+            rusqlite::params![format!("copy-{n}"), record.to_string()],
+        )
+        .unwrap();
+    }
     let removed = fixture.ok(&["restore"])["removed"].clone();
     let names: Vec<_> = removed
         .as_array()

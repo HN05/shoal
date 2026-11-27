@@ -57,7 +57,7 @@ const FIELDS: &[Column] = &[
 ];
 
 /// What a query selects to read a record.
-pub(crate) const COLUMNS: &str =
+const COLUMNS: &str =
     "space_id,repository_id,name,expires_at,chat_workspace_id,checkpoint_expires_at,record";
 
 impl Spaces {
@@ -365,7 +365,7 @@ fn row_values(removed: &RemovedSpace) -> Result<Vec<rusqlite::types::Value>> {
 }
 
 /// Reads the columns [`COLUMNS`] names.
-pub(crate) fn removed_space(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemovedSpace> {
+fn removed_space(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemovedSpace> {
     split::decode_row(row, "record", FIELDS)
 }
 
@@ -412,6 +412,17 @@ fn claim(tx: &rusqlite::Transaction<'_>, id: &SpaceId) -> Result<Option<RemovedS
         kept.checkpoint.expires_at = kept.checkpoint.expires_at.max(until);
     }
     Ok(Some(removed))
+}
+
+/// The record of `id`, whether or not it expired or a space has its ID.
+pub fn stored(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {
+    Ok(db
+        .query_row(
+            &format!("SELECT {COLUMNS} FROM removed_spaces WHERE space_id=?1"),
+            [id],
+            removed_space,
+        )
+        .optional()?)
 }
 
 fn find(db: &Connection, id: &SpaceId) -> Result<Option<RemovedSpace>> {

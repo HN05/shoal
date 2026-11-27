@@ -31,14 +31,7 @@ async fn record(manager: &Manager, id: &str) -> Option<RemovedSpace> {
     let id = id.to_owned();
     manager
         .store
-        .run(move |db| {
-            let record: Option<String> = rusqlite::OptionalExtension::optional(db.query_row(
-                "SELECT record FROM removed_spaces WHERE space_id=?1",
-                [id],
-                |row| row.get(0),
-            ))?;
-            Ok(record.map(|record| serde_json::from_str(&record).unwrap()))
-        })
+        .run(move |db| shoal_spaces::restore::records::stored(db, &id.into()))
         .await
         .unwrap()
 }

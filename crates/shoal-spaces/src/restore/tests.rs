@@ -32,16 +32,7 @@ async fn record(manager: &Fixture, id: &str) -> Option<RemovedSpace> {
     let id = id.to_owned();
     manager
         .store
-        .run(move |db| {
-            Ok(rusqlite::OptionalExtension::optional(db.query_row(
-                &format!(
-                    "SELECT {} FROM removed_spaces WHERE space_id=?1",
-                    super::records::COLUMNS
-                ),
-                [id],
-                super::records::removed_space,
-            ))?)
-        })
+        .run(move |db| super::records::stored(db, &id.into()))
         .await
         .unwrap()
 }
