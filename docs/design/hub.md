@@ -461,8 +461,9 @@ When no machine can launch the space's agent, the hub writes back that it
 keeps the space. A space never runs another agent tool than its own, and Shoal
 installs none. The hub places the space again as each machine reports its
 capacity, and continues it on the first machine it chooses. When the machine
-the space came from connects again first, the space stays there, without a
-restore, and the user hears of it. The hub keeps such a space in memory alone,
+the space came from registers a link again before the hub chose one, the space
+stays there, without a restore, and the user hears of it. A choice made first
+goes ahead, as any hand-over does, and that machine retires its copy. The hub keeps such a space in memory alone,
 so after the hub's restart `shoal restore` takes it over.
 
 The shutting-down machine reads the placement and says it leaves the space
