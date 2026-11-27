@@ -521,7 +521,9 @@ than 15 minutes before the notice. It moves it as a shutdown's hand-over does,
 and holds what it held for the space for the machine it went to. A chat in a
 workspace's worktree goes only with that workspace.
 
-A space that lags more stays, for the alert and a manual restore. The machine
+A space no machine can take waits on the sleeping machine, and the hub tries
+again as each machine reports its capacity. A space that lags more stays, for
+the alert and a manual restore. The machine
 retires the copies taken over once it wakes. One that wakes within the 10
 minutes keeps everything.
 

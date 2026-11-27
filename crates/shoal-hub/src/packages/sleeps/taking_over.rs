@@ -82,19 +82,34 @@ impl Sleeps {
         let mut tried = self.tried.lock().unwrap();
         tried.entry(member.clone()).or_default().insert(id.clone())
     }
+
+    /// Record that no machine could take the spaces `ids` of `member`, so
+    /// the next look tries again.
+    fn try_again(&self, member: &MemberId, ids: &[SpaceId]) {
+        if let Some(tried) = self.tried.lock().unwrap().get_mut(member) {
+            tried.retain(|id| !ids.contains(id));
+        }
+    }
 }
 
 impl Hub {
     /// Take sleeping machines' spaces over as they become due, every
-    /// [`LOOK_EVERY`] and whenever the hub holds a new update, while this
-    /// daemon is the hub, until it stops.
+    /// [`LOOK_EVERY`], whenever the hub holds a new update and whenever a
+    /// machine reports its capacity, which may make room for a space no
+    /// machine could take, while this daemon is the hub, until it stops.
     pub(crate) async fn keep_taking_over_sleepers(self: &Arc<Self>, daemon: &Arc<dyn Daemon>) {
         let mut every = tokio::time::interval(LOOK_EVERY);
         every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut reported = self.capacities.watch();
         loop {
             tokio::select! {
                 _ = every.tick() => {}
                 () = self.sleeps.look.notified() => {}
+                changed = reported.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                }
             }
             if !self.is_hub(&**daemon) {
                 continue;
@@ -156,7 +171,8 @@ impl Hub {
     /// Move `group`, spaces of the machine `from`, asleep since
     /// `asleep_at`, that the user knows by `labels`, to the machine
     /// placement chooses, one after another, telling the user where they
-    /// went; what does not go stays on `from`.
+    /// went; what does not go stays on `from`. A group no machine can take
+    /// waits for the next look.
     async fn take_over_group(
         &self,
         daemon: &dyn Daemon,
@@ -165,12 +181,8 @@ impl Hub {
     ) {
         let decision = match self.place_elsewhere(daemon, from, group.start).await {
             Ok(Some(decision)) => decision,
-            Ok(None) => {
-                return log!(
-                    "hub: no other machine can take space {} of sleeping machine {from}",
-                    group.spaces[0]
-                );
-            }
+            // The placement's log line says why.
+            Ok(None) => return self.sleeps.try_again(from, &group.spaces),
             Err(error) => {
                 return log!("hub: could not place space {}: {error:#}", group.spaces[0]);
             }

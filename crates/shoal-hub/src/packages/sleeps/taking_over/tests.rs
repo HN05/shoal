@@ -196,3 +196,13 @@ async fn what_a_takeover_passes_to_the_hub_s_own_machine_is_delivered_there() {
         .unwrap();
     assert_eq!(held, 0);
 }
+
+#[test]
+fn a_space_no_machine_could_take_is_tried_again() {
+    let sleeps = Sleeps::default();
+    let (desk, fix) = (MemberId::from("desk".to_owned()), id("fix"));
+    assert!(sleeps.try_once(&desk, &fix));
+    assert!(!sleeps.try_once(&desk, &fix));
+    sleeps.try_again(&desk, std::slice::from_ref(&fix));
+    assert!(sleeps.try_once(&desk, &fix));
+}

@@ -754,8 +754,10 @@ continues the space under its ID and queues its agents' restores. A chat in a
 workspace's worktree goes with that workspace, and only together.
 
 A `spaces_taken_over` alert names where the spaces went. The events the hub
-held for them follow them there. A space whose package lags more stays, and
-the [`machine_unreachable` alert](#unreachable-machines) names it.
+held for them follow them there. A space that no machine can take waits on the
+sleeping machine, and the hub tries again as each machine reports its
+capacity. A space whose package lags more stays, and the
+[`machine_unreachable` alert](#unreachable-machines) names it.
 
 The machine retires its copies of the spaces taken over once it wakes. A
 machine that wakes within the 10 minutes keeps everything where it was.
