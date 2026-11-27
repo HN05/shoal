@@ -4,7 +4,7 @@ use shoal_schedule::placement::{
     snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
-use super::among;
+use super::{among, logged};
 
 /// A start from the laptop in a repository only it has, which the server,
 /// connected too, lacks.
@@ -118,4 +118,23 @@ async fn a_placement_skips_a_machine_that_does_not_describe_itself_in_time() {
     let decision = hub.place_for(&StandIn::default(), request).await.unwrap();
     assert!(decision.is_none());
     assert_eq!(started.elapsed(), super::DESCRIBED_WITHIN);
+}
+
+#[test]
+fn the_log_names_where_a_start_goes_and_each_machine_it_skips() {
+    use shoal_schedule::placement::{Policy, Skipped, SkippedBy};
+
+    let snapshot = snapshot();
+    let placement = Placement {
+        skipped: vec![Skipped {
+            machine: "server".into(),
+            why: SkippedBy::NoAgent,
+        }],
+        ..on("laptop")
+    };
+    let line = logged(&snapshot.request, &placement, Policy::Balanced, &[]);
+    assert!(line.contains("goes to machine laptop (Local)"), "{line}");
+    assert!(line.contains("skipped: server (no_agent)"), "{line}");
+    let line = logged(&snapshot.request, &Placement::default(), Policy::Local, &[]);
+    assert!(line.contains("goes to no machine"), "{line}");
 }

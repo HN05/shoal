@@ -570,6 +570,8 @@ Placement is a policy in `shoal-schedule`, beside the queue's scheduler, under
 the same rule. It reads only a snapshot of the start and of each connected
 machine, never the hub's or a daemon's state. It ranks the machines with a
 reason each, so a start and an app can say why a space went where it did.
+The hub's log records every placement, under every policy: the machine it
+chose and why, and each machine it skipped and why.
 
 ### Capacity reports
 

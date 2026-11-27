@@ -105,6 +105,10 @@ impl Hub {
     ) -> Result<Option<Decision>> {
         let (snapshot, members) = (self.described_snapshot(daemon, request, eligible)).await?;
         let (placement, decided) = self.rank(&snapshot).await;
+        log!(
+            "hub: {}",
+            logged(&snapshot.request, &placement, decided.0, &members)
+        );
         Ok(decision(placement, decided, &members))
     }
 
@@ -232,6 +236,40 @@ fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine
         .collect()
 }
 
+/// The name of the machine `id` among `members`, its ID where they lack it.
+fn machine_name(members: &[Member], id: &MemberId) -> String {
+    let member = members.iter().find(|member| &member.id == id);
+    member.map_or_else(|| id.to_string(), |member| member.name.clone())
+}
+
+/// What the hub's log records of `placement` of a start of `request`, which
+/// `policy` made: where it sends the start and why, and why it skips each
+/// machine it skips, naming the machines among `members`.
+fn logged(request: &Request, placement: &Placement, policy: Policy, members: &[Member]) -> String {
+    let name = |id: &MemberId| machine_name(members, id);
+    let start = format!(
+        "a start of agent {} in {}",
+        request.agent,
+        request.origin.as_deref().unwrap_or("no repository")
+    );
+    let chosen = match placement.chosen() {
+        Some(placed) => format!(
+            "goes to machine {} ({:?})",
+            name(&placed.machine),
+            placed.reason
+        ),
+        None => "goes to no machine".to_owned(),
+    };
+    let skipped: Vec<String> = (placement.skipped.iter())
+        .map(|skipped| format!("{} ({})", name(&skipped.machine), skipped.why))
+        .collect();
+    let skipped = match skipped.is_empty() {
+        true => "none".to_owned(),
+        false => skipped.join(", "),
+    };
+    format!("{start} {chosen} by {policy}; skipped: {skipped}")
+}
+
 /// The decision `placement` makes, which the policy `decided` made, after
 /// the placer it names left it `unanswered`, naming the machines by their
 /// names among `members`; none without a machine to go to.
@@ -240,10 +278,7 @@ fn decision(
     (decided, unanswered): Decided,
     members: &[Member],
 ) -> Option<Decision> {
-    let name = |id: &MemberId| {
-        let member = members.iter().find(|member| &member.id == id);
-        member.map_or_else(|| id.to_string(), |member| member.name.clone())
-    };
+    let name = |id: &MemberId| machine_name(members, id);
     let chosen = placement.chosen()?;
     Some(Decision {
         machine: chosen.machine.clone(),
