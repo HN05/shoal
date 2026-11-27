@@ -350,3 +350,43 @@ async fn unresolved_stopped_agents_are_reconciled_once_their_survivors_exit() {
     assert!(record(&locked, "survivor").is_some());
     reconciling.abort();
 }
+
+/// A stopped agent whose wrapper saved an OOM kill the previous daemon
+/// never heard of is logged and counted as reconciliation forgets it.
+#[tokio::test]
+async fn reconciliation_logs_and_counts_a_recorded_oom_kill() {
+    use shoal_protocol::stop_causes::StopCause;
+    let locked = locked().await;
+    let (paths, workspace) = (&locked.fixture.agents.paths, &locked.workspace);
+    let (wrapper, child) = (exited().await, exited().await);
+    interrupted(
+        &locked,
+        "killed",
+        &wrapper,
+        Some(&child),
+        Some(Stage::Stopped),
+    )
+    .await;
+    let path = record_path(paths, &workspace.id, &"killed".into());
+    let killed =
+        r#"{"agent":"fixture","mode":"worker","stage":"stopped","cause":{"kind":"oom_kill"}}"#;
+    fs::write(&path, killed).unwrap();
+
+    reconcile_once(&locked.fixture).await;
+
+    assert!(kept(&locked).await.is_empty());
+    assert_eq!(record(&locked, "killed").unwrap().oom_kills, 1);
+    let id = workspace.id.clone();
+    let stopped = (locked.fixture.agents.store)
+        .run(move |db| {
+            let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
+            shoal_daemon_base::events::newest_of(db, &id, &kinds)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        stopped.event.agent().and_then(|agent| agent.cause),
+        Some(StopCause::OomKill)
+    );
+}

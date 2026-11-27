@@ -280,8 +280,7 @@ impl Agents {
         daemon: &dyn Daemon,
         interrupted: &Interrupted,
     ) -> Result<()> {
-        self.keep_stopped_turn(&interrupted.execution.id, None)
-            .await;
+        self.keep_stopped_agent(&interrupted.execution.id).await;
         let (id, records) = (interrupted.execution.id.clone(), self.records.clone());
         let forgotten = (self.store)
             .write(move |tx| forget_unknown_execution(tx, &*records, &id))

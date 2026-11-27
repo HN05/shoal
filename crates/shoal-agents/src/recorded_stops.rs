@@ -1,6 +1,7 @@
-//! The stop whose cause a wrapper saved in its agent's recovery record, which
-//! the daemon logs as the execution ends, whether or not the wrapper's pause
-//! report reached it.
+//! What the daemon keeps of a stopped agent before its execution's record
+//! goes: the turn it last reported, and the stop whose cause its wrapper saved
+//! in its recovery record, which the daemon logs whether or not the wrapper's
+//! pause report reached it.
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::stop_causes::StopCause;
@@ -9,11 +10,19 @@ use crate::Agents;
 use crate::execution::recovery::{self, RecordExt as _};
 
 impl Agents {
+    /// Keep what the stopped agent of execution `id` left, as every path that
+    /// forgets an execution does first: its turn, and the stop its wrapper
+    /// recorded.
+    pub async fn keep_stopped_agent(&self, id: &ExecutionId) {
+        self.keep_stopped_turn(id, None).await;
+        self.settle_recorded_stop(id).await;
+    }
+
     /// Log the stop whose cause the recovery record of execution `id` names,
     /// and count an OOM kill, unless the wrapper's pause report did. Runs
     /// while the execution is still recorded. A record that cannot be read
     /// leaves the stop unlogged.
-    pub async fn settle_recorded_stop(&self, id: &ExecutionId) {
+    async fn settle_recorded_stop(&self, id: &ExecutionId) {
         let query = id.clone();
         let found = (self.store)
             .run(move |db| shoal_store::find_execution(db, &query))
