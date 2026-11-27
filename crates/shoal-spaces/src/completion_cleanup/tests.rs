@@ -722,39 +722,6 @@ async fn an_unreadable_ancestor_completion_leaves_other_completions_to_their_cle
 }
 
 #[tokio::test]
-async fn an_unreadable_chat_completion_leaves_other_spaces_to_completion_cleanup() {
-    let (manager, workspace) = fixture().await;
-    let chat = manager.chat("notes", "chat", None, None).await;
-    let id = chat.id.clone();
-    manager
-        .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,'{','manual')",
-                [id],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    manager
-        .spaces
-        .mark_space_done(
-            &*manager,
-            &SpaceSelector::id(&workspace.id),
-            Done::default(),
-            &Attacher::User,
-        )
-        .await
-        .unwrap();
-    // The chat's cleanup fails, which retains it, and the workspace goes all
-    // the same.
-    manager.spaces.sweep_completed(&*manager).await.unwrap();
-    assert!(manager.spaces.workspace_by_id(&workspace.id).await.is_err());
-    assert!(manager.spaces.chat_by_id(&chat.id).await.unwrap().is_some());
-}
-
-#[tokio::test]
 async fn a_held_parents_completion_takes_the_chats_below_it_deepest_first() {
     let (manager, parent) = fixture().await;
     manager

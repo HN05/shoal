@@ -430,7 +430,10 @@ alone. Scoped callers run it as their `admin` permission allows.
 ## Failures
 
 A failed cleanup keeps the workspace's ownership, work and leases, and reports
-why. An invalid record keeps its workspace without blocking cleanup of others.
+why. Cleanup decodes every record strictly. One writer builds each record
+from a typed value, and a migration refuses a stored record that does not fit.
+A record that still fails to decode is a store defect, so the sweep fails and
+reports it instead of passing over the record.
 A failed sweep step does not skip the others. Background loops restart after a
 panic, and a failed daemon log write never stops them.
 
