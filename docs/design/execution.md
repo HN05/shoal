@@ -197,7 +197,10 @@ and whether the OOM killer hit it. On Linux it reads the command's scope every
 second for that. On macOS, and wherever no scope starts, it reads the command's
 process tree every second, since the daemon's ten-second sample misses short
 peaks. It sums what each process holds as the daemon's samples do, with what
-it swapped out, which a scope's reads also count.
+it swapped out, which a scope's reads also count. On Linux without a scope,
+the control group the command shares with its wrapper counts its OOM kills. A
+kill of another process in that group counts too, which errs towards a higher
+estimate.
 
 Protection's stop reaches the command through its admission. The wrapper stops
 the command, which counts as cut short, and reports its execution's end. It
