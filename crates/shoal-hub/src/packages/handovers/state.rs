@@ -41,6 +41,8 @@ pub(crate) struct Handovers {
     /// Counts the machines that stayed after all, which keep the spaces the
     /// hub kept for them.
     stayed: watch::Sender<u64>,
+    /// The spaces the hub kept that another machine took over meanwhile.
+    taken_over: Mutex<HashSet<SpaceId>>,
 }
 
 /// A space its machine released, which goes where `destination` says once
@@ -83,6 +85,25 @@ impl Handovers {
     pub(in crate::packages) fn keeps(&self, id: &SpaceId, from: &MemberId) -> bool {
         let placed = self.placed.lock().unwrap();
         placed.get(id).is_some_and(|placed| kept_from(placed, from))
+    }
+
+    /// Record that another machine took over the space `id`, so the hub keeps
+    /// it no longer.
+    pub(crate) fn taken_over(&self, id: &SpaceId) {
+        let mut placed = self.placed.lock().unwrap();
+        if placed
+            .remove(id)
+            .is_some_and(|placed| placed.destination == Destination::Hub)
+        {
+            self.taken_over.lock().unwrap().insert(id.clone());
+            self.stayed.send_modify(|stayed| *stayed += 1);
+        }
+    }
+
+    /// Whether another machine took over the space `id` while the hub kept
+    /// it, forgetting that it did.
+    pub(in crate::packages) fn was_taken_over(&self, id: &SpaceId) -> bool {
+        self.taken_over.lock().unwrap().remove(id)
     }
 
     /// Record that the space `id`, which the hub keeps for `from`, goes where

@@ -201,6 +201,10 @@ impl Hub {
     ) -> Option<Decision> {
         let (mut reported, mut stayed) = (self.capacities.watch(), self.handovers.watch_stays());
         loop {
+            if self.handovers.was_taken_over(id) {
+                log!("hub: space {id}, which it kept, was taken over elsewhere");
+                return None;
+            }
             if !self.handovers.keeps(id, from) {
                 self.tell_kept_space_stays(daemon, id, from).await;
                 return None;

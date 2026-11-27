@@ -264,3 +264,29 @@ async fn a_space_the_hub_keeps_stays_on_its_machine_once_that_machine_is_back() 
     };
     assert!(!hub.handovers.placed_later(&plan, &laptop, desk));
 }
+
+#[tokio::test]
+async fn the_hub_keeps_a_space_it_cannot_launch_under_the_local_policy_too() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "[machine.hub]\nplacement = \"local\"\n", &["laptop"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    keep_on_hub(&hub).await;
+}
+
+#[tokio::test]
+async fn a_space_the_hub_keeps_is_kept_no_longer_once_another_machine_takes_it_over() {
+    let root = tempfile::tempdir().unwrap();
+    let hub = hub(&root, "", &["laptop", "desk"]).await;
+    report(&hub, "laptop", &["plan"]).await;
+    keep_on_hub(&hub).await;
+    let (laptop, desk, plan) = (
+        MemberId::from("laptop".to_owned()),
+        MemberId::from("desk".to_owned()),
+        SpaceId::from("plan".to_owned()),
+    );
+    // As `shoal restore` on the desk takes it over from the package.
+    (hub.record_space_claim(&desk, &plan, (None, true)))
+        .await
+        .unwrap();
+    assert!(!hub.handovers.keeps(&plan, &laptop));
+}
