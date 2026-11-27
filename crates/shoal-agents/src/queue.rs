@@ -11,6 +11,7 @@ pub mod dispatch;
 pub mod entries;
 pub mod expiry;
 pub mod failures;
+pub mod jobs;
 pub mod limits;
 pub mod openings;
 pub mod ranking;
