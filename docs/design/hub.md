@@ -654,8 +654,9 @@ The stages, in order:
 4. A heavy start prefers the machine fastest at its repository, and a light
    start the slowest, since a light agent mostly waits on its model and
    keeps the fast machines free. A machine without a speed there ranks as
-   an average one, not a slow one. Speeds within a factor of 1.25 of each
-   other rank equal, so the noise of medians leaves the choice to room.
+   an average one, not a slow one. Speeds rank in steps of a factor of 1.25
+   from the average, so a machine less than 1.25 times faster or slower
+   ranks as average, and the noise of medians leaves the choice to room.
 5. A heavy start goes where a heavy agent is admitted now, with the most
    spare memory. A light start goes where it takes the least from heavy
    agents, since dynamic admission gives them the same memory: first to a

@@ -8,9 +8,10 @@ use super::{
     snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
 };
 
-/// How far apart two machines' speeds stand before the speed stage tells
-/// them apart, as a factor, so the noise of their medians leaves the choice
-/// to their room.
+/// The factor of the steps by which the speed stage ranks machines, counted
+/// from an average one toward zero, so a machine less than a step faster
+/// or slower ranks as average and the noise of medians leaves the choice to
+/// room.
 const SPEED_STEP: f64 = 1.25;
 
 /// The `balanced` policy. It ranks only the machines with room the start's
@@ -124,7 +125,7 @@ fn speed(request: &Request, machine: &Machine) -> Stage<i32> {
     let Some(speed) = machine.speed else {
         return (0, None);
     };
-    let steps = (f64::from(speed) / 100.0).log(SPEED_STEP).round() as i32;
+    let steps = (f64::from(speed) / 100.0).log(SPEED_STEP).trunc() as i32;
     match request.heavy {
         true => (-steps, (steps > 0).then_some(Reason::Faster { speed })),
         false => (steps, (steps < 0).then_some(Reason::Slower { speed })),

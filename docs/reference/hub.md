@@ -551,8 +551,9 @@ it rank equal:
    of `always_on` machines to lasting work.
 3. Your own machine comes first.
 4. A heavy start goes to the machine fastest at its repository, and a light
-   start to the slowest. A machine without a speed ranks as an average one,
-   and speeds within a factor of 1.25 rank equal.
+   start to the slowest, in steps of a factor of 1.25 from the average. A
+   machine without a speed, or less than 1.25 times faster or slower than
+   average, ranks as an average one.
 5. A heavy start goes to the machine whose admission would start a heavy
    agent now, with the most spare memory. A light start goes first to a
    machine with `max_heavy_agents = 0`, then to one where no heavy work waits,

@@ -128,9 +128,10 @@ fn a_heavy_start_goes_to_the_fastest_machine_and_a_light_one_to_the_slowest() {
         at_speed("unknown", None),
         at_speed("fast", Some(200)),
         at_speed("slow", Some(50)),
-        // Within a step of average, which leaves the order to its room.
+        // Less than a step faster than average, which leaves the order to
+        // its room.
         Machine {
-            speed: Some(110),
+            speed: Some(120),
             ..machine("roomy", true, capacity(1, 64, 0))
         },
     ];
@@ -143,6 +144,26 @@ fn a_heavy_start_goes_to_the_fastest_machine_and_a_light_one_to_the_slowest() {
     let order: Vec<&str> = light.iter().map(|(machine, _)| machine.as_str()).collect();
     assert_eq!(order, ["slow", "roomy", "unknown", "fast", "laptop"]);
     assert_eq!(light[0].1, Reason::Slower { speed: 50 });
+}
+
+#[test]
+fn a_speed_less_than_a_step_from_average_leaves_the_order_to_room() {
+    let speed = |id: &str, speed, memory| Machine {
+        speed: Some(speed),
+        ..machine(id, true, capacity(1, memory, 0))
+    };
+    let order = |heavy, machines| -> Vec<String> {
+        (ranked(request(heavy), machines).into_iter())
+            .map(|(machine, _)| machine)
+            .collect()
+    };
+    let heavy = vec![speed("quicker", 120, 8), speed("average", 100, 64)];
+    assert_eq!(order(true, heavy), ["average", "quicker"]);
+    let light = vec![speed("slower", 81, 8), speed("average", 100, 64)];
+    assert_eq!(order(false, light), ["average", "slower"]);
+    // A step past average leads whatever the room.
+    let heavy = vec![speed("quicker", 130, 8), speed("average", 100, 64)];
+    assert_eq!(order(true, heavy), ["quicker", "average"]);
 }
 
 #[test]
