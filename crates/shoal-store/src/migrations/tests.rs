@@ -250,6 +250,7 @@ mod hub_numbers;
 mod item_activity_states;
 mod journal_columns;
 mod journal_shapes;
+mod pending_plan_columns;
 mod post_files;
 mod review_targets;
 mod schema;

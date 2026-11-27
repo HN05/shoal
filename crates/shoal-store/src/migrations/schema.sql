@@ -697,7 +697,7 @@ CREATE TABLE "workspaces" (
     starting_index TEXT
 , pending_plan TEXT
         CHECK(pending_plan IS NOT NULL OR (base_commit IS NOT NULL AND git_dir IS NOT NULL))
-        CHECK(base_ref IS NULL OR base_commit IS NOT NULL), lifecycle_generation INTEGER NOT NULL DEFAULT 0);
+        CHECK(base_ref IS NULL OR base_commit IS NOT NULL), lifecycle_generation INTEGER NOT NULL DEFAULT 0, pending_source TEXT, pending_checkpoint INTEGER);
 
 CREATE TABLE demo_viewers (
     execution_id TEXT PRIMARY KEY REFERENCES demos(execution_id) ON DELETE CASCADE,

@@ -281,7 +281,7 @@ async fn failed_checkout() -> (Fixture, Workspace) {
         .run(move |db| {
             db.execute(
                 r#"UPDATE workspaces SET state=?2,git_dir=NULL,
-                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
+                    pending_plan='{"source":{}}',pending_source='new' WHERE id=?1"#,
                 rusqlite::params![id, WorkspaceState::Failed],
             )?;
             Ok(())
@@ -533,7 +533,7 @@ async fn removal_waiting_for_creation_keeps_what_creation_recorded() {
         .run(move |db| {
             db.execute(
                 r#"UPDATE workspaces SET state='preparing',base_ref=NULL,base_commit=NULL,
-                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
+                    pending_plan='{"source":{}}',pending_source='new' WHERE id=?1"#,
                 [id],
             )?;
             Ok(())

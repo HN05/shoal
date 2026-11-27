@@ -55,7 +55,7 @@ async fn cut_short(name: &str) -> Result<(Fixture, Workspace)> {
         .run(move |db| {
             db.execute(
                 r#"UPDATE workspaces SET state=?2,git_dir=NULL,
-                    pending_plan='{"source":{"kind":"new"}}' WHERE id=?1"#,
+                    pending_plan='{"source":{}}',pending_source='new' WHERE id=?1"#,
                 rusqlite::params![id, WorkspaceState::Failed],
             )?;
             Ok(())

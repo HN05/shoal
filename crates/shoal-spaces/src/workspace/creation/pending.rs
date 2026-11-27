@@ -419,15 +419,9 @@ impl Spaces {
     /// holds.
     async fn claim_pending_worktree(&self, workspace: &Workspace) -> Result<PendingWorktree> {
         let (id, name) = (workspace.id.clone(), workspace.name.clone());
-        let plan = self
-            .store
+        self.store
             .write(move |tx| {
-                let plan: Option<String> = tx.query_row(
-                    "SELECT pending_plan FROM workspaces WHERE id=?1",
-                    [&id],
-                    |row| row.get(0),
-                )?;
-                let Some(plan) = plan else {
+                let Some(plan) = rows::read(tx, &id)? else {
                     bail!("{name} already has its worktree");
                 };
                 let claimed = tx.execute(
@@ -437,8 +431,7 @@ impl Spaces {
                 ensure!(claimed == 1, "another operation holds {name}");
                 Ok(plan)
             })
-            .await?;
-        Ok(serde_json::from_str(&plan)?)
+            .await
     }
 }
 
@@ -447,14 +440,14 @@ pub fn pending_revisions(
     tx: &rusqlite::Transaction<'_>,
     repository: &RepositoryId,
 ) -> Result<Vec<String>> {
-    let mut plans = tx.prepare(
-        "SELECT pending_plan FROM spaces JOIN workspaces USING(id)
+    let mut plans = tx.prepare(&format!(
+        "SELECT {} FROM spaces JOIN workspaces USING(id)
          WHERE repository_id=?1 AND pending_plan IS NOT NULL",
-    )?;
-    let plans = plans.query_map([repository], |row| row.get::<_, String>(0))?;
+        rows::COLUMNS
+    ))?;
     let mut revisions = Vec::new();
-    for plan in plans {
-        let plan: PendingWorktree = serde_json::from_str(&plan?)?;
+    for plan in plans.query_map([repository], rows::plan)? {
+        let plan = plan?.context("the query selects pending plans")?;
         revisions.extend(plan.revisions().into_iter().map(str::to_owned));
     }
     Ok(revisions)
@@ -471,13 +464,7 @@ pub fn build_pending_in(
     base: &BranchName,
     owner: Option<&SpaceId>,
 ) -> Result<()> {
-    let plan: Option<String> = tx.query_row(
-        "SELECT pending_plan FROM workspaces WHERE id=?1",
-        [id],
-        |row| row.get(0),
-    )?;
-    let plan = plan.context("the workspace already has its worktree")?;
-    let mut pending: PendingWorktree = serde_json::from_str(&plan)?;
+    let mut pending = rows::read(tx, id)?.context("the workspace already has its worktree")?;
     let PendingSource::New {
         base: unset @ None, ..
     } = &mut pending.source
@@ -485,10 +472,7 @@ pub fn build_pending_in(
         return Ok(());
     };
     *unset = Some(base.to_string());
-    tx.execute(
-        "UPDATE workspaces SET pending_plan=?2 WHERE id=?1",
-        params![id, serde_json::to_string(&pending)?],
-    )?;
+    rows::write(tx, id, &pending)?;
     match owner {
         Some(owner) if stack::builds_on(tx, owner, id)? => Ok(()),
         Some(owner) => stack::stack_on(tx, id, owner, EventCause::Blocker),
@@ -507,3 +491,5 @@ fn carried_files(base: Option<&str>, files: Option<CommitId>) -> Result<Option<R
         snapshot,
     }))
 }
+
+pub(super) mod rows;

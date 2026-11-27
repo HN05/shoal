@@ -35,8 +35,9 @@ fn a_value_round_trips_through_its_columns_and_json() -> Result<()> {
             name: "n".into(),
         }),
     };
-    let record = json_without(&value, COLUMNS)?;
+    let (record, columns) = split(&value, COLUMNS)?;
     assert_eq!(record, r#"{"inner":{"name":"n"}}"#);
+    assert_eq!(columns, [SqlValue::Text("a".into()), SqlValue::Integer(3)]);
     assert_eq!(decoded("a", Some(3), &record)?, value);
     Ok(())
 }
@@ -50,4 +51,16 @@ fn a_null_column_leaves_its_field_out() -> Result<()> {
 #[test]
 fn a_column_without_its_parent_is_refused() {
     assert!(decoded("a", Some(3), r#"{"inner":null}"#).is_err());
+}
+
+#[test]
+fn a_null_json_column_holds_no_value() -> rusqlite::Result<()> {
+    let db = Connection::open_in_memory().unwrap();
+    let value: Option<Outer> = db.query_row(
+        "SELECT 'a' AS id, NULL AS number, NULL AS record",
+        [],
+        |row| decode_optional_row(row, "record", COLUMNS),
+    )?;
+    assert_eq!(value, None);
+    Ok(())
 }

@@ -668,8 +668,7 @@ pub(super) fn find(
 const KEPT: &str = "(expires_at > unixepoch() OR EXISTS (SELECT 1 FROM workspaces
     WHERE id=checkpoints.workspace_id AND starting_checkpoint=checkpoints.number)
     OR EXISTS (SELECT 1 FROM workspaces WHERE id=checkpoints.workspace_id
-        AND json_extract(pending_plan,'$.source.kind')='restore'
-        AND json_extract(pending_plan,'$.source.checkpoint')=checkpoints.number))";
+        AND pending_source='restore' AND pending_checkpoint=checkpoints.number))";
 
 /// Leaves room in a protocol frame for the envelope. [`NAME_LIMIT`] keeps
 /// one record well below it.

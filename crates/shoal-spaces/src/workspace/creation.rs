@@ -349,13 +349,14 @@ impl Spaces {
             pending,
         }: Inserted,
     ) -> Result<Workspace> {
-        let pending = pending.as_ref().map(serde_json::to_string).transpose()?;
+        let [pending, pending_source, pending_checkpoint] =
+            pending::rows::values(pending.as_ref())?;
         let record = match &placement {
             Placement::Replacing(converting) => converting.workspace(record),
             Placement::Below(_) => record,
         };
         ensure!(
-            pending.is_some() == record.checkout.is_pending(),
+            (pending != rusqlite::types::Value::Null) == record.checkout.is_pending(),
             "a workspace records the plan of its worktree exactly while it is pending"
         );
         let marker = match record.checkout.git_dir().map(std::path::Path::to_owned) {
@@ -408,7 +409,7 @@ impl Spaces {
                 let (branch, start_commit, made_for) = columns::head_columns(&record.head)?;
                 let (base_commit, base_ref, git_dir) = columns::checkout_columns(&record.checkout);
                 tx.execute(
-                    "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,pending_plan) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13,?14)",
+                    "INSERT INTO workspaces (id,path,branch,state,git_dir,base_commit,base_ref,setup_finished,observed_branch,base_workspace_id,start_commit,made_for,setup_skipped,disposable,pending_plan,pending_source,pending_checkpoint) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?3,?9,?10,?11,?12,?13,?14,?15,?16)",
                     params![
                         record.id,
                         record.path.to_str(),
@@ -424,6 +425,8 @@ impl Spaces {
                         record.setup_skipped,
                         record.disposable,
                         pending,
+                        pending_source,
+                        pending_checkpoint,
                     ],
                 )?;
                 let number = match &placement {
@@ -613,7 +616,7 @@ impl Spaces {
             .write(move |db| {
                 db.execute(
                     "UPDATE workspaces SET state=?2,error=NULL,setup_finished=?3 AND NOT setup_skipped,
-                        pending_plan=NULL WHERE id=?1",
+                        pending_plan=NULL,pending_source=NULL,pending_checkpoint=NULL WHERE id=?1",
                     params![
                         id,
                         if needs_setup {

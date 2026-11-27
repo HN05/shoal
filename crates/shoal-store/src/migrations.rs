@@ -15,6 +15,7 @@ mod hub_numbers;
 mod item_activity_states;
 mod journal_shapes;
 mod json_rows;
+mod pending_plan_columns;
 mod post_files;
 mod post_surfaces;
 mod review_targets;
@@ -22,7 +23,7 @@ mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 329;
+pub const SCHEMA_VERSION: i64 = 330;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -31,12 +32,20 @@ const FLOOR: i64 = 295;
 /// The release that wrote [`FLOOR`], which brings an older database to it.
 const FLOOR_RELEASE: &str = "v0.21.0";
 
-/// Runs before a migration's SQL to check existing rows, or to change them
-/// where SQL cannot; failure aborts the upgrade.
-type Prepare = fn(&Connection) -> Result<()>;
+/// Rust that checks or changes rows where SQL cannot; failure aborts the
+/// upgrade.
+type Rewrite = fn(&Connection) -> Result<()>;
 
-/// A migration: the version it writes, its SQL and what runs before it.
-type Migration = (i64, &'static str, Option<Prepare>);
+/// When a migration's [`Rewrite`] runs.
+pub(super) enum Step {
+    /// Before its SQL, on the rows the SQL then reads or drops.
+    Before(Rewrite),
+    /// After its SQL, to fill the columns and tables it added.
+    After(Rewrite),
+}
+
+/// A migration: the version it writes, its SQL and the Rust it runs.
+type Migration = (i64, &'static str, Option<Step>);
 
 // Append schema changes in version order, each in `migrations/<version>_<name>.sql`;
 // startup recovery belongs in quarantine.
@@ -61,17 +70,17 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         301,
         include_str!("migrations/0301_drop_post_choices.sql"),
-        Some(post_surfaces::rewrite_choices),
+        Some(Step::Before(post_surfaces::rewrite_choices)),
     ),
     (
         302,
         include_str!("migrations/0302_github_activity_ids.sql"),
-        Some(github_activity::key_by_database_ids),
+        Some(Step::Before(github_activity::key_by_database_ids)),
     ),
     (
         303,
         include_str!("migrations/0303_journal_event_shapes.sql"),
-        Some(journal_shapes::rewrite_records),
+        Some(Step::Before(journal_shapes::rewrite_records)),
     ),
     (
         304,
@@ -106,7 +115,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         310,
         include_str!("migrations/0310_review_target_columns.sql"),
-        Some(review_targets::move_urls),
+        Some(Step::Before(review_targets::move_urls)),
     ),
     (
         311,
@@ -116,7 +125,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         312,
         include_str!("migrations/0312_item_activity_state_columns.sql"),
-        Some(item_activity_states::move_states),
+        Some(Step::Before(item_activity_states::move_states)),
     ),
     (
         313,
@@ -126,7 +135,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         314,
         include_str!("migrations/0314_conversion_records.sql"),
-        Some(conversion_columns::move_into_columns),
+        Some(Step::Before(conversion_columns::move_into_columns)),
     ),
     (
         315,
@@ -136,7 +145,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         316,
         include_str!("migrations/0316_drop_alert_attachments_column.sql"),
-        Some(alert_attachments::move_paths),
+        Some(Step::Before(alert_attachments::move_paths)),
     ),
     (
         317,
@@ -146,7 +155,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         318,
         include_str!("migrations/0318_drop_hub_number_json.sql"),
-        Some(hub_numbers::move_numbers),
+        Some(Step::Before(hub_numbers::move_numbers)),
     ),
     (
         319,
@@ -156,7 +165,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         320,
         include_str!("migrations/0320_approval_records.sql"),
-        Some(approval_columns::move_queried_fields),
+        Some(Step::Before(approval_columns::move_queried_fields)),
     ),
     (
         321,
@@ -166,7 +175,7 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         322,
         include_str!("migrations/0322_thread_outcome_kinds.sql"),
-        Some(thread_outcomes::split_outcomes),
+        Some(Step::Before(thread_outcomes::split_outcomes)),
     ),
     (
         323,
@@ -176,22 +185,22 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         324,
         include_str!("migrations/0324_drop_post_file_lists.sql"),
-        Some(post_files::list_post_files),
+        Some(Step::Before(post_files::list_post_files)),
     ),
     (
         325,
         include_str!("migrations/0325_agent_events_by_time.sql"),
-        Some(agent_modes::record_modes),
+        Some(Step::Before(agent_modes::record_modes)),
     ),
     (
         326,
         include_str!("migrations/0326_simulator_columns.sql"),
-        Some(simulator_columns::move_fields),
+        Some(Step::Before(simulator_columns::move_fields)),
     ),
     (
         327,
         include_str!("migrations/0327_clean_request_columns.sql"),
-        Some(clean_request_columns::move_fields),
+        Some(Step::Before(clean_request_columns::move_fields)),
     ),
     (
         328,
@@ -201,7 +210,12 @@ pub(super) const MIGRATIONS: &[Migration] = &[
     (
         329,
         include_str!("migrations/0329_checkpoint_columns.sql"),
-        Some(checkpoint_columns::drop_column_fields),
+        Some(Step::Before(checkpoint_columns::drop_column_fields)),
+    ),
+    (
+        330,
+        include_str!("migrations/0330_pending_plan_columns.sql"),
+        Some(Step::After(pending_plan_columns::move_source_fields)),
     ),
 ];
 
@@ -301,12 +315,15 @@ fn apply_batch(db: &mut Connection, batch: &[&Migration]) -> Result<()> {
 /// foreign key still holds.
 fn apply(db: &mut Connection, batch: &[&Migration], rebuilds: bool) -> Result<()> {
     let tx = db.transaction()?;
-    for &&(target, sql, prepare) in batch {
-        if let Some(prepare) = prepare {
-            prepare(&tx).with_context(|| format!("prepare schema migration {target}"))?;
+    for (target, sql, step) in batch {
+        if let Some(Step::Before(rewrite)) = step {
+            rewrite(&tx).with_context(|| format!("prepare schema migration {target}"))?;
         }
         tx.execute_batch(sql)
             .with_context(|| format!("apply schema migration {target}"))?;
+        if let Some(Step::After(rewrite)) = step {
+            rewrite(&tx).with_context(|| format!("fill schema migration {target}"))?;
+        }
         tx.pragma_update(None, "user_version", target)?;
     }
     if rebuilds {

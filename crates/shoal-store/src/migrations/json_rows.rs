@@ -2,6 +2,7 @@
 //! a row's JSON object, whose fields they take out, refusing a row that is
 //! malformed or lacks one.
 use anyhow::{Context, Result, bail};
+use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 /// The JSON object a row of `table` holds, named by `key` in errors.
@@ -20,9 +21,35 @@ impl JsonRow {
         Ok(Self { table, key, object })
     }
 
+    /// Takes out the field at `path` as a `T`; refuses a row that lacks it
+    /// or holds another type there.
+    pub(super) fn take<T: DeserializeOwned>(&mut self, path: &[&str]) -> Result<T> {
+        let value = self.take_optional(path)?;
+        value.with_context(|| format!("{} row {} lacks {}", self.table, self.key, path.join(".")))
+    }
+
+    /// Takes out the field at `path` as a `T`, absent where it or a parent
+    /// is, or where it is null. Refuses a parent that is no object, and a
+    /// field of another type.
+    pub(super) fn take_optional<T: DeserializeOwned>(
+        &mut self,
+        path: &[&str],
+    ) -> Result<Option<T>> {
+        let Some(value) = self.take_value(path)? else {
+            return Ok(None);
+        };
+        let field = path.join(".");
+        serde_json::from_value(value).with_context(|| {
+            format!(
+                "{} row {}: {field} holds the wrong type",
+                self.table, self.key
+            )
+        })
+    }
+
     /// Takes out the field at `path`, absent where it or a parent is, or
     /// where it is null. Refuses a parent that is no object.
-    pub(super) fn take_optional(&mut self, path: &[&str]) -> Result<Option<Value>> {
+    fn take_value(&mut self, path: &[&str]) -> Result<Option<Value>> {
         let (last, parents) = path.split_last().context("a field has a path")?;
         let mut object = &mut self.object;
         for parent in parents {
@@ -38,7 +65,7 @@ impl JsonRow {
     /// Takes out the field at `path`, which must hold `column`, the value
     /// the row keeps in a column already; absent only where that is null.
     pub(super) fn take_matching(&mut self, path: &[&str], column: &Value) -> Result<()> {
-        match self.take_optional(path)? {
+        match self.take_value(path)? {
             None if column.is_null() => Ok(()),
             Some(value) if value == *column => Ok(()),
             value => bail!(

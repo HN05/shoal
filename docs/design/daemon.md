@@ -154,6 +154,10 @@ migrates only from its floor, as [AGENTS.md](../../AGENTS.md#compatibility)
 states. Opening the store therefore migrates it, rewriting what it holds into
 the shapes this release reads.
 
+A migration rewrites in Rust what SQL cannot, in the same transaction as its
+SQL: before it, to check or change the rows the SQL reads, or after it, to
+fill the columns and tables the SQL adds.
+
 The store refuses, unchanged, a database below its floor, naming the release
 to start once first. It refuses a database a newer release wrote the same way.
 [After an update](../reference/install.md#after-an-update) names the floor's
