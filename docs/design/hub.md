@@ -623,6 +623,12 @@ machines that ran the same work. A machine that shares no key with another
 has no speed there. The hub compares only the connected machines, and leaves
 out medians under 10 seconds, whose startup outweighs their work.
 
+The capacity includes each repository's demand on the machine. Its busy time
+is how long its heavy agents ran and its CI jobs and commands took over the
+last week. Its agents' time comes from the journal's agent starts and ends,
+whose events name the mode that tells a heavy agent from a light one. Its
+waiting work is its heavy agents waiting in the queue now.
+
 ### Policies
 
 `[machine.hub] placement` picks the policy, as the

@@ -201,6 +201,7 @@ async fn a_heavy_start_goes_to_the_machine_faster_at_its_repository_and_a_light_
         repositories: vec![Registered {
             origin: ORIGIN.into(),
             agents: vec!["claude".into()],
+            ..Registered::default()
         }],
         heavy_free: 1,
         light_free: true,

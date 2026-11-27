@@ -27,7 +27,10 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::Thread,
 };
-use shoal_schedule::{placement::snapshot::Capacity, priority::Priority};
+use shoal_schedule::{
+    placement::snapshot::{Capacity, Demand},
+    priority::Priority,
+};
 
 use crate::streams::{Incoming, Outgoing};
 
@@ -309,6 +312,9 @@ pub trait Queue: Send + Sync {
     /// What the queue has room for now, without the machine's
     /// repositories.
     fn queue_room(&self) -> BoxFuture<'_, Result<Capacity>>;
+
+    /// What each repository with any asks of this machine, by its ID.
+    fn repository_demand(&self) -> BoxFuture<'_, Result<HashMap<RepositoryId, Demand>>>;
 }
 
 /// Rerunning the CI jobs that machines asleep or shut down cut off.

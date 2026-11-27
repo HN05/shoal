@@ -77,7 +77,11 @@ fn launchable_by(settings: &Settings, path: &OsString) -> Launchable {
         .map(|(origin, mut agents)| {
             agents.sort();
             agents.dedup();
-            Registered { origin, agents }
+            Registered {
+                origin,
+                agents,
+                ..Registered::default()
+            }
         })
         .collect();
     let mut agents: Vec<String> = installed(&settings.global).collect();

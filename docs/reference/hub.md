@@ -520,6 +520,9 @@ its spaces, which `hub ls --json` shows as `capacity`:
 
 - the origins of its repositories, each with the agents it can launch there,
   and the agents it can launch outside a repository;
+- for each repository with any, its `demand`: how long its heavy agents ran
+  and its CI jobs and commands took over the last week, in `busy_seconds`,
+  and its heavy agents waiting in the queue, in `heavy_waiting`;
 - its `max_heavy_agents`, and the heavy agents its admission would start now;
 - the memory new work may use;
 - the heavy agents waiting in its queue;

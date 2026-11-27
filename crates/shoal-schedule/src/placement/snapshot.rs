@@ -111,17 +111,45 @@ pub struct Capacity {
 }
 
 /// A repository a machine registered.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Registered {
     /// Its origin, by the key machines match repositories by.
     pub origin: String,
     /// The agents the machine can launch under the repository's settings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<String>,
+    /// What it asks of the machine, none while it asks nothing.
+    #[serde(default, skip_serializing_if = "Demand::is_none")]
+    pub demand: Demand,
 }
 
 /// How far back the demand a machine reports reaches.
 pub const DEMAND_WINDOW: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// What a repository asks of a machine.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Demand {
+    /// How long it kept the machine busy over the last [`DEMAND_WINDOW`]:
+    /// its heavy agents' running time and its CI jobs' and commands'
+    /// durations, in seconds.
+    pub busy_seconds: u64,
+    /// Its heavy agents waiting in the machine's queue.
+    pub heavy_waiting: u32,
+}
+
+impl Demand {
+    /// Whether it asks nothing: no busy time and no heavy work waiting.
+    pub fn is_none(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+impl std::ops::AddAssign for Demand {
+    fn add_assign(&mut self, other: Self) {
+        self.busy_seconds = self.busy_seconds.saturating_add(other.busy_seconds);
+        self.heavy_waiting = self.heavy_waiting.saturating_add(other.heavy_waiting);
+    }
+}
 
 impl Request {
     /// Why the start cannot go to `machine`, none when it can. The caller's

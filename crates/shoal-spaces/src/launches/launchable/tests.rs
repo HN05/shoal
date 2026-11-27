@@ -13,6 +13,7 @@ fn machine(name: &str, agents: &[&str]) -> Member {
         repositories: vec![Registered {
             origin: ORIGIN.into(),
             agents: agents.iter().map(|agent| (*agent).into()).collect(),
+            ..Registered::default()
         }],
         ..Capacity::default()
     });

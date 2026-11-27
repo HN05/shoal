@@ -39,6 +39,7 @@ fn registered(agents: &[&str]) -> Registered {
     Registered {
         origin: ORIGIN.into(),
         agents: agents.iter().map(|agent| (*agent).into()).collect(),
+        ..Registered::default()
     }
 }
 

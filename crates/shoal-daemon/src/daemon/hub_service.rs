@@ -321,6 +321,13 @@ impl shoal_hub::daemon::Queue for Manager {
     fn queue_room(&self) -> BoxFuture<'_, Result<shoal_schedule::placement::snapshot::Capacity>> {
         Box::pin(self.agents.queue_room(self))
     }
+
+    fn repository_demand(
+        &self,
+    ) -> BoxFuture<'_, Result<HashMap<RepositoryId, shoal_schedule::placement::snapshot::Demand>>>
+    {
+        Box::pin(self.agents.repository_demand(self))
+    }
 }
 
 impl Registrations for Manager {

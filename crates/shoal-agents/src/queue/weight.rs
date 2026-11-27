@@ -63,7 +63,17 @@ impl Agents {
     /// a repository has one, and the agents of every space in a light one,
     /// whether they run or, stopped, wait for their restore.
     pub async fn light(&self, daemon: &dyn Daemon) -> Result<Light> {
-        let (mut executions, spaces, mut repositories) = (self.store)
+        self.light_including(daemon, HashSet::new()).await
+    }
+
+    /// Which agents are light now, as [`Self::light`] says, with the light
+    /// modes of `repositories` too.
+    pub async fn light_including(
+        &self,
+        daemon: &dyn Daemon,
+        mut repositories: HashSet<Option<RepositoryId>>,
+    ) -> Result<Light> {
+        let (mut executions, spaces, queued) = (self.store)
             .read(move |tx| {
                 let spaces: Vec<_> = (shoal_store::spaces::all_facts(tx)?.into_iter())
                     .map(|space| (space.id, space.repository))
@@ -76,6 +86,7 @@ impl Agents {
             })
             .await?;
         executions.extend(self.stopped_modes(&spaces, &executions)?);
+        repositories.extend(queued);
         repositories.extend(
             executions
                 .iter()

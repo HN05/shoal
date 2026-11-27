@@ -9,7 +9,7 @@ use shoal_schedule::placement::snapshot::Capacity;
 
 use super::{
     limits::{self, Limits, Waiting, Work},
-    store::queued_rows,
+    store::{QueuedRow, queued_rows},
     weight::Light,
 };
 use crate::Agents;
@@ -55,18 +55,26 @@ impl Agents {
     /// light ones.
     async fn heavy_waiting(&self, light: &Light) -> Result<u32> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
-        let heavy = (queued.iter())
-            .filter(|row| row.kind != QueueKind::Job)
-            .filter(|row| {
-                !light.entry(
-                    row.execution.as_ref(),
-                    row.repository.as_ref(),
-                    row.mode.as_ref(),
-                )
-            })
-            .count();
+        let heavy = heavy_entries(&queued, light).count();
         Ok(heavy.try_into().unwrap_or(u32::MAX))
     }
+}
+
+/// The entries among `queued` that start a heavy agent, which `light`
+/// tells from the light ones.
+pub(super) fn heavy_entries<'a>(
+    queued: &'a [QueuedRow],
+    light: &'a Light,
+) -> impl Iterator<Item = &'a QueuedRow> {
+    (queued.iter())
+        .filter(|row| row.kind != QueueKind::Job)
+        .filter(|row| {
+            !light.entry(
+                row.execution.as_ref(),
+                row.repository.as_ref(),
+                row.mode.as_ref(),
+            )
+        })
 }
 
 /// The heavy launches `limits` would admit beside the `occupied` slots, up

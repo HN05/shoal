@@ -36,7 +36,10 @@ use shoal_protocol::{
     space_names::{SpaceName, SpaceSelector},
     threads::Thread,
 };
-use shoal_schedule::{placement::snapshot::Capacity, priority::Priority};
+use shoal_schedule::{
+    placement::snapshot::{Capacity, Demand},
+    priority::Priority,
+};
 
 use crate::{
     Hub,
@@ -461,6 +464,10 @@ impl Packages for StandIn {
 impl Queue for StandIn {
     fn queue_room(&self) -> BoxFuture<'_, Result<Capacity>> {
         Box::pin(async { Ok(Capacity::default()) })
+    }
+
+    fn repository_demand(&self) -> BoxFuture<'_, Result<HashMap<RepositoryId, Demand>>> {
+        Box::pin(async { Ok(HashMap::new()) })
     }
 }
 
