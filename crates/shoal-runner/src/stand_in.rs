@@ -148,18 +148,20 @@ impl Fixture {
             runner_id: None,
         };
         let row = claim.clone();
-        let job = serde_json::to_string(job).unwrap();
+        let job = shoal_store::jobs::JobColumns::of(job).unwrap();
         (self.runner.store)
             .write(move |tx| {
                 tx.execute(
-                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,execution_id,job,started_at,launched_at)
-                     VALUES (?1,?2,?3,?4,?5,0,?6)",
+                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,execution_id,job,handle,
+                        started_at,launched_at)
+                     VALUES (?1,?2,?3,?4,?5,?6,0,?7)",
                     rusqlite::params![
                         row.id,
                         row.repository_id,
                         row.workspace_id,
                         row.execution_id,
-                        job,
+                        job.job,
+                        job.handle,
                         row.launched_at
                     ],
                 )?;

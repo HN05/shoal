@@ -246,15 +246,22 @@ impl Runner {
     ) -> Result<()> {
         let repository = entry.job_repository()?;
         let linked = self.link_job(daemon, forge, repository, job.job.clone(), job.run.clone());
-        let job = serde_json::to_string(&linked.await?)?;
+        let job = shoal_store::jobs::JobColumns::of(&linked.await?)?;
         let (id, repository, workspace) =
             (entry.id.clone(), repository.clone(), workspace.to_owned());
         self.store
             .run(move |db| {
                 db.execute(
-                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at)
-                     VALUES (?1,?2,?3,?4,?5)",
-                    params![id, repository, workspace, job, UnixTime::now()],
+                    "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,handle,started_at)
+                     VALUES (?1,?2,?3,?4,?5,?6)",
+                    params![
+                        id,
+                        repository,
+                        workspace,
+                        job.job,
+                        job.handle,
+                        UnixTime::now()
+                    ],
                 )?;
                 Ok(())
             })

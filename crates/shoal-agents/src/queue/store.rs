@@ -12,7 +12,7 @@ pub use plans::planned_start;
 use super::blockers;
 use crate::daemon::{Records, Removals};
 use crate::model::QueueEntry;
-use crate::model::{QueueRequest, QueuedStart};
+use crate::model::{QueueRequest, QueuedJob, QueuedStart};
 use crate::state::QueueKind;
 use crate::state::QueueState;
 use shoal_ids::{queue_entry_ids::QueueEntryId, space_ids::SpaceId};
@@ -31,8 +31,8 @@ pub struct QueuedRow {
     pub started_here: bool,
     /// Whether Shoal queued the restore on its own.
     pub automatic: bool,
-    /// A job's entry's job, as JSON.
-    pub job: Option<String>,
+    /// A job's entry's job.
+    pub job: Option<QueuedJob>,
     /// The mode a launch's agent starts in.
     pub mode: Option<crate::config::modes::ModeName>,
     /// The agent it starts.
@@ -44,7 +44,7 @@ pub fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
     Ok(db
         .prepare(
             "SELECT id,repository_id,kind,execution_id,space_id,env IS NOT NULL,automatic,job,mode,
-                agent
+                agent,handle
              FROM agent_queue WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -56,7 +56,7 @@ pub fn queued_rows(db: &rusqlite::Connection) -> Result<Vec<QueuedRow>> {
                 workspace: row.get(4)?,
                 started_here: row.get(5)?,
                 automatic: row.get(6)?,
-                job: row.get(7)?,
+                job: shoal_store::jobs::queued_job(row)?,
                 mode: row.get(8)?,
                 agent: row.get(9)?,
             })
@@ -479,7 +479,7 @@ pub fn last_seq(db: &rusqlite::Connection) -> Result<i64> {
     Ok(seq.unwrap_or(0))
 }
 
-pub const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,space_id,execution_id,opens_workspace_id,base_branch,job,scope_space_id";
+pub const ENTRY_COLUMNS: &str = "id,kind,repository_id,name,agent,mode,narrowing,issue_title,state,created_at,space_id,execution_id,opens_workspace_id,base_branch,job,handle,scope_space_id";
 
 pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
     Ok(QueueEntry {
@@ -501,7 +501,7 @@ pub fn entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<QueueEntry> {
         blockers: Vec::new(),
         waits_for_update: false,
         base: row.get("base_branch")?,
-        job: shoal_store::json_column(row, "job")?,
+        job: shoal_store::jobs::queued_job(row)?.map(Box::new),
         command: None,
         held_by: None,
         rank: None,

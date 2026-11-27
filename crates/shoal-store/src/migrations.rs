@@ -14,6 +14,7 @@ mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
 mod item_activity_states;
+mod job_handles;
 mod journal_shapes;
 mod json_rows;
 mod move_destination_kind;
@@ -29,7 +30,7 @@ mod space_blockers;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 339;
+pub const SCHEMA_VERSION: i64 = 341;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -264,12 +265,22 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         include_str!("migrations/0339_place_origins.sql"),
         Some(Step::Before(place_origins::move_into_columns)),
     ),
+    (
+        340,
+        include_str!("migrations/0340_job_handle_columns.sql"),
+        None,
+    ),
+    (
+        341,
+        include_str!("migrations/0341_job_handles.sql"),
+        Some(Step::Before(job_handles::move_into_columns)),
+    ),
 ];
 
 /// The migrations that rebuild a table others reference, which run on their
 /// own with foreign keys off, so dropping the old table deletes nothing that
 /// references it.
-const REBUILDS: &[i64] = &[];
+const REBUILDS: &[i64] = &[341];
 
 /// The schema the migrations up to [`SCHEMA_VERSION`] make. A new database
 /// takes it in one step: SQLite checks the whole schema on every

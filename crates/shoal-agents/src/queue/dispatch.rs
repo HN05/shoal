@@ -589,13 +589,13 @@ impl Agents {
 async fn job_work(
     daemon: &dyn Daemon,
     repository: Option<&shoal_ids::repository_ids::RepositoryId>,
-    job: Option<String>,
+    job: Option<crate::model::QueuedJob>,
 ) -> Result<Result<Work, HeldBy>> {
     let repository = repository.context("a job's entry names no repository")?;
     if daemon.job_permits_busy(repository) {
         return Ok(Err(HeldBy::Permits));
     }
-    let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
+    let job = job.context("a job's entry names no job")?;
     if let Some(ahead) = daemon.job_claim_deferred(repository, &job) {
         return Ok(Err(HeldBy::RankedBehind { ahead }));
     }

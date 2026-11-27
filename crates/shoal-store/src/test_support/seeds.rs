@@ -20,6 +20,7 @@ use shoal_protocol::{
     time::UnixTime,
 };
 
+use crate::jobs::JobColumns;
 use crate::origins::OriginColumns;
 use crate::{json_text, narrowing_column};
 
@@ -225,6 +226,7 @@ impl QueueEntry {
 /// Record `entry`, whose launch plans nothing and whose launch or restore
 /// starts Claude Code, as a job's starts no agent.
 pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
+    let job = (entry.job.as_ref()).map(JobColumns::of).transpose()?;
     let (agent, plan) = match entry.kind {
         QueueKind::Launch => ("claude", Some(r#"{"launch":{}}"#)),
         QueueKind::Restore => ("claude", None),
@@ -233,8 +235,8 @@ pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
     };
     db.execute(
         "INSERT INTO agent_queue(id,kind,state,repository_id,space_id,execution_id,name,job,
-            automatic,created_at,agent,plan,env)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            handle,automatic,created_at,agent,plan,env)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
         params![
             entry.id,
             entry.kind,
@@ -243,7 +245,8 @@ pub fn queue_entry(db: &Connection, entry: &QueueEntry) -> Result<()> {
             entry.space,
             entry.execution,
             entry.name,
-            json_text(entry.job.as_ref())?,
+            job.as_ref().map(|job| &job.job),
+            job.as_ref().map(|job| &job.handle),
             entry.automatic,
             entry.created_at,
             agent,

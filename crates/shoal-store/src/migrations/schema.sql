@@ -193,32 +193,6 @@ CREATE TABLE space_parents (
     parent_id TEXT NOT NULL
 );
 
-CREATE TABLE "agent_queue" (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    id TEXT NOT NULL UNIQUE,
-    kind TEXT NOT NULL CHECK(kind IN ('launch','restore','job')),
-    repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    agent TEXT NOT NULL,
-    issue_title TEXT,
-    plan TEXT,
-    env TEXT,
-    execution_id TEXT UNIQUE,
-    state TEXT NOT NULL CHECK(state IN ('queued','starting')),
-    created_at INTEGER NOT NULL,
-    seen_at INTEGER,
-    space_id TEXT,
-    opens_workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
-    base_branch TEXT,
-    automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1)),
-    job TEXT, mode TEXT, narrowing TEXT, scope_space_id TEXT, priority INTEGER CHECK(priority BETWEEN 0 AND 100), stop_reason TEXT, wakes_when TEXT, issue_labels TEXT, source TEXT, starts_at_once INTEGER NOT NULL DEFAULT 0,
-    CHECK(CASE kind
-        WHEN 'launch' THEN plan IS NOT NULL AND env IS NOT NULL AND execution_id IS NULL AND job IS NULL
-        WHEN 'restore' THEN plan IS NULL AND execution_id IS NOT NULL AND space_id IS NOT NULL AND job IS NULL
-        ELSE plan IS NULL AND env IS NULL AND execution_id IS NULL AND job IS NOT NULL
-    END)
-);
-
 CREATE TABLE ci_passed_jobs (
     repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     handle TEXT NOT NULL,
@@ -264,21 +238,6 @@ CREATE TABLE space_progress (
     updated_at INTEGER NOT NULL,
     published_at INTEGER
 );
-
-CREATE TABLE "ci_jobs" (
-    id TEXT PRIMARY KEY,
-    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
-    workspace_id TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
-    execution_id TEXT,
-    job TEXT NOT NULL,
-    started_at INTEGER NOT NULL,
-    launched_at INTEGER,
-    peak_memory INTEGER,
-    usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
-    runner_id INTEGER
-, cut_short INTEGER NOT NULL DEFAULT 0
-    CHECK(cut_short IN (0,1)), oom_killed INTEGER NOT NULL DEFAULT 0
-    CHECK(oom_killed IN (0,1)));
 
 CREATE TABLE "owned_places" (
             origin_host TEXT NOT NULL,
@@ -1197,6 +1156,61 @@ CREATE TABLE "space_moves" (
     held_until INTEGER
 );
 
+CREATE TABLE "agent_queue" (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL CHECK(kind IN ('launch','restore','job')),
+    repository_id TEXT REFERENCES repositories(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    issue_title TEXT,
+    plan TEXT,
+    env TEXT,
+    execution_id TEXT UNIQUE,
+    state TEXT NOT NULL CHECK(state IN ('queued','starting')),
+    created_at INTEGER NOT NULL,
+    seen_at INTEGER,
+    space_id TEXT,
+    opens_workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+    base_branch TEXT,
+    automatic INTEGER NOT NULL DEFAULT 0 CHECK(automatic IN (0,1)),
+    job TEXT,
+    handle TEXT,
+    mode TEXT,
+    narrowing TEXT,
+    scope_space_id TEXT,
+    priority INTEGER CHECK(priority BETWEEN 0 AND 100),
+    stop_reason TEXT,
+    wakes_when TEXT,
+    issue_labels TEXT,
+    source TEXT,
+    starts_at_once INTEGER NOT NULL DEFAULT 0,
+    CHECK(CASE kind
+        WHEN 'launch' THEN plan IS NOT NULL AND env IS NOT NULL AND execution_id IS NULL
+            AND job IS NULL AND handle IS NULL
+        WHEN 'restore' THEN plan IS NULL AND execution_id IS NOT NULL AND space_id IS NOT NULL
+            AND job IS NULL AND handle IS NULL
+        ELSE plan IS NULL AND env IS NULL AND execution_id IS NULL AND job IS NOT NULL
+            AND handle IS NOT NULL
+    END)
+);
+
+CREATE TABLE "ci_jobs" (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
+    execution_id TEXT,
+    job TEXT NOT NULL,
+    handle TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    launched_at INTEGER,
+    peak_memory INTEGER,
+    usage_recorded INTEGER NOT NULL DEFAULT 0 CHECK(usage_recorded IN (0,1)),
+    runner_id INTEGER,
+    cut_short INTEGER NOT NULL DEFAULT 0 CHECK(cut_short IN (0,1)),
+    oom_killed INTEGER NOT NULL DEFAULT 0 CHECK(oom_killed IN (0,1))
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);
@@ -1205,22 +1219,13 @@ CREATE INDEX repository_resource_owner ON repository_resource_leases(repository_
 
 CREATE INDEX space_parents_parent ON space_parents(parent_id);
 
-CREATE INDEX agent_queue_opens ON agent_queue(opens_workspace_id);
-
-CREATE UNIQUE INDEX agent_queue_job_handles ON agent_queue(repository_id, json_extract(job, '$.job.handle'))
-    WHERE kind = 'job';
-
 CREATE INDEX merges_by_branch ON merges(repository_id, branch);
 
 CREATE INDEX space_agent_state_execution ON space_agent_state(execution_id);
 
-CREATE INDEX agent_queue_scopes ON agent_queue(scope_space_id);
-
 CREATE INDEX agent_queue_blocker_targets ON agent_queue_blockers(kind, target);
 
 CREATE INDEX executions_space ON executions(space_id);
-
-CREATE INDEX agent_queue_space ON agent_queue(space_id);
 
 CREATE INDEX gate_verdicts_action ON gate_verdicts(space_id, action);
 
@@ -1328,6 +1333,15 @@ CREATE INDEX simulators_effective_owner ON simulators(coalesce(workspace_id, las
 
 CREATE INDEX clean_requests_workspace ON simulator_clean_requests(workspace_id,id);
 
+CREATE INDEX agent_queue_opens ON agent_queue(opens_workspace_id);
+
+CREATE UNIQUE INDEX agent_queue_job_handles ON agent_queue(repository_id, handle)
+    WHERE kind = 'job';
+
+CREATE INDEX agent_queue_scopes ON agent_queue(scope_space_id);
+
+CREATE INDEX agent_queue_space ON agent_queue(space_id);
+
 CREATE VIEW space_numbers AS
     SELECT number FROM spaces WHERE number IS NOT NULL
     UNION ALL SELECT space_number FROM access_requests WHERE space_id IS NULL;
@@ -1340,8 +1354,6 @@ CREATE VIEW hub_held_numbers AS
     SELECT member_id, number, NULL AS space_id FROM hub_reserved_numbers
     UNION ALL SELECT member_id, number, space_id FROM hub_space_copies;
 
-INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
-
 INSERT INTO "sqlite_sequence" VALUES ('alerts', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('threads', 0);
@@ -1351,6 +1363,8 @@ INSERT INTO "sqlite_sequence" VALUES ('thread_code', 0);
 INSERT INTO "sqlite_sequence" VALUES ('thread_posts', 0);
 
 INSERT INTO "sqlite_sequence" VALUES ('space_events', 0);
+
+INSERT INTO "sqlite_sequence" VALUES ('agent_queue', 0);
 
 INSERT INTO "journal_pruned" VALUES (0);
 
@@ -1475,12 +1489,6 @@ END;
 CREATE TRIGGER space_turn_retry_execution_ended AFTER DELETE ON executions BEGIN
     DELETE FROM space_turn_retries WHERE execution_id=OLD.id
         AND NOT EXISTS (SELECT 1 FROM agent_queue WHERE execution_id=OLD.id);
-END;
-
-CREATE TRIGGER space_turn_retry_restore_ended AFTER DELETE ON agent_queue
-WHEN OLD.execution_id IS NOT NULL BEGIN
-    DELETE FROM space_turn_retries WHERE execution_id=OLD.execution_id AND delivered=0
-        AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
 END;
 
 CREATE TRIGGER agent_handoff_space_removed AFTER DELETE ON spaces BEGIN
@@ -1726,4 +1734,10 @@ END;
 CREATE TRIGGER space_completed_again AFTER UPDATE OF record ON space_completion
 WHEN NEW.error IS NULL BEGIN
     SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
+END;
+
+CREATE TRIGGER space_turn_retry_restore_ended AFTER DELETE ON agent_queue
+WHEN OLD.execution_id IS NOT NULL BEGIN
+    DELETE FROM space_turn_retries WHERE execution_id=OLD.execution_id AND delivered=0
+        AND NOT EXISTS (SELECT 1 FROM executions WHERE id=OLD.execution_id);
 END;

@@ -249,6 +249,7 @@ mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
 mod item_activity_states;
+mod job_handles;
 mod journal_columns;
 mod journal_shapes;
 mod move_destination_kind;

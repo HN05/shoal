@@ -98,7 +98,7 @@ const FAILED_COLUMNS: &str = "f.id,'launch' AS kind,f.repository_id,f.name,f.age
     f.narrowing,f.issue_title,'failed' AS state,f.created_at,
     f.space_id AS space_id,NULL AS execution_id,
     NULL AS opens_workspace_id,NULL AS base_branch,
-    NULL AS job,f.scope_space_id,f.error";
+    NULL AS job,NULL AS handle,f.scope_space_id,f.error";
 
 /// Every failed launch of a recorded space as a failed entry with its
 /// error, the oldest failure first: a workspace's opens it, a chat's

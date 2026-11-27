@@ -3306,6 +3306,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shoal-core",
+ "shoal-forge-types",
  "shoal-ids",
  "shoal-protocol",
  "shoal-refs",

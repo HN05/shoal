@@ -21,6 +21,7 @@ rusqlite = { workspace = true, features = ["bundled", "functions"] }
 serde.workspace = true
 serde_json.workspace = true
 shoal-core.workspace = true
+shoal-forge-types.workspace = true
 shoal-ids = { workspace = true, features = ["rusqlite"] }
 shoal-protocol = { workspace = true, features = ["rusqlite"] }
 shoal-refs = { workspace = true, features = ["rusqlite"] }

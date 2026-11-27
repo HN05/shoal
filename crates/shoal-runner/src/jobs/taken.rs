@@ -11,6 +11,7 @@ use shoal_forge_types::{
 };
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_protocol::model::QueuedJob;
+use shoal_store::jobs::JobColumns;
 
 use super::ClaimedJob;
 use crate::{Runner, daemon::Daemon, log};
@@ -132,11 +133,14 @@ impl Runner {
     async fn record_taken_job(&self, id: &QueueEntryId, job: &QueuedJob) -> Result<()> {
         let (id, job) = (
             id.to_owned(),
-            serde_json::to_string(job).context("record the job the runner took")?,
+            JobColumns::of(job).context("record the job the runner took")?,
         );
         self.store
             .run(move |db| {
-                db.execute("UPDATE ci_jobs SET job=?2 WHERE id=?1", params![id, job])?;
+                db.execute(
+                    "UPDATE ci_jobs SET job=?2,handle=?3 WHERE id=?1",
+                    params![id, job.job, job.handle],
+                )?;
                 Ok(())
             })
             .await

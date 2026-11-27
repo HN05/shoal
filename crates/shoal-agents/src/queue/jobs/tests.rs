@@ -32,7 +32,7 @@ fn queue_jobs(db: &Connection, repository: &str, handles: &[&str]) {
 /// Admit the job entry of `handle`, as the queue does once it starts.
 fn admit(db: &Connection, handle: &str) {
     db.execute(
-        "UPDATE agent_queue SET state=?2 WHERE json_extract(job,'$.job.handle')=?1",
+        "UPDATE agent_queue SET state=?2 WHERE handle=?1",
         params![handle, QueueState::Starting],
     )
     .unwrap();

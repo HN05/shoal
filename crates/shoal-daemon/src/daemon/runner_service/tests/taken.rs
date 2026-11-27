@@ -196,12 +196,13 @@ async fn a_report_recorded_before_a_restart_still_moves_the_workspace() {
         .job_run(&manager.forges.user_account(), RunId::new(2))
         .await
         .unwrap();
-    let (id, recorded) = (job.id.clone(), serde_json::to_string(&recorded).unwrap());
+    let recorded = shoal_store::jobs::JobColumns::of(&recorded).unwrap();
+    let id = job.id.clone();
     (manager.store)
         .run(move |db| {
             db.execute(
-                "UPDATE ci_jobs SET job=?2 WHERE id=?1",
-                rusqlite::params![id, recorded],
+                "UPDATE ci_jobs SET job=?2,handle=?3 WHERE id=?1",
+                rusqlite::params![id, recorded.job, recorded.handle],
             )?;
             Ok(())
         })

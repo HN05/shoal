@@ -4,6 +4,7 @@ pub mod agent_handoffs;
 pub mod applied_reports;
 mod executions;
 mod guards;
+pub mod jobs;
 pub mod journal;
 pub mod lifecycle;
 mod migrations;

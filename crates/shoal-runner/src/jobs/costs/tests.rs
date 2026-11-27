@@ -29,8 +29,8 @@ async fn claimed(fixture: &Fixture, n: usize, job: &QueuedJob, memory: i64) -> C
     (fixture.runner.store)
         .run(move |db| {
             db.execute(
-                "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at,peak_memory)
-                 VALUES (?1,?2,?3,'{}',0,?4)",
+                "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,handle,started_at,peak_memory)
+                 VALUES (?1,?2,?3,'{}','attempt',0,?4)",
                 params![row.0, row.1, workspace, memory],
             )?;
             Ok(())

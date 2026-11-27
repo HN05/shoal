@@ -117,7 +117,7 @@ fn forget_unlisted_jobs(
     let mut known = records.forget_unlisted_job_entries(tx, repository_id, listed)?;
     // The forge lists a claimed job until its runner takes it.
     let claimed = tx
-        .prepare("SELECT json_extract(job,'$.job.handle') FROM ci_jobs WHERE repository_id=?1")?
+        .prepare("SELECT handle FROM ci_jobs WHERE repository_id=?1")?
         .query_map([repository_id], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<String>>>()?;
     known.extend(claimed);

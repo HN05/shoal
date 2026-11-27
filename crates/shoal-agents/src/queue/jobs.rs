@@ -6,6 +6,8 @@ use rusqlite::{Connection, params};
 use shoal_ids::{queue_entry_ids::QueueEntryId, repository_ids::RepositoryId};
 use shoal_protocol::{space_names::SpaceName, time::UnixTime};
 
+use shoal_store::jobs::JobColumns;
+
 use crate::{
     model::QueuedJob,
     state::{QueueKind, QueueState},
@@ -23,9 +25,10 @@ pub struct JobEntry {
 /// Queue `job` of `repository` behind the work already waiting.
 pub fn queue(db: &Connection, repository: &RepositoryId, job: &QueuedJob) -> Result<()> {
     let name = SpaceName::derive(&format!("ci-{}-{}", job.job.name, job.job.id), "workspace");
+    let columns = JobColumns::of(job)?;
     db.execute(
-        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job)
-         VALUES (?1,?2,?3,?4,'',?5,?6,?7)",
+        "INSERT INTO agent_queue(id,kind,repository_id,name,agent,state,created_at,job,handle)
+         VALUES (?1,?2,?3,?4,'',?5,?6,?7,?8)",
         params![
             QueueEntryId::generate(),
             QueueKind::Job,
@@ -33,7 +36,8 @@ pub fn queue(db: &Connection, repository: &RepositoryId, job: &QueuedJob) -> Res
             name,
             QueueState::Queued,
             UnixTime::now(),
-            serde_json::to_string(job)?,
+            columns.job,
+            columns.handle,
         ],
     )?;
     Ok(())
@@ -46,25 +50,21 @@ pub fn in_state(
     state: QueueState,
     repository: Option<&RepositoryId>,
 ) -> Result<Vec<JobEntry>> {
-    let rows = db
+    Ok(db
         .prepare(
-            "SELECT id,repository_id,name,job FROM agent_queue
+            "SELECT id,repository_id,name,job,handle FROM agent_queue
              WHERE kind=?1 AND state=?2 AND (?3 IS NULL OR repository_id=?3)
              ORDER BY seq",
         )?
         .query_map(params![QueueKind::Job, state, repository], |row| {
-            let Some(job) = shoal_store::json_column(row, "job")? else {
-                return Ok(None);
-            };
-            Ok(Some(JobEntry {
+            Ok(JobEntry {
                 id: row.get("id")?,
                 repository: row.get("repository_id")?,
                 name: row.get("name")?,
-                job,
-            }))
+                job: shoal_store::jobs::job(row)?,
+            })
         })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    Ok(rows.into_iter().flatten().collect())
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Forget the job entry `id`, waiting or admitted.
@@ -114,10 +114,7 @@ struct HandledEntry {
 /// handle.
 fn handled_entries(db: &Connection, repository: &RepositoryId) -> Result<Vec<HandledEntry>> {
     Ok(db
-        .prepare(
-            "SELECT id,json_extract(job,'$.job.handle'),state FROM agent_queue
-             WHERE repository_id=?1 AND kind=?2",
-        )?
+        .prepare("SELECT id,handle,state FROM agent_queue WHERE repository_id=?1 AND kind=?2")?
         .query_map(params![repository, QueueKind::Job], |row| {
             Ok(HandledEntry {
                 id: row.get(0)?,

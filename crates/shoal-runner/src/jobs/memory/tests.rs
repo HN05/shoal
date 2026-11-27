@@ -17,14 +17,15 @@ async fn claim(fixture: &Fixture, execution: &str, peak: i64) -> (QueueEntryId, 
     .unwrap();
     let id = QueueEntryId::from(format!("job-{execution}"));
     let row = (id.clone(), fixture.repository().clone(), workspace.clone());
-    let (job, execution) = (serde_json::to_string(&job).unwrap(), execution.to_owned());
+    let job = shoal_store::jobs::JobColumns::of(&job).unwrap();
+    let execution = execution.to_owned();
     (fixture.runner.store)
         .run(move |db| {
             db.execute(
-                "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,started_at,peak_memory,
-                     execution_id)
-                 VALUES (?1,?2,?3,?4,0,?5,?6)",
-                params![row.0, row.1, row.2, job, peak, execution],
+                "INSERT INTO ci_jobs(id,repository_id,workspace_id,job,handle,started_at,
+                     peak_memory,execution_id)
+                 VALUES (?1,?2,?3,?4,?5,0,?6,?7)",
+                params![row.0, row.1, row.2, job.job, job.handle, peak, execution],
             )?;
             Ok(())
         })

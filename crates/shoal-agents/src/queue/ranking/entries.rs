@@ -51,7 +51,7 @@ fn queued(
         .prepare(
             "SELECT seq,id,kind,name,created_at,COALESCE(space_id,opens_workspace_id),job,
                 priority,(SELECT prompt_cache_expires_at FROM space_agent_state s
-                    WHERE s.execution_id=q.execution_id),repository_id
+                    WHERE s.execution_id=q.execution_id),repository_id,handle
              FROM agent_queue q WHERE state=?1 ORDER BY seq",
         )?
         .query_map([QueueState::Queued], |row| {
@@ -62,7 +62,7 @@ fn queued(
                 row.get::<_, String>(3)?,
                 row.get::<_, UnixTime>(4)?,
                 row.get::<_, Option<SpaceId>>(5)?,
-                row.get::<_, Option<String>>(6)?,
+                shoal_store::jobs::queued_job(row)?,
                 row.get::<_, Option<Priority>>(7)?,
                 row.get::<_, Option<UnixTime>>(8)?,
                 row.get::<_, Option<RepositoryId>>(9)?,
@@ -73,7 +73,7 @@ fn queued(
     for (seq, id, kind, name, queued_at, space, job, priority, prompt_cache_until, repository) in
         rows
     {
-        let work = work(kind, space, job.as_deref(), jobs.get(&id))?;
+        let work = work(kind, space, job, jobs.get(&id))?;
         let entry = Entry {
             id,
             name,
@@ -130,12 +130,12 @@ pub fn oneshot_name(work: &OneShotWork) -> String {
 fn work(
     kind: QueueKind,
     space: Option<SpaceId>,
-    job: Option<&str>,
+    job: Option<QueuedJob>,
     linked: Option<&Vec<SpaceId>>,
 ) -> Result<Work> {
     Ok(match (kind, space) {
         (QueueKind::Job, _) => {
-            let job: QueuedJob = serde_json::from_str(job.context("a job's entry names no job")?)?;
+            let job = job.context("a job's entry names no job")?;
             Work::Job {
                 tier: job_tier(&job),
                 spaces: linked.cloned().unwrap_or(job.space_ids),

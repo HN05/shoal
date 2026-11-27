@@ -54,29 +54,19 @@ impl Runner {
 pub(super) fn claims(db: &rusqlite::Connection) -> Result<Vec<ClaimedJob>> {
     Ok(db
         .prepare(
-            "SELECT id,repository_id,workspace_id,execution_id,job,launched_at,runner_id
+            "SELECT id,repository_id,workspace_id,execution_id,job,handle,launched_at,runner_id
              FROM ci_jobs ORDER BY started_at",
         )?
         .query_map([], |row| {
             Ok(ClaimedJob {
-                id: row.get(0)?,
-                repository_id: row.get(1)?,
-                workspace_id: row.get(2)?,
-                execution_id: row.get(3)?,
-                launched_at: row.get(5)?,
-                runner_id: row.get(6)?,
-                job: queued_job(row, 4)?,
+                id: row.get("id")?,
+                repository_id: row.get("repository_id")?,
+                workspace_id: row.get("workspace_id")?,
+                execution_id: row.get("execution_id")?,
+                launched_at: row.get("launched_at")?,
+                runner_id: row.get("runner_id")?,
+                job: shoal_store::jobs::job(row)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?)
-}
-
-fn queued_job(row: &rusqlite::Row<'_>, index: usize) -> rusqlite::Result<QueuedJob> {
-    serde_json::from_str(&row.get::<_, String>(index)?).map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            index,
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
-    })
 }

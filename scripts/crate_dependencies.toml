@@ -251,7 +251,7 @@ dependencies = [
 dependencies = []
 
 [shoal-store]
-dependencies = ["shoal-core", "shoal-ids", "shoal-protocol", "shoal-refs"]
+dependencies = ["shoal-core", "shoal-forge-types", "shoal-ids", "shoal-protocol", "shoal-refs"]
 
 [shoal-subprocess]
 dependencies = []
