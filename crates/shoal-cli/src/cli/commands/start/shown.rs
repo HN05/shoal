@@ -31,8 +31,10 @@ pub(in crate::cli::commands) async fn start(ctx: &Context, mut launch: Launch) -
 }
 
 /// Attach this terminal to the agent `launched` started on another machine,
-/// once a workspace's preparation there ends.
+/// once a workspace's preparation there ends. JSON shows the space first, as
+/// a start whose agent runs here does.
 pub(super) async fn attach_launched(ctx: &Context, launched: Launched) -> Result<i32> {
+    ctx.show(&*launched.space, |_| ())?;
     let (space, machine) = (launched.space.id.clone(), launched.machine.clone());
     if let Some(code) = await_preparation(ctx, launched, machine.as_deref()).await? {
         return Ok(code);
