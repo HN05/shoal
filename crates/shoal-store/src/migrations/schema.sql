@@ -766,18 +766,6 @@ CREATE TABLE hub_move_fences (
     settled_at INTEGER NOT NULL
 );
 
-CREATE TABLE "space_moves" (
-    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
-    destination TEXT NOT NULL,
-    ticket TEXT NOT NULL,
-    carrying TEXT NOT NULL,
-    unsaved TEXT NOT NULL,
-    phase TEXT NOT NULL CHECK(phase IN ('packing','delivering','delivered')),
-    checkpoints TEXT NOT NULL DEFAULT '{}',
-    saved_before TEXT NOT NULL DEFAULT '{}',
-    created_at INTEGER NOT NULL
-, held_until INTEGER);
-
 CREATE TABLE moved_parents (
     space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
     parent_id TEXT NOT NULL
@@ -1193,6 +1181,20 @@ CREATE TABLE space_blockers (
     step_key TEXT,
     step_name TEXT CHECK(step_key IS NULL OR step_name IS NULL),
     PRIMARY KEY(space_id, position)
+);
+
+CREATE TABLE "space_moves" (
+    space_id TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+    destination TEXT NOT NULL,
+    destination_kind TEXT NOT NULL,
+    ticket TEXT NOT NULL,
+    carrying TEXT NOT NULL,
+    unsaved TEXT NOT NULL,
+    phase TEXT NOT NULL CHECK(phase IN ('packing','delivering','delivered')),
+    checkpoints TEXT NOT NULL DEFAULT '{}',
+    saved_before TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    held_until INTEGER
 );
 
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;

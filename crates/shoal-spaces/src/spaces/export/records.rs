@@ -8,10 +8,16 @@ use rusqlite::{Connection, OptionalExtension, Row, Transaction, params};
 use crate::refusal::{Reason, Refusal};
 use crate::store;
 use crate::time::UnixTime;
-use crate::transfer::{MovePhase, MoveRecord};
+use crate::transfer::{MoveDestination, MovePhase, MoveRecord};
+use rusqlite::types::Value as SqlValue;
 use shoal_ids::space_ids::SpaceId;
+use shoal_store::split::{self, Column};
 
-const COLUMNS: &str = "space_id,destination,ticket,carrying,unsaved,phase,checkpoints,saved_before";
+const COLUMNS: &str =
+    "space_id,destination,destination_kind,ticket,carrying,unsaved,phase,checkpoints,saved_before";
+
+/// The column that keeps the destination's kind, which a query reads.
+const DESTINATION: &[Column] = &[("destination_kind", &["kind"])];
 
 /// Refuses a space another move already takes.
 pub fn insert(tx: &Transaction<'_>, record: &MoveRecord) -> Result<()> {
@@ -19,12 +25,14 @@ pub fn insert(tx: &Transaction<'_>, record: &MoveRecord) -> Result<()> {
         let message = "another move of this space is recorded; Shoal finishes it first";
         return Err(Refusal::new(Reason::MoveInProgress, message).into());
     }
+    let (destination, kind) = destination_columns(&record.destination)?;
     tx.execute(
-        "INSERT INTO space_moves(space_id,destination,ticket,carrying,unsaved,phase,checkpoints,
-            saved_before,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+        "INSERT INTO space_moves(space_id,destination,destination_kind,ticket,carrying,unsaved,
+            phase,checkpoints,saved_before,created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
         params![
             record.space,
-            serde_json::to_string(&record.destination)?,
+            destination,
+            kind,
             record.ticket,
             serde_json::to_string(&record.carrying)?,
             serde_json::to_string(&record.unsaved)?,
@@ -71,12 +79,10 @@ pub fn all(db: &Transaction<'_>) -> Result<Vec<MoveRecord>> {
 /// Those whose move holds its package for the joined machine that started
 /// it and waits for that machine after `now`.
 pub(super) fn held_after(db: &Connection, now: UnixTime) -> Result<HashSet<SpaceId>> {
+    let (_, held) = destination_columns(&MoveDestination::Held)?;
     Ok(db
-        .prepare(
-            "SELECT space_id FROM space_moves
-                WHERE json_extract(destination,'$.kind')='held' AND held_until>?1",
-        )?
-        .query_map([now], |row| row.get(0))?
+        .prepare("SELECT space_id FROM space_moves WHERE destination_kind=?1 AND held_until>?2")?
+        .query_map(params![held, now], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -107,7 +113,7 @@ pub(super) fn forget(tx: &Transaction<'_>, space: &SpaceId) -> Result<()> {
 fn record(row: &Row<'_>) -> rusqlite::Result<MoveRecord> {
     Ok(MoveRecord {
         space: row.get("space_id")?,
-        destination: required(row, "destination")?,
+        destination: split::decode_row(row, "destination", DESTINATION)?,
         ticket: row.get("ticket")?,
         carrying: required(row, "carrying")?,
         unsaved: required(row, "unsaved")?,
@@ -117,8 +123,17 @@ fn record(row: &Row<'_>) -> rusqlite::Result<MoveRecord> {
     })
 }
 
+/// The destination's JSON without its kind, and its kind.
+fn destination_columns(destination: &MoveDestination) -> Result<(String, SqlValue)> {
+    let (json, mut kind) = split::split(destination, DESTINATION)?;
+    Ok((json, kind.remove(0)))
+}
+
 /// The JSON column `name`, which is never `NULL`.
 fn required<T: serde::de::DeserializeOwned>(row: &Row<'_>, name: &str) -> rusqlite::Result<T> {
     store::json_column(row, name)?
         .ok_or_else(|| rusqlite::Error::InvalidColumnName(name.to_owned()))
 }
+
+#[cfg(test)]
+mod tests;

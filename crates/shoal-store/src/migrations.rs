@@ -16,6 +16,7 @@ mod hub_numbers;
 mod item_activity_states;
 mod journal_shapes;
 mod json_rows;
+mod move_destination_kind;
 mod pending_plan_columns;
 mod post_files;
 mod post_surfaces;
@@ -26,7 +27,7 @@ mod space_blockers;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 334;
+pub const SCHEMA_VERSION: i64 = 336;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -239,6 +240,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         334,
         include_str!("migrations/0334_space_blockers.sql"),
         Some(Step::After(space_blockers::move_blockers)),
+    ),
+    (
+        335,
+        include_str!("migrations/0335_move_destination_kind.sql"),
+        Some(Step::After(move_destination_kind::move_kind)),
+    ),
+    (
+        336,
+        include_str!("migrations/0336_move_destination_kind_required.sql"),
+        None,
     ),
 ];
 
