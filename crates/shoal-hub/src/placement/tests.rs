@@ -1,10 +1,20 @@
-use shoal_protocol::hub::placement::Unanswered;
+use std::collections::BTreeMap;
+
+use shoal_protocol::hub::{
+    Member,
+    availability::{Availability, AvailabilityReason, Classified},
+    directory::Report,
+    placement::Unanswered,
+};
 use shoal_schedule::placement::{
-    Placed, Placement, Reason,
-    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
+    Balanced, Placed, Placement, Placer, Reason,
+    snapshot::{Capacity, Lifetime, Machine, Registered, Request, Snapshot},
+    speeds::Medians,
 };
 
-use super::{among, logged};
+use super::{among, logged, placed_machines};
+
+const ORIGIN: &str = "example.com/owner/repo";
 
 /// A start from the laptop in a repository only it has, which the server,
 /// connected too, lacks.
@@ -21,7 +31,7 @@ fn snapshot() -> Snapshot {
     };
     Snapshot {
         request: Request {
-            origin: Some("example.com/owner/repo".into()),
+            origin: Some(ORIGIN.into()),
             base: None,
             agent: "claude".into(),
             mode: "worker".into(),
@@ -156,4 +166,68 @@ async fn a_machine_whose_link_opened_again_is_undescribed_until_it_reports_there
     let _second = hub.links.register(&desk, "desk").unwrap();
     drop(first);
     assert!(hub.capacities.of(&desk, hub.links.token(&desk)).is_none());
+}
+
+/// A connected `always_on` machine named `id`, with room for a heavy agent
+/// and the repository `snapshot` starts in.
+fn member(id: &str) -> Member {
+    Member {
+        connected: true,
+        availability: Some(Classified {
+            availability: Availability::AlwaysOn,
+            reason: AvailabilityReason::Set,
+        }),
+        ..Member::unlisted(id.into())
+    }
+}
+
+/// The medians of the repository `snapshot` starts in, whose build ran
+/// for `seconds`.
+fn build_medians(seconds: u64) -> Medians {
+    let runs = BTreeMap::from([(r#"ci_job ["ci.yml","build"]"#.to_owned(), seconds)]);
+    Medians(BTreeMap::from([(ORIGIN.to_owned(), runs)]))
+}
+
+#[tokio::test]
+async fn a_heavy_start_goes_to_the_machine_faster_at_its_repository_and_a_light_one_to_the_slower()
+{
+    use shoal_core::config::Config;
+
+    use crate::stand_in;
+
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::default()).await;
+    let capacity = Capacity {
+        repositories: vec![Registered {
+            origin: ORIGIN.into(),
+            agents: vec!["claude".into()],
+        }],
+        heavy_free: 1,
+        light_free: true,
+        memory_free: Some(1 << 30),
+        ..Capacity::default()
+    };
+    let mut members = vec![member("fast"), member("slow")];
+    for (member, seconds) in members.iter().zip([300, 600]) {
+        let whole = Report::Whole(Vec::new());
+        let medians = Some(build_medians(seconds));
+        let reported = (&member.id, None);
+        (hub.capacities).keep(reported, &whole, Some(capacity.clone()), medians);
+    }
+    hub.with_capacity(&mut members);
+    assert_eq!(
+        members[0].speeds,
+        BTreeMap::from([(ORIGIN.to_owned(), 200)])
+    );
+    let chosen = |heavy| {
+        let request = Request {
+            heavy,
+            ..snapshot().request
+        };
+        let machines = placed_machines(members.iter(), request.origin.as_deref());
+        let placement = Balanced.place(&Snapshot { request, machines });
+        placement.chosen().map(|placed| placed.machine.to_string())
+    };
+    assert_eq!(chosen(true).as_deref(), Some("fast"));
+    assert_eq!(chosen(false).as_deref(), Some("slow"));
 }

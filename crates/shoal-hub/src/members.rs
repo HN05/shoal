@@ -34,6 +34,7 @@ fn recorded(row: &Row<'_>, own: &PublicKey) -> rusqlite::Result<Recorded> {
             hub: &key == own,
             availability: None,
             capacity: None,
+            speeds: Default::default(),
         },
         revoked: row.get::<_, Option<UnixTime>>("revoked_at")?.is_some(),
         key,

@@ -322,6 +322,10 @@ pub enum Call {
         kept: super::directory::KeptRemoved,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
+        /// The medians of its runs, which replace what the hub had for it;
+        /// none when they are as it last reported them.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        medians: Option<shoal_schedule::placement::speeds::Medians>,
         /// Every repository it registers, which replaces what the hub had
         /// for it; none when they are as it last reported them.
         #[serde(default, skip_serializing_if = "Option::is_none")]

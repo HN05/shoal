@@ -78,8 +78,12 @@ pub(crate) fn describe(hub: &Hub, member: &MemberId, agents: &[&str]) {
         changed: Vec::new(),
         removed: Vec::new(),
     };
-    hub.capacities
-        .keep((member, hub.links.token(member)), &report, Some(capacity));
+    hub.capacities.keep(
+        (member, hub.links.token(member)),
+        &report,
+        Some(capacity),
+        None,
+    );
 }
 
 /// A daemon with no spaces, agents, approvals or app store, and the

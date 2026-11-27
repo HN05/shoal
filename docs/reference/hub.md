@@ -113,8 +113,8 @@ The hub gives each machine and device an ID at pairing. `shoal hub ls` lists
 them with their kind, name, Shoal version and when each was last seen. For
 each machine, it shows its [availability](#availability). For a connected
 machine, it also shows what it last reported for [placement](#placement),
-with the agents it can launch, `capacity` in `--json`. Anyone lists the
-members.
+with the agents it can launch, `capacity` in `--json`, and its speed at each
+repository, `speeds` in `--json`. Anyone lists the members.
 
 `shoal hub revoke` revokes a member by the ID or name `hub ls` shows.
 `shoal hub leave` revokes this machine's own credential. When it cannot reach
@@ -526,6 +526,13 @@ its spaces, which `hub ls --json` shows as `capacity`:
 - whether its user [walked away](machine.md#walking-away) while its
   `keep_awake` admits nothing new then, or
   [paused it](machine.md#pausing-a-machine).
+
+Each machine also reports, per repository, the median duration of each CI
+job, `shoal run` command and seed build it ran whole over the last 7 days.
+The hub compares two machines on the runs both made, and `hub ls --json`
+shows each machine's `speeds`, by repository origin: its speed in percent of
+the machines it shares runs with, where 200 takes half their time. A machine
+that shares no run with another has no speed for that repository.
 
 A start that finds the machine full meanwhile waits in its queue there.
 Placement never moves a space once it is created.

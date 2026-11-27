@@ -253,6 +253,10 @@ pub struct Member {
     /// spaces by; none before it reported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capacity: Option<shoal_schedule::placement::snapshot::Capacity>,
+    /// A connected machine's speed at each repository's work, by origin,
+    /// against the other connected machines that ran it.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub speeds: std::collections::BTreeMap<String, shoal_schedule::placement::speeds::Speed>,
 }
 
 impl Member {
@@ -270,6 +274,7 @@ impl Member {
             hub: false,
             availability: None,
             capacity: None,
+            speeds: Default::default(),
         }
     }
 

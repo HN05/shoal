@@ -101,6 +101,7 @@ impl Hub {
                 reserved,
                 kept,
                 capacity,
+                medians,
                 repositories,
                 power,
                 sent_at,
@@ -111,7 +112,7 @@ impl Hub {
                 // A report from a link another replaced describes nothing.
                 if let Some(link) = self.links.serving(&member.id, calls) {
                     self.capacities
-                        .keep((&member.id, Some(link)), &report, capacity);
+                        .keep((&member.id, Some(link)), &report, capacity, medians);
                 }
                 let held = directory::Held { reserved, kept };
                 let held = (held, repositories);

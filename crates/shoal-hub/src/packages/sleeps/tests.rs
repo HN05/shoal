@@ -103,6 +103,7 @@ fn machine(name: &str, availability: Availability) -> Member {
             reason: AvailabilityReason::Set,
         }),
         capacity: None,
+        speeds: Default::default(),
     }
 }
 

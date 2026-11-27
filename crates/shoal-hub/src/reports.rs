@@ -10,6 +10,7 @@ use shoal_protocol::hub::{
     directory::{RegisteredRepository, Report, SpaceSummary},
     link::{Call, Reply},
 };
+use shoal_schedule::placement::speeds::Medians;
 use tokio::{sync::watch, time::Instant};
 
 use super::session::Calls;
@@ -84,7 +85,8 @@ impl Hub {
         let mut held = self.held().await?;
         let mut registered = (self.registrations(daemon, &mut registered_origins)).await?;
         let whole = sent.values().map(|(summary, _)| summary.clone()).collect();
-        let report = (Report::Whole(whole), measured.borrow_and_update().clone());
+        let mut medians = None;
+        let report = (Report::Whole(whole), unsent(&mut measured, &mut medians));
         let holds = (held.clone(), Some(registered.clone()));
         self.report(daemon, &sink, report, holds).await?;
         self.reported.0.send_replace(sent.keys().cloned().collect());
@@ -120,7 +122,7 @@ impl Hub {
                     changed: Vec::new(),
                     removed: Vec::new(),
                 });
-                let report = (changes, measured.borrow_and_update().clone());
+                let report = (changes, unsent(&mut measured, &mut medians));
                 self.report(daemon, &sink, report, (holds.clone(), repositories))
                     .await?;
                 self.reported
@@ -214,9 +216,9 @@ impl Hub {
     }
 
     /// Send `report` to `sink`, with what this machine `measured` of its
-    /// capacity and power, what it `held` of the spaces it does not have, and
-    /// its `repositories`, none when unchanged. Numbers this machine's spaces
-    /// from the hub's answer.
+    /// capacity, runs and power, what it `held` of the spaces it does not
+    /// have, and its `repositories`, none when unchanged. Numbers this
+    /// machine's spaces from the hub's answer.
     async fn report(
         &self,
         daemon: &dyn Daemon,
@@ -224,10 +226,15 @@ impl Hub {
         (report, measured): (Report, Measured),
         (held, repositories): (Held, Option<Vec<RegisteredRepository>>),
     ) -> Result<()> {
-        let Measured { capacity, power } = measured;
+        let Measured {
+            capacity,
+            medians,
+            power,
+        } = measured;
         let numbering = match sink {
             Sink::Hub(own) => {
-                self.capacities.keep((own, None), &report, capacity);
+                self.capacities
+                    .keep((own, None), &report, capacity, medians);
                 let held = (held, repositories);
                 self.record_report(daemon, own, report, held).await?
             }
@@ -237,6 +244,7 @@ impl Hub {
                     reserved: held.reserved,
                     kept: held.kept,
                     capacity,
+                    medians,
                     repositories,
                     power,
                     sent_at: crate::time::UnixTime::now(),
@@ -249,6 +257,17 @@ impl Hub {
         };
         self.take_numbering(daemon, numbering).await
     }
+}
+
+/// The latest of what `measured` holds, its medians only where they differ
+/// from the `sent` ones, which they then replace.
+fn unsent(measured: &mut watch::Receiver<Measured>, sent: &mut Option<Medians>) -> Measured {
+    let mut measured = measured.borrow_and_update().clone();
+    match measured.medians == *sent {
+        true => measured.medians = None,
+        false => sent.clone_from(&measured.medians),
+    }
+    measured
 }
 
 /// `summaries` with the JSON each compares by.

@@ -111,6 +111,69 @@ pub fn expected_memory(
     Ok(Some(percentile(peaks) as u64))
 }
 
+/// The median duration of a key's runs, which the hub compares machines'
+/// speeds by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MedianDuration {
+    pub repository: RepositoryId,
+    /// The key's kind and text as the runs table records them, which tell
+    /// it from other keys on every machine.
+    pub run: String,
+    pub seconds: u64,
+}
+
+/// The median duration of each key's whole runs that ended from `since`,
+/// leaving out those the OOM killer hit, which ran short of memory rather
+/// than at the machine's speed.
+pub fn median_durations(db: &Connection, since: UnixTime) -> Result<Vec<MedianDuration>> {
+    let medians = (durations_by_key(db, since)?.into_iter())
+        .map(|((repository, run), durations)| MedianDuration {
+            repository,
+            run,
+            seconds: median(&durations),
+        })
+        .collect();
+    Ok(medians)
+}
+
+/// Which repository a key's runs are of, and the key as a
+/// [`MedianDuration`] names it.
+type Keyed = (RepositoryId, String);
+
+/// The durations of the runs [`median_durations`] reads, by key, each
+/// key's in order.
+fn durations_by_key(db: &Connection, since: UnixTime) -> Result<Vec<(Keyed, Vec<u64>)>> {
+    let mut statement = db.prepare(
+        "SELECT repository_id, kind, key, duration FROM run_usage
+         WHERE whole AND NOT oom_killed AND duration IS NOT NULL AND ended_at>=?1
+         ORDER BY repository_id, kind, key, duration",
+    )?;
+    let rows = statement.query_map([since], |row| {
+        let (kind, key): (String, String) = (row.get(1)?, row.get(2)?);
+        let seconds: i64 = row.get(3)?;
+        Ok(((row.get(0)?, format!("{kind} {key}")), seconds))
+    })?;
+    let mut keys: Vec<(Keyed, Vec<u64>)> = Vec::new();
+    for row in rows {
+        let (key, seconds) = row?;
+        let seconds = u64::try_from(seconds).unwrap_or_default();
+        match keys.last_mut() {
+            Some((last, durations)) if *last == key => durations.push(seconds),
+            _ => keys.push((key, vec![seconds])),
+        }
+    }
+    Ok(keys)
+}
+
+/// The median of `sorted`, which holds at least one duration.
+fn median(sorted: &[u64]) -> u64 {
+    let middle = sorted.len() / 2;
+    match sorted.len() % 2 {
+        1 => sorted[middle],
+        _ => (sorted[middle - 1] + sorted[middle]) / 2,
+    }
+}
+
 /// The condition that selects the runs of the key of repository `?1`,
 /// kind `?2` and text `?3`.
 const KEY: &str = "repository_id=?1 AND kind=?2 AND key=?3";

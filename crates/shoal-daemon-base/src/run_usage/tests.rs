@@ -132,3 +132,43 @@ fn a_command_by_name_and_one_by_arguments_keep_their_own_estimates() {
     assert_eq!(estimate(&argv), Some(GIB));
     assert_eq!(estimate(&RunKey::SeedBuild), Some(12 * GIB));
 }
+
+/// A whole run of `seconds` that ended at `ended_at`.
+fn lasting(ended_at: i64, seconds: u64) -> RunUsage {
+    RunUsage {
+        duration: Duration::from_secs(seconds),
+        ..run(ended_at, GIB)
+    }
+}
+
+#[test]
+fn a_keys_median_reads_its_whole_runs_since_the_window_began() {
+    let db = database();
+    let cut_short = RunUsage {
+        whole: false,
+        ..lasting(20, 1)
+    };
+    let oom_killed = RunUsage {
+        oom_killed: true,
+        ..lasting(21, 1)
+    };
+    // The run before the window, and those cut short or OOM killed, are
+    // left out.
+    record(&db, [lasting(5, 1000), lasting(10, 100), lasting(11, 300)]);
+    record(
+        &db,
+        [cut_short, oom_killed, lasting(12, 200), lasting(13, 600)],
+    );
+    record_run(&db, &repository(), &RunKey::SeedBuild, &lasting(14, 90)).unwrap();
+    let medians = median_durations(&db, UnixTime::from_seconds(10)).unwrap();
+    let medians: Vec<(&str, u64)> = (medians.iter())
+        .map(|median| (median.run.as_str(), median.seconds))
+        .collect();
+    assert_eq!(
+        medians,
+        [
+            (r#"ci_job ["ci.yml","rust"]"#, 250),
+            (r#"seed_build "seed""#, 90)
+        ]
+    );
+}

@@ -610,6 +610,19 @@ skips it as such, never as lacking the repository or the agent. A placement
 that meets one first waits 2 seconds for its report, as such a machine sends
 one soon after its link opens, then places without it.
 
+A machine also reports how long its runs take: per repository and run key,
+the median duration of its whole runs over the last 7 days. It leaves out
+runs the OOM killer hit, which ran short of memory rather than at the
+machine's speed. It sends the medians with a report when they changed.
+
+The hub derives each machine's speed per repository from these medians. It
+compares two machines only on the keys both ran, since machines run
+different jobs and commands. A machine's speed is the mean of its log ratios
+against each machine it shares keys with, so it stays relative to the
+machines that ran the same work. A machine that shares no key with another
+has no speed there. The hub compares only the connected machines, and leaves
+out medians under 10 seconds, whose startup outweighs their work.
+
 ### Policies
 
 `[machine.hub] placement` picks the policy, as the

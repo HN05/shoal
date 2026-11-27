@@ -117,6 +117,7 @@ fn member(id: &str, name: &str, kind: super::super::MemberKind) -> Member {
         hub: false,
         availability: None,
         capacity: None,
+        speeds: Default::default(),
     }
 }
 

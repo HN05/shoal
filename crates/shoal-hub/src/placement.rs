@@ -1,5 +1,9 @@
 //! Where a new space starts among the hub's machines.
-use std::{collections::HashMap, sync::Mutex, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Mutex,
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow};
 use shoal_ids::member_ids::MemberId;
@@ -13,6 +17,7 @@ use shoal_protocol::hub::{
 use shoal_schedule::placement::{
     Balanced, Local, Placement, Placer, Policy,
     snapshot::{Capacity, Machine, Request, Snapshot},
+    speeds::{self, Medians, Speed},
 };
 use tokio::{sync::watch, time::Instant};
 
@@ -32,51 +37,94 @@ pub use placer::Registration;
 /// reported their capacity since their link opened.
 const DESCRIBED_WITHIN: Duration = Duration::from_secs(2);
 
-/// The capacity each machine last reported, with the link it reported on,
-/// none for the hub's own machine, which has no link.
+/// The capacity and the medians of runs each machine last reported, each
+/// with the link it reported on, none for the hub's own machine, which has
+/// no link.
 #[derive(Default)]
 pub(crate) struct Capacities {
-    reported: Mutex<HashMap<MemberId, (Option<u64>, Capacity)>>,
+    reported: Mutex<Reported>,
     /// Counts the reports kept, for those who wait for one.
     kept: watch::Sender<u64>,
 }
 
+#[derive(Default)]
+struct Reported {
+    capacities: OnLinks<Capacity>,
+    medians: OnLinks<Medians>,
+}
+
 impl Capacities {
-    /// Keep `capacity` as what the machine `member` reported with
-    /// `report` on its link `link`: a whole report, which a machine sends as
-    /// its link opens, replaces what the hub had, so one that has not
-    /// measured since has none; a report of changes without one keeps it.
+    /// Keep `capacity` and `medians` as what the machine `member` reported
+    /// with `report` on its link `link`: a whole report, which a machine
+    /// sends as its link opens, replaces what the hub had, so one that has
+    /// not measured since has none; a report of changes without them keeps
+    /// them.
     pub fn keep(
         &self,
         (member, link): (&MemberId, Option<u64>),
         report: &Report,
         capacity: Option<Capacity>,
+        medians: Option<Medians>,
     ) {
-        let mut capacities = self.reported.lock().unwrap();
+        let mut reported = self.reported.lock().unwrap();
         self.kept.send_modify(|kept| *kept += 1);
-        match (capacity, report) {
-            (Some(capacity), _) => {
-                capacities.insert(member.clone(), (link, capacity));
-            }
-            (None, Report::Whole(_)) => {
-                capacities.remove(member);
-            }
-            (None, Report::Changes { .. }) => {}
-        }
+        let whole = matches!(report, Report::Whole(_));
+        replace(&mut reported.capacities, (member, link), capacity, whole);
+        replace(&mut reported.medians, (member, link), medians, whole);
     }
 
     /// What the machine `member` reported last on its link `link`, none
     /// before it reported there. So a machine whose link opened again is
     /// undescribed until its first report on it.
     pub fn of(&self, member: &MemberId, link: Option<u64>) -> Option<Capacity> {
-        let capacities = self.reported.lock().unwrap();
-        let reported = capacities.get(member).filter(|(on, _)| *on == link);
-        reported.map(|(_, capacity)| capacity.clone())
+        let reported = self.reported.lock().unwrap();
+        on_link(&reported.capacities, member, link).cloned()
     }
 
     /// Changes as each report is kept.
     pub fn watch(&self) -> watch::Receiver<u64> {
         self.kept.subscribe()
+    }
+
+    /// The speeds per repository of the machines `members` name, from the
+    /// medians each reported on its link, compared among them alone.
+    fn speeds<'a>(
+        &self,
+        members: impl Iterator<Item = (&'a MemberId, Option<u64>)>,
+    ) -> HashMap<MemberId, BTreeMap<String, Speed>> {
+        let reported = self.reported.lock().unwrap();
+        let medians: Vec<(&MemberId, &Medians)> = (members)
+            .filter_map(|(member, link)| Some((member, on_link(&reported.medians, member, link)?)))
+            .collect();
+        speeds::speeds(medians)
+    }
+}
+
+/// What each machine reported, with the link it reported it on.
+type OnLinks<T> = HashMap<MemberId, (Option<u64>, T)>;
+
+/// What `member` reported in `kept` on its link `link`, none from another.
+fn on_link<'a, T>(kept: &'a OnLinks<T>, member: &MemberId, link: Option<u64>) -> Option<&'a T> {
+    let reported = kept.get(member).filter(|(on, _)| *on == link);
+    reported.map(|(_, value)| value)
+}
+
+/// Keep `value` as what `member` reported in `kept` on its link; without
+/// one, a `whole` report forgets what it had.
+fn replace<T>(
+    kept: &mut OnLinks<T>,
+    (member, link): (&MemberId, Option<u64>),
+    value: Option<T>,
+    whole: bool,
+) {
+    match (value, whole) {
+        (Some(value), _) => {
+            kept.insert(member.clone(), (link, value));
+        }
+        (None, true) => {
+            kept.remove(member);
+        }
+        (None, false) => {}
     }
 }
 
@@ -137,7 +185,10 @@ impl Hub {
             let members = self.local_hub_overview(daemon).await?.members;
             let snapshot = Snapshot {
                 request: request.clone(),
-                machines: placed_machines(members.iter().filter(|member| eligible(member))),
+                machines: placed_machines(
+                    members.iter().filter(|member| eligible(member)),
+                    request.origin.as_deref(),
+                ),
             };
             let undescribed = (snapshot.machines.iter()).any(|machine| machine.capacity.is_none());
             if !undescribed || !kept_by(&mut kept, deadline).await {
@@ -189,10 +240,14 @@ impl Hub {
     }
 
     /// Give each connected machine among `members` the capacity it last
-    /// reported.
+    /// reported, and its speeds against the other connected machines.
     pub(super) fn with_capacity(&self, members: &mut [Member]) {
+        let connected = (members.iter()).filter(|member| member.connected);
+        let links = connected.map(|member| (&member.id, self.links.token(&member.id)));
+        let mut speeds = self.capacities.speeds(links);
         for member in members.iter_mut().filter(|member| member.connected) {
             member.capacity = self.capacities.of(&member.id, self.links.token(&member.id));
+            member.speeds = speeds.remove(&member.id).unwrap_or_default();
         }
     }
 }
@@ -231,8 +286,12 @@ fn among(placement: Placement, snapshot: &Snapshot) -> Result<Placement, Unanswe
     }
 }
 
-/// The connected machines among `members`, as placement reads them.
-fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine> {
+/// The connected machines among `members`, as placement reads them for a
+/// start in the repository of `origin`.
+fn placed_machines<'a>(
+    members: impl Iterator<Item = &'a Member>,
+    origin: Option<&str>,
+) -> Vec<Machine> {
     members
         .filter(|member| member.kind == MemberKind::Machine && member.connected)
         .map(|member| Machine {
@@ -241,7 +300,7 @@ fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine
             always_on: (member.availability)
                 .is_some_and(|classified| classified.availability == Availability::AlwaysOn),
             capacity: member.capacity.clone(),
-            speed: None,
+            speed: origin.and_then(|origin| member.speeds.get(origin).copied()),
         })
         .collect()
 }

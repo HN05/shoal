@@ -26,6 +26,7 @@ fn device(name: &str) -> Member {
         hub: false,
         availability: None,
         capacity: None,
+        speeds: Default::default(),
     }
 }
 
