@@ -16,7 +16,7 @@ use shoal_protocol::hub::{
 };
 use shoal_schedule::placement::{
     Balanced, Local, Placement, Placer, Policy,
-    snapshot::{Capacity, Machine, Request, Snapshot},
+    snapshot::{Capacity, Exclusive, Machine, Request, Snapshot},
     speeds::{self, Medians, Speed},
 };
 use tokio::{sync::watch, time::Instant};
@@ -240,7 +240,9 @@ impl Hub {
     }
 
     /// Give each connected machine among `members` the capacity it last
-    /// reported, and its speeds against the other connected machines.
+    /// reported, its speeds against the other connected machines, and the
+    /// repositories it alone serves by those reports. Read their
+    /// availability first.
     pub(super) fn with_capacity(&self, members: &mut [Member]) {
         let connected = (members.iter()).filter(|member| member.connected);
         let links = connected.map(|member| (&member.id, self.links.token(&member.id)));
@@ -249,6 +251,7 @@ impl Hub {
             member.capacity = self.capacities.of(&member.id, self.links.token(&member.id));
             member.speeds = speeds.remove(&member.id).unwrap_or_default();
         }
+        with_exclusive(members);
     }
 }
 
@@ -256,6 +259,28 @@ impl Hub {
 async fn kept_by(kept: &mut watch::Receiver<u64>, deadline: Instant) -> bool {
     let changed = tokio::time::timeout_at(deadline, kept.changed()).await;
     matches!(changed, Ok(Ok(())))
+}
+
+/// Give each machine among `members` with a capacity the repositories it
+/// alone serves beside the other `always_on` machines with one.
+fn with_exclusive(members: &mut [Member]) {
+    let always_on: Vec<(MemberId, Capacity)> = (members.iter())
+        .filter(|member| always_on(member))
+        .filter_map(|member| Some((member.id.clone(), member.capacity.clone()?)))
+        .collect();
+    for member in members.iter_mut() {
+        let others = (always_on.iter())
+            .filter(|(id, _)| *id != member.id)
+            .map(|(_, capacity)| capacity);
+        member.exclusive =
+            (member.capacity.as_ref()).map(|capacity| Exclusive::among(capacity, others));
+    }
+}
+
+/// Whether `member` is a machine classified `always_on`.
+fn always_on(member: &Member) -> bool {
+    (member.availability)
+        .is_some_and(|classified| classified.availability == Availability::AlwaysOn)
 }
 
 /// The policy that made a placement, and why the placer an `external` one
@@ -297,10 +322,10 @@ fn placed_machines<'a>(
         .map(|member| Machine {
             id: member.id.clone(),
             name: member.name.clone(),
-            always_on: (member.availability)
-                .is_some_and(|classified| classified.availability == Availability::AlwaysOn),
+            always_on: always_on(member),
             capacity: member.capacity.clone(),
             speed: origin.and_then(|origin| member.speeds.get(origin).copied()),
+            exclusive: member.exclusive.clone().unwrap_or_default(),
         })
         .collect()
 }

@@ -69,6 +69,9 @@ pub struct Machine {
     /// run with another machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub speed: Option<Speed>,
+    /// The repositories it alone serves, as the hub reckons them.
+    #[serde(default, skip_serializing_if = "Exclusive::is_empty")]
+    pub exclusive: Exclusive,
 }
 
 /// What a machine reports of its repositories, the agents it can launch
@@ -151,6 +154,47 @@ impl std::ops::AddAssign for Demand {
     }
 }
 
+/// The repositories a machine alone serves: those no other connected
+/// `always_on` machine has registered, with their summed demand.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Exclusive {
+    /// Their origins.
+    pub repositories: Vec<String>,
+    #[serde(flatten)]
+    pub demand: Demand,
+}
+
+impl Exclusive {
+    /// The repositories the machine of `capacity` alone serves beside the
+    /// connected `always_on` machines of `others`.
+    pub fn among<'a>(capacity: &Capacity, others: impl IntoIterator<Item = &'a Capacity>) -> Self {
+        let others: Vec<_> = others.into_iter().collect();
+        let mut exclusive = Self::default();
+        for registered in &capacity.repositories {
+            let origin = &registered.origin;
+            if others
+                .iter()
+                .any(|other| other.registered(origin).is_some())
+            {
+                continue;
+            }
+            exclusive.repositories.push(origin.clone());
+            exclusive.demand += registered.demand;
+        }
+        exclusive
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.repositories.is_empty()
+    }
+
+    /// Whether it leaves out the repository of `origin`, so that a start
+    /// there is work of another repository; a start without one is.
+    pub fn leaves_out(&self, origin: Option<&str>) -> bool {
+        origin.is_none_or(|origin| !self.repositories.iter().any(|served| served == origin))
+    }
+}
+
 impl Request {
     /// Why the start cannot go to `machine`, none when it can. The caller's
     /// machine needs no registered repository: the start found it there.
@@ -205,3 +249,6 @@ impl Capacity {
         (self.repositories.iter()).find(|registered| registered.origin == origin)
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -104,6 +104,7 @@ fn machine(name: &str, availability: Availability) -> Member {
         }),
         capacity: None,
         speeds: Default::default(),
+        exclusive: None,
     }
 }
 

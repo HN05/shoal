@@ -85,6 +85,7 @@ impl Known {
                 availability: None,
                 capacity: None,
                 speeds: Default::default(),
+                exclusive: None,
             })
             .collect();
         let spaces = (self.spaces.into_iter()).map(listed).collect();

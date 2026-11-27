@@ -23,6 +23,7 @@ fn snapshot(agents: &[&str]) -> Snapshot {
                 ..Capacity::default()
             }),
             speed: None,
+            exclusive: Default::default(),
         }],
     }
 }

@@ -257,6 +257,11 @@ pub struct Member {
     /// against the other connected machines that ran it.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub speeds: std::collections::BTreeMap<String, shoal_schedule::placement::speeds::Speed>,
+    /// The repositories a connected machine alone serves among the
+    /// connected `always_on` machines, by what each last reported, which
+    /// placement spares it for; none before it reported.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclusive: Option<shoal_schedule::placement::snapshot::Exclusive>,
 }
 
 impl Member {
@@ -275,6 +280,7 @@ impl Member {
             availability: None,
             capacity: None,
             speeds: Default::default(),
+            exclusive: None,
         }
     }
 

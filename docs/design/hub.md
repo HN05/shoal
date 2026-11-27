@@ -629,6 +629,11 @@ last week. Its agents' time comes from the journal's agent starts and ends,
 whose events name the mode that tells a heavy agent from a light one. Its
 waiting work is its heavy agents waiting in the queue now.
 
+From the reports, the hub reckons which repositories each machine alone
+serves: those no other connected `always_on` machine has registered. The
+other machines then cannot take that work, so placement spares the machine
+for it. An offline machine takes no work, so it shares none.
+
 ### Policies
 
 `[machine.hub] placement` picks the policy, as the

@@ -23,6 +23,7 @@ fn machine(name: &str, availability: Availability, last_seen: UnixTime) -> Membe
         }),
         capacity: None,
         speeds: Default::default(),
+        exclusive: None,
     }
 }
 

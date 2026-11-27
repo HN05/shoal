@@ -537,6 +537,10 @@ shows each machine's `speeds`, by repository origin: its speed in percent of
 the machines it shares runs with, where 200 takes half their time. A machine
 that shares no run with another has no speed for that repository.
 
+`hub ls --json` also shows, as `exclusive`, the repositories each machine
+alone serves, which no other connected `always_on` machine has, with their
+summed demand.
+
 A start that finds the machine full meanwhile waits in its queue there.
 Placement never moves a space once it is created.
 

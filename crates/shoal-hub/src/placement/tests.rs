@@ -8,11 +8,11 @@ use shoal_protocol::hub::{
 };
 use shoal_schedule::placement::{
     Balanced, Placed, Placement, Placer, Reason,
-    snapshot::{Capacity, Lifetime, Machine, Registered, Request, Snapshot},
+    snapshot::{Capacity, Demand, Lifetime, Machine, Registered, Request, Snapshot},
     speeds::Medians,
 };
 
-use super::{among, logged, placed_machines};
+use super::{among, logged, placed_machines, with_exclusive};
 
 const ORIGIN: &str = "example.com/owner/repo";
 
@@ -28,6 +28,7 @@ fn snapshot() -> Snapshot {
             ..Capacity::default()
         }),
         speed: None,
+        exclusive: Default::default(),
     };
     Snapshot {
         request: Request {
@@ -231,4 +232,55 @@ async fn a_heavy_start_goes_to_the_machine_faster_at_its_repository_and_a_light_
     };
     assert_eq!(chosen(true).as_deref(), Some("fast"));
     assert_eq!(chosen(false).as_deref(), Some("slow"));
+}
+
+/// A connected machine `id` of `availability` that registers `repositories`,
+/// each kept busy for a minute.
+fn serving(id: &str, availability: Availability, repositories: &[&str]) -> Member {
+    let busy = Demand {
+        busy_seconds: 60,
+        heavy_waiting: 0,
+    };
+    Member {
+        connected: true,
+        availability: Some(Classified {
+            availability,
+            reason: AvailabilityReason::Set,
+        }),
+        capacity: Some(Capacity {
+            repositories: (repositories.iter())
+                .map(|origin| Registered {
+                    origin: origin.to_string(),
+                    demand: busy,
+                    ..Registered::default()
+                })
+                .collect(),
+            ..Capacity::default()
+        }),
+        ..Member::unlisted(id.to_owned().into())
+    }
+}
+
+#[test]
+fn only_other_always_on_machines_share_a_machine_s_repositories() {
+    let mut members = [
+        serving("mac", Availability::AlwaysOn, &["app", "lib"]),
+        serving("linux", Availability::AlwaysOn, &["lib"]),
+        serving("laptop", Availability::Intermittent, &["app", "web"]),
+    ];
+    with_exclusive(&mut members);
+    let exclusive: Vec<(Vec<String>, u64)> = (members.iter())
+        .map(|member| {
+            let exclusive = member.exclusive.clone().unwrap();
+            (exclusive.repositories, exclusive.demand.busy_seconds)
+        })
+        .collect();
+    assert_eq!(
+        exclusive,
+        [
+            (vec!["app".to_owned()], 60),
+            (vec![], 0),
+            (vec!["web".to_owned()], 60),
+        ]
+    );
 }
