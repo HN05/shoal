@@ -171,19 +171,18 @@ fn cases() -> Vec<Case> {
         case(
             "space_completed",
             "",
-            "INSERT INTO space_completion(space_id,record,cause)
-                VALUES ('work','{\"error\":null}','idle')",
+            "INSERT INTO space_completion(space_id,record,cause) VALUES ('work','{}','idle')",
             vec![json!({"space_id": "work", "kind": "completed", "cause": "idle"})],
         ),
         case(
             "space_completed_again",
-            "INSERT INTO space_completion(space_id,record) VALUES ('work','{\"error\":\"x\"}')",
-            "UPDATE space_completion SET record='{\"error\":null}' WHERE space_id='work'",
+            "INSERT INTO space_completion(space_id,record,error) VALUES ('work','{}','x')",
+            "UPDATE space_completion SET record='{}',error=NULL WHERE space_id='work'",
             vec![json!({"space_id": "work", "kind": "completed", "cause": "manual"})],
         ),
         case(
             "space_undone",
-            "INSERT INTO space_completion(space_id,record) VALUES ('work','{\"error\":null}')",
+            "INSERT INTO space_completion(space_id,record) VALUES ('work','{}')",
             "DELETE FROM space_completion WHERE space_id='work'",
             vec![json!({"space_id": "work", "kind": "undone"})],
         ),

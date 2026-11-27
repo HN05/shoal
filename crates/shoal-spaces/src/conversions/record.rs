@@ -1,13 +1,14 @@
 //! The store side of a conversion: changing a space's kind and swapping its
 //! kind's row.
 use anyhow::{Context as _, Result, bail};
-use rusqlite::{Connection, OptionalExtension, Transaction, params, types::Value as SqlValue};
+use rusqlite::{Connection, OptionalExtension, Transaction, types::Value as SqlValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Map;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::daemon::Records;
+use crate::model::EventCause;
 
 use super::pending::{ConvertedChat, forget};
 use crate::{
@@ -39,10 +40,11 @@ pub struct ChatRow {
     columns: serde_json::Map<String, serde_json::Value>,
 }
 
+/// The completion as JSON, which keeps its every field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct KeptCompletion {
     record: String,
-    cause: String,
+    cause: EventCause,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,11 +135,9 @@ pub fn restore_chat(
     records.forget_command_executions(tx, id)?;
     tx.execute("DELETE FROM workspaces WHERE id=?1", [id])?;
     forget_completion(tx, id)?;
-    if let Some(completion) = &row.space_completion {
-        tx.execute(
-            "INSERT OR REPLACE INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)",
-            params![id, completion.record, completion.cause],
-        )?;
+    if let Some(kept) = &row.space_completion {
+        let completion = serde_json::from_str(&kept.record)?;
+        crate::spaces::done::rows::write(tx, id, &completion, kept.cause)?;
     }
     forget(tx, id)
 }
@@ -205,18 +205,13 @@ fn chat_columns(db: &Connection, id: &SpaceId) -> Result<Map<String, serde_json:
 }
 
 fn kept_completion(db: &Connection, id: &SpaceId) -> Result<Option<KeptCompletion>> {
-    Ok(db
-        .query_row(
-            "SELECT record,cause FROM space_completion WHERE space_id=?1",
-            [id],
-            |row| {
-                Ok(KeptCompletion {
-                    record: row.get(0)?,
-                    cause: row.get(1)?,
-                })
-            },
-        )
-        .optional()?)
+    match crate::spaces::done::rows::read_with_cause(db, id)? {
+        Some((completion, cause)) => Ok(Some(KeptCompletion {
+            record: serde_json::to_string(&completion)?,
+            cause,
+        })),
+        None => Ok(None),
+    }
 }
 
 fn give_back_chat_row(tx: &Transaction<'_>, id: &SpaceId, row: &ChatRow) -> Result<()> {

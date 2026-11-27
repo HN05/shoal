@@ -588,7 +588,7 @@ fn recorded(
     db.prepare(
         "SELECT chats.id,space.repository_id,space.name,
                     space.created_at AS started_at,
-                    space_completion.record AS completion,
+                    space_completion.record,space_completion.error,
                     workspaces.id AS workspace_id,home.name AS workspace_name,
                     workspaces.branch,workspaces.path AS worktree,
                     space.number,space.mode,chats.root_dir,space.narrowing
@@ -634,10 +634,7 @@ fn recorded(
                 agent: None,
                 started_at: row.get("started_at")?,
                 tmp_dir,
-                // An unreadable record fails only the cleanup that reads it,
-                // for that chat alone, rather than every listing of chats.
-                completion: (row.get::<_, Option<String>>("completion")?)
-                    .and_then(|record| serde_json::from_str(&record).ok()),
+                completion: crate::spaces::done::rows::completion(row)?,
             },
         })
     })?

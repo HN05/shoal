@@ -304,7 +304,7 @@ CREATE TABLE space_completion (
     space_id TEXT PRIMARY KEY,
     record TEXT NOT NULL,
     cause TEXT NOT NULL DEFAULT 'manual'
-);
+, error TEXT);
 
 CREATE TABLE space_sleep (
     space_id TEXT PRIMARY KEY,
@@ -1540,11 +1540,6 @@ CREATE TRIGGER space_completed AFTER INSERT ON space_completion BEGIN
     SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
 END;
 
-CREATE TRIGGER space_completed_again AFTER UPDATE OF record ON space_completion
-WHEN json_extract(NEW.record,'$.error') IS NULL BEGIN
-    SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
-END;
-
 CREATE TRIGGER space_undone AFTER DELETE ON space_completion BEGIN
     SELECT journal_append('undone', OLD.space_id, json_object());
 END;
@@ -1711,4 +1706,9 @@ END;
 
 CREATE TRIGGER space_oom_kills_removed AFTER DELETE ON spaces BEGIN
     DELETE FROM agent_oom_kills WHERE space_id=OLD.id;
+END;
+
+CREATE TRIGGER space_completed_again AFTER UPDATE OF record ON space_completion
+WHEN NEW.error IS NULL BEGIN
+    SELECT journal_append('completed', NEW.space_id, json_object('cause', NEW.cause));
 END;

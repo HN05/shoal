@@ -244,6 +244,7 @@ mod alert_attachments;
 mod approval_columns;
 mod checkpoint_columns;
 mod clean_request_columns;
+mod completion_error;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;

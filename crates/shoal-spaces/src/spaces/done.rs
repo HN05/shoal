@@ -309,53 +309,32 @@ struct Persisted {
 }
 
 pub fn recorded(db: &rusqlite::Connection, id: &SpaceId) -> Result<Option<Completion>> {
-    let record: Option<String> = db
-        .query_row(
-            "SELECT record FROM space_completion WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    record
-        .map(|record| serde_json::from_str(&record).map_err(Into::into))
-        .transpose()
+    rows::read(db, id)
 }
 
-/// Returns whether it differs from the recorded one in any field, or that
-/// record is unreadable.
+/// Returns whether it differs from the recorded one in any field.
 pub fn record_completion(
     tx: &rusqlite::Transaction,
     id: &SpaceId,
     completion: &Completion,
 ) -> Result<bool> {
-    let recorded: Option<String> = tx
-        .query_row(
-            "SELECT record FROM space_completion WHERE space_id=?1",
-            [id],
-            |row| row.get(0),
-        )
-        .optional()?;
-    let recorded = recorded.and_then(|record| serde_json::from_str::<Completion>(&record).ok());
-    tx.execute(
-        "INSERT INTO space_completion(space_id,record,cause) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id) DO UPDATE SET record=excluded.record,cause=excluded.cause",
-        rusqlite::params![id, serde_json::to_string(completion)?, EventCause::Manual],
-    )?;
+    let recorded = rows::read(tx, id)?;
+    rows::write(tx, id, completion, EventCause::Manual)?;
     Ok(recorded.as_ref() != Some(completion))
 }
 
-/// An unreadable record stays in place for diagnosis.
 pub fn take_completion(tx: &rusqlite::Transaction, id: &SpaceId) -> Result<Option<Completion>> {
-    let record: Option<String> = tx
+    Ok(tx
         .query_row(
-            "DELETE FROM space_completion WHERE space_id=?1 RETURNING record",
+            &format!(
+                "DELETE FROM space_completion WHERE space_id=?1 RETURNING {}",
+                rows::COLUMNS
+            ),
             [id],
-            |row| row.get(0),
+            rows::completion,
         )
-        .optional()?;
-    Ok(record
-        .map(|record| serde_json::from_str(&record))
-        .transpose()?)
+        .optional()?
+        .flatten())
 }
 
 /// Names the threads it closed and the files it handed back.
@@ -410,6 +389,8 @@ pub fn results_preview(results: &[HandedBack]) -> String {
         more => format!("{} and {more} more", names.join(", ")),
     }
 }
+
+pub(crate) mod rows;
 
 #[cfg(test)]
 mod tests;

@@ -160,11 +160,8 @@ impl Spaces {
         let error = format!("{error:#}");
         self.store
             .run(move |db| {
-                // Keep a malformed record for diagnosis instead of
-                // overwriting it.
                 db.execute(
-                    "UPDATE space_completion SET record=json_set(record, '$.error', ?2)
-                WHERE space_id=?1 AND json_valid(record)",
+                    "UPDATE space_completion SET error=?2 WHERE space_id=?1",
                     rusqlite::params![id, error],
                 )?;
                 Ok(())

@@ -9,6 +9,7 @@ mod alert_attachments;
 mod approval_columns;
 mod checkpoint_columns;
 mod clean_request_columns;
+mod completion_error;
 mod conversion_columns;
 mod github_activity;
 mod hub_numbers;
@@ -24,7 +25,7 @@ mod simulator_columns;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 331;
+pub const SCHEMA_VERSION: i64 = 333;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -222,6 +223,16 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         331,
         include_str!("migrations/0331_removed_space_columns.sql"),
         Some(Step::After(removed_space_columns::move_fields)),
+    ),
+    (
+        332,
+        include_str!("migrations/0332_completion_error.sql"),
+        Some(Step::After(completion_error::move_error)),
+    ),
+    (
+        333,
+        include_str!("migrations/0333_completion_error_trigger.sql"),
+        None,
     ),
 ];
 

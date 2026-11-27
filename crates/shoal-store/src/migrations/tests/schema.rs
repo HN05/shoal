@@ -119,9 +119,12 @@ fn lifecycle_events_commit_and_roll_back_with_state() -> Result<()> {
         "UPDATE workspaces SET state='ready',error=NULL WHERE id='w'",
         [],
     )?;
-    db.execute("INSERT INTO space_completion(space_id,record,cause) VALUES ('w','{\"error\":null}','issue')", [])?;
     db.execute(
-        "UPDATE space_completion SET record='{\"error\":\"retained\"}'",
+        "INSERT INTO space_completion(space_id,record,cause) VALUES ('w','{}','issue')",
+        [],
+    )?;
+    db.execute(
+        "UPDATE space_completion SET record='{}',error='retained'",
         [],
     )?;
     db.execute("DELETE FROM space_completion WHERE space_id='w'", [])?;
