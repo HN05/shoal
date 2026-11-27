@@ -619,8 +619,8 @@ impl Agents {
     }
 
     /// The record at `path` of the agent stopped as `execution` in the space
-    /// `id`, with an OOM kill it marks counted, as the wrapper's pause report
-    /// counts it unless it was lost.
+    /// `id`, with an OOM kill it marks counted and logged, as the wrapper's
+    /// pause report does unless it was lost.
     async fn counted_record(
         &self,
         id: &SpaceId,
@@ -631,7 +631,7 @@ impl Agents {
         if record.oom_kills == 0 {
             return Some(record);
         }
-        self.record_oom_kill(id, execution).await;
+        (self.recover_oom_kill(id, execution, record.agent)).await;
         recovery::Record::load(path).ok().flatten()
     }
 

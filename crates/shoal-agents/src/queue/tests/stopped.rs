@@ -767,8 +767,9 @@ async fn stop_all_selects_running_agents_and_pending_restores() {
     assert_eq!(targets, ["queued", "requested", "running"]);
 }
 
-/// An OOM kill whose pause report the daemon never got counts as its
-/// restore is queued, from the mark its wrapper left in the record.
+/// An OOM kill whose pause report the daemon never got counts, and logs its
+/// stop, as its restore is queued, from the mark its wrapper left in the
+/// record.
 #[tokio::test]
 async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
     let fixture = Fixture::new().await;
@@ -797,4 +798,19 @@ async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
         .unwrap()
         .unwrap();
     assert!(asleep.reason.contains('2'), "{}", asleep.reason);
+    let id = workspace.id.clone();
+    let stopped = (fixture.agents.store)
+        .run(move |db| {
+            let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
+            shoal_daemon_base::events::newest_of(db, &id, &kinds)
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let agent = stopped.event.agent().unwrap();
+    assert_eq!(agent.execution_id, Some("second-agent".into()));
+    assert_eq!(
+        agent.cause,
+        Some(shoal_protocol::stop_causes::StopCause::OomKill)
+    );
 }
