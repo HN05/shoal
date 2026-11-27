@@ -1,7 +1,8 @@
 //! The admission of `shoal run` commands: each waits in the agent queue at
 //! the memory its earlier runs estimate, holds its admission while it runs,
 //! reports what it holds, and once it ends reports what it used, which the
-//! runs table keeps and the space's log shows.
+//! runs table keeps and the space's log shows. The daemon acknowledges that
+//! last report once it has recorded it.
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result, ensure};
@@ -17,6 +18,7 @@ use shoal_protocol::{
     space_names::SpaceSelector,
     time::UnixTime,
 };
+use shoal_store::applied_reports::apply_once;
 use tokio::{
     io::BufReader,
     net::{UnixStream, unix::OwnedReadHalf},
@@ -81,11 +83,16 @@ pub async fn admit_command(
         reports: reports(reader),
         stopped,
     };
-    let ran = link.serve(&agents, admission).await?;
-    if let Some(ran) = ran {
-        agents
-            .record_command(&admitting, request.command, ran)
-            .await;
+    let Some(ran) = link.serve(&agents, admission).await? else {
+        return Ok(());
+    };
+    // Unacknowledged, the wrapper sends the run again, to a daemon that
+    // records it then.
+    if agents
+        .record_command(&admitting, request.command, ran)
+        .await
+    {
+        link.recorded().await?;
     }
     Ok(())
 }
@@ -157,6 +164,11 @@ impl Link {
                 }
             }
         }
+    }
+
+    /// Tell the command that the daemon recorded its run.
+    async fn recorded(&mut self) -> Result<()> {
+        protocol::write(&mut self.writer, &AdmissionFrame::Recorded).await
     }
 }
 
@@ -266,16 +278,23 @@ impl Agents {
     }
 
     /// Keep the run `ran` of `command` for its estimate and the space's
-    /// log, which a failure only logs.
-    async fn record_command(&self, admitting: &Admitting, command: CommandKey, ran: RunReport) {
+    /// log, unless the daemon kept that report before. False when it could
+    /// not keep it, which it logs.
+    async fn record_command(
+        &self,
+        admitting: &Admitting,
+        command: CommandKey,
+        ran: RunReport,
+    ) -> bool {
         let RunReport::Ran {
+            report,
             peak,
             duration_ms,
             whole,
             oom_killed,
         } = ran
         else {
-            return;
+            return false;
         };
         let run = RunUsage {
             ended_at: UnixTime::now(),
@@ -292,19 +311,20 @@ impl Agents {
             oom_killed,
         };
         let (space, repository) = (admitting.space.clone(), admitting.repository.clone());
-        let recorded = self
-            .store
-            .write(move |tx| {
-                record_run(tx, &repository, &RunKey::Command(command), &run)?;
-                record_command_ran(tx, &space, &event)
-            })
+        let record = move |tx: &rusqlite::Connection| {
+            record_run(tx, &repository, &RunKey::Command(command), &run)?;
+            record_command_ran(tx, &space, &event)
+        };
+        let recorded = (self.store)
+            .write(move |tx| apply_once(tx, &report, record))
             .await;
-        if let Err(error) = recorded {
+        if let Err(error) = &recorded {
             crate::log!(
                 "run of a command in {} not recorded: {error:#}",
                 admitting.space
             );
         }
+        recorded.is_ok()
     }
 }
 

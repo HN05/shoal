@@ -32,6 +32,7 @@ use crate::{
     sessions::Origin,
     workers::{Worker, internal_command},
 };
+use shoal_ids::report_ids::ReportId;
 use shoal_protocol::approvals::Undecided;
 use shoal_protocol::protocol::ScopeMemory;
 use shoal_protocol::runs::RunReport;
@@ -75,6 +76,7 @@ pub(super) async fn run_tracked(
 fn ran(outcome: &Outcome, memory: Option<ScopeMemory>, took: Duration) -> RunReport {
     let memory = memory.unwrap_or_default();
     RunReport::Ran {
+        report: ReportId::generate(),
         peak: memory.peak,
         duration_ms: took.as_millis().try_into().unwrap_or(u64::MAX),
         whole: matches!(outcome, Outcome::Exited(_)),

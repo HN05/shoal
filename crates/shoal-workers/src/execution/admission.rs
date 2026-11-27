@@ -1,8 +1,9 @@
 //! A `shoal run` command's admission: the command waits until the daemon
 //! admits it at the memory its earlier runs estimate, telling the user what
 //! it waits for, and holds its admission while it runs, reporting what it
-//! holds and, as it ends, what it used. Protection's stop ends the run,
-//! which runs again once it fits, up to [`STOPS`] times.
+//! holds and, as it ends, what it used, until the daemon says it recorded
+//! that. Protection's stop ends the run, which runs again once it fits, up
+//! to [`STOPS`] times.
 use std::{
     sync::{
         Arc, Mutex,
@@ -35,7 +36,8 @@ pub(super) const STOPS: u32 = 3;
 const USING_INTERVAL: Duration = Duration::from_secs(5);
 
 /// The first and the longest wait before the wrapper asks again for the
-/// admission a daemon lost.
+/// admission a daemon lost, or sends again the end the daemon did not
+/// acknowledge.
 const RETRY_FIRST: Duration = Duration::from_secs(1);
 const RETRY_LAST: Duration = Duration::from_secs(30);
 
@@ -210,9 +212,35 @@ async fn admitted(link: &mut CommandAdmission, key: Option<&CommandKey>) -> Resu
                     eprintln!("shoal: {key} waits for {}", held_by_label(&held));
                 }
             }
-            AdmissionFrame::Waiting { held: None } => {}
+            AdmissionFrame::Waiting { held: None } | AdmissionFrame::Recorded => {}
             AdmissionFrame::Stop { reason } => bail!("{reason}"),
         }
+    }
+}
+
+/// Whether the daemon on `link` says it recorded the run's end before it
+/// hangs up.
+async fn recorded(link: &mut CommandAdmission) -> bool {
+    loop {
+        match link.frame().await {
+            Ok(AdmissionFrame::Recorded) => return true,
+            Ok(_) => {}
+            Err(_) => return false,
+        }
+    }
+}
+
+/// The waits between a wrapper's attempts, each longer than the one before.
+struct Backoff(Duration);
+
+impl Backoff {
+    fn new() -> Self {
+        Self(RETRY_FIRST)
+    }
+
+    async fn wait(&mut self) {
+        tokio::time::sleep(self.0).await;
+        self.0 = (self.0 * 2).min(RETRY_LAST);
     }
 }
 
@@ -299,19 +327,22 @@ impl Holding {
         }
     }
 
-    /// Report the run's end, `ran`, on `link`. When that fails, or there is
-    /// no link, report it on the admission asked for again, for as long as
-    /// the run's completion waits for a restarting daemon.
+    /// Report the run's end, `ran`, on `link` until the daemon says it
+    /// recorded it. When the daemon does not, or there is no link, report it
+    /// again on the admission asked for again, for as long as the run's
+    /// completion waits for a restarting daemon.
     async fn deliver(&self, mut link: Option<CommandAdmission>, ran: RunReport) {
         let delivered = async {
+            let mut backoff = Backoff::new();
             loop {
                 let mut current = match link.take() {
                     Some(link) => link,
                     None => self.reconnect().await,
                 };
-                if current.report(ran.clone()).await.is_ok() {
+                if current.report(ran.clone()).await.is_ok() && recorded(&mut current).await {
                     return;
                 }
+                backoff.wait().await;
             }
         };
         let _ = tokio::time::timeout(timing::REATTACH_EXIT_TIMEOUT, delivered).await;
@@ -321,7 +352,7 @@ impl Holding {
     /// daemon gives it. Each failure, such as a daemon still restarting or
     /// a scope not yet reattached, is tried again after a longer wait.
     async fn reconnect(&self) -> CommandAdmission {
-        let mut wait = RETRY_FIRST;
+        let mut backoff = Backoff::new();
         loop {
             let attempt = async {
                 let mut link = self.request_again().await?;
@@ -331,8 +362,7 @@ impl Holding {
             if let Ok(link) = attempt.await {
                 return link;
             }
-            tokio::time::sleep(wait).await;
-            wait = (wait * 2).min(RETRY_LAST);
+            backoff.wait().await;
         }
     }
 
@@ -366,3 +396,6 @@ pub(super) fn stopped_message(key: &CommandKey, reason: &str, next: AfterStop) -
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

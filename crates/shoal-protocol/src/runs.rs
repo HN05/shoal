@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::HeldBy;
-use shoal_ids::execution_ids::ExecutionId;
+use shoal_ids::{execution_ids::ExecutionId, report_ids::ReportId};
 
 /// What tells the runs of a `shoal run` command apart, whose peaks one
 /// estimate reads: a configured command's name, whatever arguments follow
@@ -53,6 +53,9 @@ pub enum AdmissionFrame {
     /// Protection stopped the command for `reason`: the wrapper stops it,
     /// then asks again to run it once it fits.
     Stop { reason: String },
+    /// The daemon recorded the run's end, which the wrapper sends again
+    /// until it reads this.
+    Recorded,
 }
 
 /// Wrapper → daemon frames about an admitted command.
@@ -66,8 +69,11 @@ pub enum RunReport {
     Using { memory: u64 },
     /// The run ended: the most memory it held, how long it ran, whether it
     /// ran to its own end rather than being stopped or interrupted, and
-    /// whether the kernel's OOM killer killed a process of it.
+    /// whether the kernel's OOM killer killed a process of it. `report`
+    /// names this report, which the daemon records once however often the
+    /// wrapper sends it.
     Ran {
+        report: ReportId,
         peak: u64,
         duration_ms: u64,
         whole: bool,

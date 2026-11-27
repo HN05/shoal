@@ -226,6 +226,9 @@ its execution's, so a long wait holds back no daemon update. After a daemon
 restart it asks again as its running execution's, which only that execution's
 wrapper may.
 
+The wrapper sends the run's end until the daemon says it recorded it, as
+[Reports sent again](daemon.md#reports-sent-again) describes.
+
 A `shoal run` inside an admitted command or a CI job takes no admission of its
 own. The enclosing run's reads count what it holds, and waiting for memory the
 enclosing run holds would never end.

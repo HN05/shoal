@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
-use shoal_daemon_base::run_usage::{RunKey, expected_memory};
+use shoal_daemon_base::{
+    events,
+    run_usage::{RunKey, expected_memory},
+};
 use shoal_protocol::{
+    events::{EventItem, SpaceEvent},
     model::Workspace,
     protocol::{Body, Response},
     runs::{AdmissionFrame, AdmitAs, CommandKey, RunReport},
@@ -27,9 +31,10 @@ impl Wrapper {
         protocol::read_buffered(&mut self.reader).await.unwrap()
     }
 
-    /// Report `ran` and hang up, once the daemon kept it.
+    /// Report `ran` and hang up, once the daemon says it recorded it.
     async fn end(mut self, ran: RunReport) {
         protocol::write(&mut self.writer, &ran).await.unwrap();
+        assert_eq!(self.frame().await, AdmissionFrame::Recorded);
         drop(self.writer);
         self.served.await.unwrap().unwrap();
     }
@@ -85,6 +90,7 @@ async fn request(
 
 fn whole_run(peak: u64) -> RunReport {
     RunReport::Ran {
+        report: "run".into(),
         peak,
         duration_ms: 60_000,
         whole: true,
@@ -112,6 +118,31 @@ async fn a_command_runs_once_admitted_and_its_run_estimates_the_next() {
         .await
         .unwrap();
     assert_eq!(expected, Some(3 * GIB));
+}
+
+/// The `Command ran` entries of the journal.
+async fn command_runs(fixture: &Fixture) -> usize {
+    let page = events::page(&fixture.agents.store, None, None, 1000);
+    let (items, _) = page.await.unwrap();
+    let ran = |item: &&EventItem| match item {
+        EventItem::Event(event) => matches!(event.details.event, SpaceEvent::CommandRan { .. }),
+        _ => false,
+    };
+    items.iter().filter(ran).count()
+}
+
+#[tokio::test]
+async fn a_run_reported_again_is_recorded_once() {
+    let fixture = fixture().await;
+    let workspace = fixture.workspace("api").await;
+    // The second admission is the one a wrapper asks for again when it
+    // read no acknowledgement of the first's report.
+    for _ in 0..2 {
+        let mut wrapper = admit(&fixture, &workspace, true).await;
+        assert_eq!(wrapper.frame().await, AdmissionFrame::Admitted);
+        wrapper.end(whole_run(3 * GIB)).await;
+    }
+    assert_eq!(command_runs(&fixture).await, 1);
 }
 
 #[tokio::test]
