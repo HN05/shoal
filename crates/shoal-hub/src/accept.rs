@@ -185,6 +185,9 @@ impl Hub {
                 ),
             )));
         };
+        // At once, so no placement sends a space the hub keeps for it
+        // elsewhere while it is connected.
+        self.handovers.stays(&member.id);
         // Registered: a revocation now ends this link, so writing the
         // welcome, however long the network takes, holds up no other.
         drop(admission);
@@ -420,7 +423,6 @@ impl Hub {
             member.id.clone(),
             calls.clone(),
         ));
-        self.handovers.stays(&member.id);
         self.hear_awake(&member.id).await;
         tokio::spawn((self.clone()).retire_taken_over(member.id.clone(), calls.clone()));
         let answer = |call| {
