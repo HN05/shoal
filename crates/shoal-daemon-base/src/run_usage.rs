@@ -1,12 +1,13 @@
 //! What the runs Shoal measures used, kept by repository, kind and key, and
 //! the memory a run of a key is expected to use, which admission counts it
 //! at. docs/design/queue.md says why the estimate reads what it does.
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::runs::CommandKey;
+use shoal_schedule::placement::snapshot::DEMAND_WINDOW;
 
 use crate::time::UnixTime;
 
@@ -95,8 +96,30 @@ pub fn record_run(
             run.oom_killed,
         ],
     )?;
-    forget_unread_runs(db, repository, key, run.ended_at - MEDIAN_WINDOW)?;
+    let ended = run.ended_at;
+    forget_unread_runs(
+        db,
+        repository,
+        key,
+        ended - MEDIAN_WINDOW,
+        ended - DEMAND_WINDOW,
+    )?;
     forget_idle_keys(db, run.ended_at - KEPT_FOR)
+}
+
+/// How long the CI jobs and commands of each repository ran, of those that
+/// ended since `since`, which placement reads as the repository's demand.
+pub fn busy_since(db: &Connection, since: UnixTime) -> Result<HashMap<RepositoryId, Duration>> {
+    let mut statement = db.prepare(
+        "SELECT repository_id, SUM(duration) FROM run_usage
+         WHERE ended_at>=?1 AND kind IN ('ci_job','command') AND duration IS NOT NULL
+         GROUP BY repository_id",
+    )?;
+    let rows = statement.query_map([since], |row| {
+        let seconds: i64 = row.get(1)?;
+        Ok((row.get(0)?, Duration::from_secs(seconds.max(0) as u64)))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 /// What a run of `key` in `repository` is expected to use: the
@@ -229,23 +252,32 @@ fn percentile(mut peaks: Vec<f64>) -> f64 {
 }
 
 /// Forget the whole runs of `key` before its latest [`WHOLE_RUNS`], unless
-/// a median from `since` reads them, and its runs cut short once it has a
-/// whole one.
+/// a median from `median_since` reads them, and its runs cut short once it
+/// has a whole one, among those that ended before `demand_since`, from
+/// which placement reads every run as its repository's demand.
 fn forget_unread_runs(
     db: &Connection,
     repository: &RepositoryId,
     key: &RunKey,
-    since: UnixTime,
+    median_since: UnixTime,
+    demand_since: UnixTime,
 ) -> Result<()> {
     db.execute(
         &format!(
-            "DELETE FROM run_usage WHERE {KEY}
+            "DELETE FROM run_usage WHERE {KEY} AND ended_at<?6
              AND rowid NOT IN (SELECT rowid FROM run_usage WHERE {KEY} AND {WHOLE}
                  ORDER BY ended_at DESC, rowid DESC LIMIT ?4)
              AND NOT ({TIMED} AND ended_at>=?5)
              AND ({WHOLE} OR EXISTS (SELECT 1 FROM run_usage WHERE {KEY} AND {WHOLE}))"
         ),
-        params![repository, key.kind(), key.text(), WHOLE_RUNS, since],
+        params![
+            repository,
+            key.kind(),
+            key.text(),
+            WHOLE_RUNS,
+            median_since,
+            demand_since
+        ],
     )?;
     Ok(())
 }

@@ -110,6 +110,7 @@ dependencies = [
     "shoal-forge-types",
     "shoal-ids",
     "shoal-protocol",
+    "shoal-schedule",
     "shoal-store",
 ]
 

@@ -1,4 +1,6 @@
 //! What a placement policy reads, as the hub builds it.
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use shoal_ids::member_ids::MemberId;
 use shoal_states::states;
@@ -117,6 +119,9 @@ pub struct Registered {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub agents: Vec<String>,
 }
+
+/// How far back the demand a machine reports reaches.
+pub const DEMAND_WINDOW: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
 impl Request {
     /// Why the start cannot go to `machine`, none when it can. The caller's

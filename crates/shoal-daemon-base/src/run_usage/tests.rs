@@ -46,6 +46,12 @@ fn estimate(db: &Connection) -> Option<u64> {
     expected_memory(db, &repository(), &job("rust")).unwrap()
 }
 
+/// The seconds of placement's demand window, past which runs the estimate
+/// does not read go.
+fn window() -> i64 {
+    DEMAND_WINDOW.as_secs() as i64
+}
+
 fn kept_runs(db: &Connection) -> i64 {
     (db.query_row("SELECT count(*) FROM run_usage", [], |row| row.get(0))).unwrap()
 }
@@ -92,7 +98,7 @@ fn runs_cut_short_bound_the_estimate_only_until_a_whole_run() {
     record(&db, [cut_short(1, 6 * GIB), cut_short(2, 4 * GIB)]);
     assert_eq!(estimate(&db), Some(6 * GIB));
 
-    record(&db, [run(3, 9 * GIB), cut_short(4, GIB)]);
+    record(&db, [run(window() + 3, 9 * GIB)]);
     assert_eq!(estimate(&db), Some(9 * GIB));
     assert_eq!(kept_runs(&db), 1, "the runs cut short are forgotten");
 }
@@ -190,4 +196,18 @@ fn a_keys_median_reads_every_whole_run_of_the_window_beyond_those_an_estimate_re
     assert_eq!(medians[0].seconds, 600);
     // Runs before the window go once an estimate reads them no more.
     assert_eq!(kept_runs(&db), 100);
+}
+
+#[test]
+fn placement_reads_every_run_of_its_window_beside_the_estimate_s() {
+    let db = database();
+    record(&db, (1..=40).map(|n| run(n, GIB)));
+    assert_eq!(kept_runs(&db), 40);
+    record_run(&db, &repository(), &RunKey::SeedBuild, &run(41, GIB)).unwrap();
+
+    let busy = busy_since(&db, UnixTime::from_seconds(11)).unwrap();
+    assert_eq!(
+        busy.get(&repository()),
+        Some(&Duration::from_secs(30 * 600))
+    );
 }
