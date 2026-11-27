@@ -9,7 +9,6 @@ use std::{
 };
 
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::agent::Agent;
 use shoal_protocol::hub::availability::Classified;
 use tokio::sync::Notify;
 
@@ -31,8 +30,6 @@ struct Open {
     /// The availability the hub last told the member it has, once it
     /// described itself.
     told: Option<Classified>,
-    /// The agent tools the member last said it has.
-    agents: Vec<Agent>,
     /// The kinds of shared item whose copies the member read on this link,
     /// so it receives the copies of them others change.
     shares: HashSet<&'static str>,
@@ -94,7 +91,6 @@ impl Links {
             stop: stop.clone(),
             calls: None,
             told: None,
-            agents: Vec::new(),
             shares: HashSet::new(),
         };
         open.insert(member.clone(), registered);
@@ -135,20 +131,6 @@ impl Links {
         if let Some(open) = self.open.lock().unwrap().get_mut(member) {
             open.told = Some(availability);
         }
-    }
-
-    /// Remember the agent tools `member`, whose link is open, says it has.
-    pub fn describe_agents(&self, member: &MemberId, agents: Vec<Agent>) {
-        if let Some(open) = self.open.lock().unwrap().get_mut(member) {
-            open.agents = agents;
-        }
-    }
-
-    /// The agent tools `member` said it has, while its link is open.
-    pub fn agents(&self, member: &MemberId) -> Vec<Agent> {
-        let open = self.open.lock().unwrap();
-        open.get(member)
-            .map_or_else(Vec::new, |open| open.agents.clone())
     }
 
     /// Send `member`, whose link is open, the copies of the shared items of

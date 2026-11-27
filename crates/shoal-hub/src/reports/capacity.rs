@@ -70,21 +70,17 @@ impl Hub {
     }
 
     /// This machine's capacity now: its queue's room as `daemon` reads it,
-    /// with the origins of its repositories.
+    /// with its repositories and the agents it can launch.
     async fn measure_capacity(
         &self,
         daemon: &dyn Daemon,
         origins: &mut Origins,
     ) -> Result<Capacity> {
         let room = daemon.queue_room().await?;
-        let mut repositories = Vec::new();
-        for repository in daemon.repositories().await? {
-            repositories.extend(origins.of(&repository).await.origin);
-        }
-        repositories.sort();
-        repositories.dedup();
+        let launchable = self.launchable(daemon, origins).await?;
         Ok(Capacity {
-            repositories,
+            repositories: launchable.repositories,
+            agents: launchable.agents,
             ..room
         })
     }

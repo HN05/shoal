@@ -15,6 +15,7 @@ use shoal_daemon_base::{
     gates::Gates,
     notifications::{Coordinators, Notifications, Source},
 };
+use shoal_ids::member_ids::MemberId;
 use shoal_ids::repository_ids::RepositoryId;
 use shoal_ids::space_ids::{SpaceId, SpaceNumber};
 use shoal_protocol::{
@@ -64,6 +65,20 @@ pub(crate) async fn hub(root: &tempfile::TempDir, config: Config) -> Arc<Hub> {
         Paths::for_test(root.path()),
         Arc::new(StandInRecords),
     ))
+}
+
+/// Keep a report from the machine `member` that it can launch `agents`
+/// outside a repository, with no room for lasting work.
+pub(crate) fn describe(hub: &Hub, member: &MemberId, agents: &[&str]) {
+    let capacity = Capacity {
+        agents: agents.iter().map(|agent| (*agent).to_owned()).collect(),
+        ..Capacity::default()
+    };
+    let report = shoal_protocol::hub::directory::Report::Changes {
+        changed: Vec::new(),
+        removed: Vec::new(),
+    };
+    hub.capacities.keep(member, &report, Some(capacity));
 }
 
 /// A daemon with no spaces, agents, approvals or app store, and the
@@ -257,6 +272,26 @@ impl Spaces for StandIn {
         let registered = self.registered().into_iter();
         let repositories = registered.map(|r| r.repository).collect();
         Box::pin(async { Ok(repositories) })
+    }
+
+    /// Under the default global config, with the repository's local config
+    /// as its layer.
+    fn repository_settings<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<crate::config::Effective>> {
+        let settings = self.local_config(id).and_then(|text| {
+            let local_config = match text {
+                Some(text) => crate::config::repo::parse(&text)?,
+                None => Default::default(),
+            };
+            let layers = crate::config::repo::ConfigLayers {
+                local_config,
+                ..Default::default()
+            };
+            Config::from_toml("")?.resolve(&layers)
+        });
+        Box::pin(async { settings })
     }
 
     fn acts_on_global_config(&self) -> bool {

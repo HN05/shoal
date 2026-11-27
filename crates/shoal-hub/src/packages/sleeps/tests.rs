@@ -102,7 +102,6 @@ fn machine(name: &str, availability: Availability) -> Member {
             availability,
             reason: AvailabilityReason::Set,
         }),
-        agents: Vec::new(),
         capacity: None,
     }
 }

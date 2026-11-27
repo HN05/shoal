@@ -89,9 +89,6 @@ impl fmt::Display for Classified {
 pub struct Description {
     pub battery: bool,
     pub availability: AvailabilitySetting,
-    /// The agent tools it has installed.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub agents: Vec<crate::agent::Agent>,
 }
 
 #[cfg(test)]

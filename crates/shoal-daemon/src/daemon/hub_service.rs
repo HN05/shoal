@@ -116,6 +116,13 @@ impl Spaces for Manager {
         Box::pin(self.repositories.list())
     }
 
+    fn repository_settings<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<crate::config::Effective>> {
+        Box::pin(self.repositories.repository_settings(id))
+    }
+
     fn acts_on_global_config(&self) -> bool {
         Manager::acts_on_global_config(self)
     }

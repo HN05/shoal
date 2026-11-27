@@ -15,6 +15,7 @@ use tokio::{sync::watch, time::Instant};
 use super::session::Calls;
 use crate::{Hub, daemon::Daemon, directory::Held, log};
 
+mod agents;
 mod capacity;
 mod summaries;
 

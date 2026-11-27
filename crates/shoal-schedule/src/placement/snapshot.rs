@@ -59,21 +59,24 @@ pub struct Machine {
     pub name: String,
     /// Whether it stays reachable, so lasting work may count on it.
     pub always_on: bool,
-    /// The agent tools it has installed.
-    pub agents: Vec<String>,
-    /// What it last reported of its repositories and queue; none before
-    /// its first report.
+    /// What it last reported of its repositories, agents and queue; none
+    /// before its first report.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capacity: Option<Capacity>,
 }
 
-/// What a machine reports of its repositories and its queue's room.
+/// What a machine reports of its repositories, the agents it can launch
+/// and its queue's room.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capacity {
-    /// The origins of its registered repositories, by the key machines
-    /// match repositories by.
+    /// Its registered repositories, each with the agents it can launch
+    /// there.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub repositories: Vec<String>,
+    pub repositories: Vec<Registered>,
+    /// The agents it can launch outside a repository, under its global and
+    /// shared config.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<String>,
     /// Its `max_heavy_agents` when fixed, `0` for a machine that runs no
     /// heavy agents; none under dynamic admission.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -101,19 +104,31 @@ pub struct Capacity {
     pub paused: Option<UnixTime>,
 }
 
+/// A repository a machine registered.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Registered {
+    /// Its origin, by the key machines match repositories by.
+    pub origin: String,
+    /// The agents the machine can launch under the repository's settings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<String>,
+}
+
 impl Request {
     /// Why the start cannot go to `machine`, none when it can. The caller's
     /// machine needs no registered repository: the start found it there.
     pub fn unfit(&self, machine: &Machine) -> Option<SkippedBy> {
         let caller = machine.id == self.caller;
-        let capacity = machine.capacity.as_ref();
-        if capacity.is_some_and(|capacity| capacity.paused.is_some()) {
+        let Some(capacity) = machine.capacity.as_ref() else {
+            return Some(SkippedBy::Undescribed);
+        };
+        if capacity.paused.is_some() {
             Some(SkippedBy::Paused)
-        } else if capacity.is_some_and(|capacity| capacity.away) {
+        } else if capacity.away {
             Some(SkippedBy::Away)
         } else if !caller && !machine.has_repository(self.origin.as_deref()) {
             Some(SkippedBy::NoRepository)
-        } else if !machine.has_agent(&self.agent) {
+        } else if !machine.launches(self.origin.as_deref(), &self.agent) {
             Some(SkippedBy::NoAgent)
         } else {
             None
@@ -123,15 +138,24 @@ impl Request {
 
 impl Machine {
     pub fn has_repository(&self, origin: Option<&str>) -> bool {
-        let Some(origin) = origin else {
-            return true;
-        };
-        (self.capacity.iter())
-            .flat_map(|capacity| &capacity.repositories)
-            .any(|registered| registered == origin)
+        origin.is_none_or(|origin| self.registered(origin).is_some())
     }
 
-    pub fn has_agent(&self, agent: &str) -> bool {
-        self.agents.iter().any(|installed| installed == agent)
+    /// Whether it can launch `agent` in the repository of `origin`, or
+    /// outside one. A repository it has not reported, as the caller's may
+    /// be, goes by the agents it launches outside one.
+    pub fn launches(&self, origin: Option<&str>, agent: &str) -> bool {
+        let Some(capacity) = &self.capacity else {
+            return false;
+        };
+        let registered = origin.and_then(|origin| self.registered(origin));
+        let agents = registered.map_or(&capacity.agents, |registered| &registered.agents);
+        agents.iter().any(|launched| launched == agent)
+    }
+
+    fn registered(&self, origin: &str) -> Option<&Registered> {
+        (self.capacity.iter())
+            .flat_map(|capacity| &capacity.repositories)
+            .find(|registered| registered.origin == origin)
     }
 }

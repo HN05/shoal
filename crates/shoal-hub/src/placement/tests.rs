@@ -13,8 +13,10 @@ fn snapshot() -> Snapshot {
         id: id.into(),
         name: id.into(),
         always_on: true,
-        agents: vec!["claude".into()],
-        capacity: Some(Capacity::default()),
+        capacity: Some(Capacity {
+            agents: vec!["claude".into()],
+            ..Capacity::default()
+        }),
     };
     Snapshot {
         request: Request {
@@ -65,6 +67,7 @@ async fn the_registered_placer_decides_under_the_external_policy() {
     let config = Config::from_toml("[machine.hub]\nplacement = \"external\"\n").unwrap();
     let hub = stand_in::hub(&root, config).await;
     let own = hub.own_member().await.unwrap();
+    stand_in::describe(&hub, &own, &["claude"]);
     let mut request = snapshot().request;
     request.caller = own.clone();
     let mut registration = hub.placers.register();

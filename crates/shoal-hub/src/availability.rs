@@ -5,7 +5,6 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 use anyhow::{Result, anyhow};
 use rusqlite::Transaction;
 use shoal_ids::member_ids::MemberId;
-use shoal_protocol::agent::Agent;
 use shoal_protocol::hub::{
     MemberKind,
     availability::{
@@ -177,8 +176,6 @@ impl Hub {
         description: Description,
     ) -> Result<Classified> {
         let id = member.clone();
-        self.links
-            .describe_agents(member, description.agents.clone());
         let classified = self
             .store
             .write(move |tx| {
@@ -225,21 +222,6 @@ impl Hub {
         (self.store)
             .read(move |tx| of_member(tx, &own, UnixTime::now()))
             .await
-    }
-
-    /// Give each connected machine among `members` the agent tools it said
-    /// it has, which the hub's own machine reads here.
-    pub(super) async fn with_agent_tools(
-        &self,
-        members: &mut [shoal_protocol::hub::Member],
-    ) -> Result<()> {
-        for member in members {
-            member.agents = match member.hub {
-                true => self.installed_agents().await?,
-                false => self.links.agents(&member.id),
-            };
-        }
-        Ok(())
     }
 
     /// Give each machine among `members` its availability.
@@ -289,24 +271,13 @@ impl Hub {
         }
     }
 
-    /// What this machine says of itself: whether it has a battery, its
-    /// `[machine] availability` and the agent tools it has installed.
+    /// What this machine says of itself: whether it has a battery and its
+    /// `[machine] availability`.
     pub(super) async fn own_description(&self) -> Result<Description> {
         Ok(Description {
             battery: battery::present(),
             availability: self.config.current().machine.availability,
-            agents: self.installed_agents().await?,
         })
-    }
-
-    /// The agent tools this machine has installed, as the global config
-    /// names them and its daemon's `PATH` finds their programs.
-    async fn installed_agents(&self) -> Result<Vec<Agent>> {
-        let layers = crate::config::repo::ConfigLayers::default();
-        let settings = (self.config.current()).resolve_with_template_files(&layers, &self.paths)?;
-        let path = std::env::var_os("PATH").unwrap_or_default();
-        let found = move || crate::agents::installed_agents(&settings, &path);
-        Ok(tokio::task::spawn_blocking(found).await?)
     }
 
     /// Describe this machine to the hub as `description` says, keeping the

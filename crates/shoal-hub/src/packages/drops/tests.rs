@@ -21,7 +21,6 @@ fn machine(name: &str, availability: Availability, last_seen: UnixTime) -> Membe
             availability,
             reason: AvailabilityReason::Set,
         }),
-        agents: Vec::new(),
         capacity: None,
     }
 }

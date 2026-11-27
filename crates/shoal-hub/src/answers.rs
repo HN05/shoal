@@ -341,7 +341,6 @@ impl Hub {
             }
         }
         self.with_availability(&mut members).await?;
-        self.with_agent_tools(&mut members).await?;
         self.with_capacity(&mut members);
         Ok(Overview {
             listener: self.hub_listener(daemon),

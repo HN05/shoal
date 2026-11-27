@@ -40,6 +40,7 @@ impl Agents {
         let occupied: Vec<_> = slots.into_iter().map(|slot| slot.repository).collect();
         Ok(Capacity {
             repositories: Vec::new(),
+            agents: Vec::new(),
             max_heavy_agents: config.machine.max_heavy_agents.fixed(),
             heavy_free: heavy_free(&occupied, &limits),
             light_free: light_free(&occupied, &limits),

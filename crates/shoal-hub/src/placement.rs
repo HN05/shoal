@@ -185,9 +185,6 @@ fn placed_machines<'a>(members: impl Iterator<Item = &'a Member>) -> Vec<Machine
             name: member.name.clone(),
             always_on: (member.availability)
                 .is_some_and(|classified| classified.availability == Availability::AlwaysOn),
-            agents: (member.agents.iter())
-                .map(|agent| agent.name().to_owned())
-                .collect(),
             capacity: member.capacity.clone(),
         })
         .collect()

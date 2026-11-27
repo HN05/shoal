@@ -579,9 +579,15 @@ every 15 seconds, and at once as a pause starts or ends. It sends a report
 when the capacity changes enough to place by. The hub places from the latest
 report, never a live query, and keeps it in memory alone.
 
-A machine also tells the hub which agent tools it has installed, when its link
-opens and as its config changes them. The hub keeps that only for an open
-link, since only a connected machine starts work.
+The report lists the agents the machine can launch in each of its
+repositories, under that repository's settings as a launch there resolves
+them, and those it can launch outside a repository. The machine works them
+out at each measurement, so an agent tool installed on the daemon's `PATH`
+shows in the next report. The hub matches agents by name alone: the machine
+that runs a start launches that name under its own definition.
+
+A connected machine that has not reported yet is `undescribed`. Placement
+skips it as such, never as lacking the repository or the agent.
 
 ### Policies
 

@@ -1,7 +1,7 @@
 use super::Balanced;
 use crate::placement::{
     Placer, Reason, Skipped, SkippedBy,
-    snapshot::{Capacity, Lifetime, Machine, Request, Snapshot},
+    snapshot::{Capacity, Lifetime, Machine, Registered, Request, Snapshot},
 };
 
 const ORIGIN: &str = "example.com/owner/repo";
@@ -19,17 +19,25 @@ fn request(heavy: bool) -> Request {
     }
 }
 
-/// A machine with the repository and the agent tool, of `capacity`.
+/// A machine that launches claude in the repository and outside one, of
+/// `capacity`.
 fn machine(id: &str, always_on: bool, capacity: Capacity) -> Machine {
     Machine {
         id: id.into(),
         name: id.into(),
         always_on,
-        agents: vec!["claude".into()],
         capacity: Some(Capacity {
-            repositories: vec![ORIGIN.into()],
+            repositories: vec![registered(&["claude"])],
+            agents: vec!["claude".into()],
             ..capacity
         }),
+    }
+}
+
+fn registered(agents: &[&str]) -> Registered {
+    Registered {
+        origin: ORIGIN.into(),
+        agents: agents.iter().map(|agent| (*agent).into()).collect(),
     }
 }
 
@@ -122,7 +130,10 @@ fn a_lasting_start_stays_on_the_callers_machine_without_an_always_on_machine_wit
     // A caller skipped for its agent tool, which the hub may not know of,
     // leaves no machine to go to rather than one without room.
     let mut machines = machines.clone();
-    machines[1].agents.clear();
+    (machines[1].capacity.as_mut().into_iter()).for_each(|capacity| {
+        capacity.repositories = vec![registered(&[])];
+        capacity.agents.clear();
+    });
     assert_eq!(ranked(request(true), machines), []);
 }
 
@@ -203,8 +214,13 @@ fn a_start_skips_machines_without_its_repository_or_agent_tool() {
     let mut elsewhere = machine("elsewhere", true, capacity(1, 64, 0));
     (elsewhere.capacity.as_mut().into_iter()).for_each(|capacity| capacity.repositories.clear());
     let mut codex = machine("codex", true, capacity(1, 64, 0));
-    codex.agents = vec!["codex".into()];
-    let machines = vec![laptop(), elsewhere, codex];
+    (codex.capacity.as_mut().into_iter()).for_each(|capacity| {
+        capacity.repositories = vec![registered(&["codex"])];
+        capacity.agents = vec!["codex".into()];
+    });
+    let mut undescribed = machine("undescribed", true, capacity(1, 64, 0));
+    undescribed.capacity = None;
+    let machines = vec![laptop(), elsewhere, codex, undescribed];
     let placement = Balanced.place(&Snapshot {
         request: request(true),
         machines: machines.clone(),
@@ -217,7 +233,8 @@ fn a_start_skips_machines_without_its_repository_or_agent_tool() {
         placement.skipped,
         [
             skipped("elsewhere", SkippedBy::NoRepository),
-            skipped("codex", SkippedBy::NoAgent)
+            skipped("codex", SkippedBy::NoAgent),
+            skipped("undescribed", SkippedBy::Undescribed),
         ]
     );
     // The caller's machine has the repository the start found there.
@@ -235,6 +252,28 @@ fn a_start_skips_machines_without_its_repository_or_agent_tool() {
     let mut chat = request(true);
     chat.origin = None;
     assert_eq!(ranked(chat, machines)[0].0, "elsewhere");
+}
+
+#[test]
+fn a_machine_launches_the_agents_of_each_repository_by_its_settings() {
+    let mut server = machine("server", true, capacity(1, 64, 0));
+    (server.capacity.as_mut().into_iter())
+        .for_each(|capacity| capacity.repositories = vec![registered(&["claude", "reviewer"])]);
+    let mut start = request(true);
+    start.agent = "reviewer".into();
+    let machines = vec![laptop(), server];
+    assert_eq!(ranked(start.clone(), machines.clone())[0].0, "server");
+    // Outside the repository, its config defines no such agent.
+    start.origin = None;
+    let placement = Balanced.place(&Snapshot {
+        request: start,
+        machines,
+    });
+    let skipped: Vec<_> = (placement.skipped.iter())
+        .map(|skipped| (skipped.machine.to_string(), skipped.why))
+        .collect();
+    let no_agent = |id: &str| (id.to_owned(), SkippedBy::NoAgent);
+    assert_eq!(skipped, [no_agent("laptop"), no_agent("server")]);
 }
 
 #[test]

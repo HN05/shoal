@@ -3,7 +3,7 @@ use shoal_schedule::placement::{Placed, Placement, Reason, snapshot::Lifetime};
 use super::*;
 use crate::{
     packages::tests::{hub, kept, report},
-    stand_in::{HANG, StandIn},
+    stand_in::{self, HANG, StandIn},
     streams::Incoming,
     test_support::linked,
     time::UnixTime,
@@ -65,6 +65,7 @@ async fn the_hub_keeps_a_handed_over_package_and_answers_where_its_space_goes() 
     let hub = hub(&root, config, &["laptop"]).await;
     report(&hub, "laptop", &["plan"]).await;
     let own = hub.own_member().await.unwrap();
+    stand_in::describe(&hub, &own, &["claude"]);
     let mut registration = hub.placers.register();
     let answering = async {
         let asked = registration.asked.recv().await.unwrap();

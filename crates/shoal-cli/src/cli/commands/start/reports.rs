@@ -119,7 +119,8 @@ fn unanswered_why(unanswered: Unanswered) -> &'static str {
 fn skipped_why(why: SkippedBy) -> &'static str {
     match why {
         SkippedBy::NoRepository => "repository not registered; `shoal repo add` there registers it",
-        SkippedBy::NoAgent => "agent tool not installed",
+        SkippedBy::NoAgent => "cannot launch the agent there",
+        SkippedBy::Undescribed => "has not described itself yet",
         SkippedBy::Away => "its user is away; it starts nothing new until they return",
         SkippedBy::Paused => "paused; it starts nothing new until `shoal unpause` there",
     }

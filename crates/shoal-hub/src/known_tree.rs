@@ -83,7 +83,6 @@ impl Known {
                 connected: false,
                 hub: false,
                 availability: None,
-                agents: Vec::new(),
                 capacity: None,
             })
             .collect();

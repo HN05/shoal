@@ -116,7 +116,6 @@ fn member(id: &str, name: &str, kind: super::super::MemberKind) -> Member {
         connected: true,
         hub: false,
         availability: None,
-        agents: Vec::new(),
         capacity: None,
     }
 }

@@ -79,6 +79,12 @@ pub trait Spaces: Send + Sync {
 
     fn repositories(&self) -> BoxFuture<'_, Result<Vec<Repository>>>;
 
+    /// The settings a launch in the repository `id` starts under.
+    fn repository_settings<'a>(
+        &'a self,
+        id: &'a RepositoryId,
+    ) -> BoxFuture<'a, Result<crate::config::Effective>>;
+
     /// Whether this daemon acts on what the global config sets up for the
     /// machine, such as its hub role.
     fn acts_on_global_config(&self) -> bool;

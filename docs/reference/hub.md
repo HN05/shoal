@@ -112,9 +112,9 @@ overrides the route a machine joined by.
 The hub gives each machine and device an ID at pairing. `shoal hub ls` lists
 them with their kind, name, Shoal version and when each was last seen. For
 each machine, it shows its [availability](#availability). For a connected
-machine, it also shows the agent tools it has installed, `agents` in
-`--json`, and what it last reported for [placement](#placement), `capacity`
-in `--json`. Anyone lists the members.
+machine, it also shows what it last reported for [placement](#placement),
+with the agents it can launch, `capacity` in `--json`. Anyone lists the
+members.
 
 `shoal hub revoke` revokes a member by the ID or name `hub ls` shows.
 `shoal hub leave` revokes this machine's own credential. When it cannot reach
@@ -512,7 +512,8 @@ A start stays on your machine when it needs your machine:
 The hub places a start from what each connected machine last reported with
 its spaces, which `hub ls --json` shows as `capacity`:
 
-- the origins of its repositories;
+- the origins of its repositories, each with the agents it can launch there,
+  and the agents it can launch outside a repository;
 - its `max_heavy_agents`, and the heavy agents its admission would start now;
 - the memory new work may use;
 - the heavy agents waiting in its queue;
@@ -528,8 +529,9 @@ start with `--disposable` is disposable, and any other is lasting. It ranks
 the machines by these rules, each ordering only the machines the rules before
 it rank equal:
 
-1. The machine has the start's repository and agent tool, and its user has
-   neither walked away nor paused it. Lasting work goes only to an
+1. The machine has the start's repository, can launch its agent there and
+   has reported since its link opened, and its user has neither walked away
+   nor paused it. Lasting work goes only to an
    `always_on` machine with room, and disposable work to any machine with
    room. Without one, the start stays on your machine.
 2. Disposable work goes to an `intermittent` machine first, leaving the room
@@ -543,8 +545,9 @@ it rank equal:
 
 `shoal start` names the machine with the policy's reason before it attaches
 your terminal. Under `balanced`, the reason is the first rule that put it
-ahead. It also names each connected machine it skipped, for lacking the
-repository or the agent tool, or for a user who walked away or paused it. `--json` gives these as
+ahead. It also names each connected machine it skipped: for lacking the
+repository, for an agent it cannot launch there, for having not reported yet,
+or for a user who walked away or paused it. `--json` gives these as
 `placement`, in a chat's start and as a last document after a workspace's.
 
 A start stays on your machine, with a warning, when the hub cannot be asked.
@@ -565,8 +568,9 @@ The hub places a start by `balanced` instead, and the start names it, when:
 - the placer does not answer in the time the
   [configuration reference](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
   gives;
-- it answers with a machine that is not connected or lacks the start's
-  repository or agent tool, since placement never clones a repository.
+- it answers with a machine that is not connected, lacks the start's
+  repository or cannot launch its agent there, since placement never clones
+  a repository.
 
 ## The space tree across machines
 

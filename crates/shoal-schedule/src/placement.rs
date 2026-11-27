@@ -96,8 +96,11 @@ states! {
     SkippedBy {
         /// It has not registered the start's repository.
         NoRepository => "no_repository",
-        /// It has not installed the start's agent tool.
+        /// It cannot launch the start's agent in the start's repository.
         NoAgent => "no_agent",
+        /// It has not reported its repositories and agents since its link
+        /// opened.
+        Undescribed => "undescribed",
         /// Its user walked away, and it admits nothing new.
         Away => "away",
         /// Its user paused it, and it admits nothing new.
