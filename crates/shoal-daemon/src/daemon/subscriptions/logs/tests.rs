@@ -1,20 +1,21 @@
 use super::*;
 use crate::daemon::scope::Access;
 use crate::daemon::{events::EventKind, test_support::manager};
+use shoal_store::test_support::seeds;
 
 mod journal;
 
-/// Live workspaces `plan` and `other`, and the journal of `fix`, which
-/// was below `plan` until its removal: created, an agent that worked and
-/// exited, then removed, recorded in `plan`'s log too.
+/// Record the live workspaces `plan` and `other`, and the journal of `fix`,
+/// which was below `plan` until its removal: created, an agent that worked
+/// and exited, then removed, recorded in `plan`'s log too.
+fn journal(db: &mut rusqlite::Connection) -> anyhow::Result<()> {
+    seeds::ready_workspace(db, "repo", "plan", "plan")?;
+    seeds::ready_workspace(db, "repo", "other", "other")?;
+    Ok(db.execute_batch(JOURNAL)?)
+}
+
+/// What [`journal`] records after the live workspaces.
 const JOURNAL: &str = "
-    INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-    BEGIN;
-    INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-        VALUES ('plan','/plan','plan','ready','abc','/admin'),('other','/other','other','ready','abc','/admin');
-    INSERT INTO spaces(id,kind,repository_id,name)
-        VALUES ('plan','workspace','repo','plan'),('other','workspace','repo','other');
-    COMMIT;
     INSERT INTO space_events(space_id,kind,bulk,record) VALUES
         ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
             'name','fix','path','/fix')),
@@ -57,11 +58,7 @@ fn caller(space: &str) -> Caller {
 #[tokio::test]
 async fn a_removed_space_s_log_reads_by_its_id_with_the_default_filter() {
     let (_temp, manager) = manager().await;
-    manager
-        .store
-        .run(|db| Ok(db.execute_batch(JOURNAL)?))
-        .await
-        .unwrap();
+    manager.store.run(journal).await.unwrap();
     let fix = SpaceSelector::from("fix-id");
     // A removed space's name selects nothing.
     assert!(
@@ -108,11 +105,7 @@ async fn a_removed_space_s_log_reads_by_its_id_with_the_default_filter() {
 #[tokio::test]
 async fn a_scoped_caller_reads_its_own_log_and_those_of_spaces_below_it() {
     let (_temp, manager) = manager().await;
-    manager
-        .store
-        .run(|db| Ok(db.execute_batch(JOURNAL)?))
-        .await
-        .unwrap();
+    manager.store.run(journal).await.unwrap();
     let narrowed = |caller_space: &str, space: &str| {
         let manager = manager.clone();
         let (caller, mut selector) = (caller(caller_space), Some(SpaceSelector::from(space)));

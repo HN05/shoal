@@ -4,11 +4,13 @@ use crate::daemon::test_support::{manager, repository};
 use crate::model::{Repository, Workspace};
 use crate::protocol::operations::{OperationKind, OperationSpec, Preparation};
 use crate::protocol::{ErrorCode, Work, WorkPlace};
+use crate::state::ExecutionState;
 use crate::state::WorkspaceState;
 use futures_util::FutureExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::seeds;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -23,18 +25,15 @@ async fn restart_waits_for_background_work_and_executions_that_cannot_reattach()
     drop(quiet);
     // A restart leaves disconnected records as they are, including
     // commands from releases before reattachment.
-    manager.store.run(|db| {
-            db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/test','/test',0);
-                 INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES ('workspace','workspace','repo','work');
-                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES ('workspace','/test/work','work','ready','abc','/admin');
-                 INSERT INTO executions(id,space_id,state) VALUES ('legacy','workspace','running');
-                 INSERT INTO executions(id,space_id,state) VALUES ('unknown','workspace','unknown');"
-            )?;
-            Ok(())
-        }).await.unwrap();
+    manager
+        .store
+        .run(|db| {
+            let workspace = seeds::ready_workspace(db, "repo", "workspace", "work")?;
+            seeds::bare_execution(db, "legacy", &workspace.id, ExecutionState::Running)?;
+            seeds::bare_execution(db, "unknown", &workspace.id, ExecutionState::Unknown)
+        })
+        .await
+        .unwrap();
     assert!(quiesce(&manager).is_some());
     // Connected setup and merges stop with the daemon.
     manager

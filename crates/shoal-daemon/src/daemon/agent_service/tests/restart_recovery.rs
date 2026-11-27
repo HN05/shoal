@@ -1,7 +1,7 @@
 //! Daemon interruptions of stopped agents: a restart quarantines their
 //! executions, and startup reconciles them from their recovery records.
+use crate::daemon::manager::Manager;
 use crate::daemon::test_support::overload::{blocked, executions, fixture, record, restart};
-use crate::daemon::{manager::Manager, store};
 use crate::{
     execution::recovery::{Stage, record_path},
     model::Workspace,
@@ -9,6 +9,8 @@ use crate::{
     state::ExecutionState,
 };
 use shoal_ids::execution_ids::ExecutionId;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
 use std::fs;
 
 /// A process whose identity stays verifiable until it is killed.
@@ -46,19 +48,10 @@ async fn interrupted(
     manager
         .store
         .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper,child,group_id)
-                    VALUES (?1,?2,?3,?4,?5,?6)",
-                rusqlite::params![
-                    id,
-                    workspace_id,
-                    ExecutionState::Unknown,
-                    store::json_text(Some(&wrapper))?,
-                    store::json_text(child.as_ref())?,
-                    group,
-                ],
-            )?;
-            Ok(())
+            let mut recorded = test_support::execution(id.as_str(), workspace_id.as_str());
+            recorded.state = ExecutionState::Unknown;
+            (recorded.wrapper, recorded.child, recorded.group_id) = (Some(wrapper), child, group);
+            seeds::execution(db, &recorded, None)
         })
         .await
         .unwrap();

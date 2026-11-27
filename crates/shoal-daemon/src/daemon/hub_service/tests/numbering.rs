@@ -8,6 +8,7 @@ use shoal_protocol::{
     hub::numbering::{Numbering, Renumbering},
     space_names::{SpaceName, SpaceSelector},
 };
+use shoal_store::test_support::seeds;
 
 use crate::{
     config::permissions::PermissionsConfig,
@@ -212,11 +213,9 @@ async fn a_machine_reserves_the_numbers_it_holds_without_a_space() -> Result<()>
             // Issue proposals outlive the space that made them, whose number
             // they keep.
             for (key, space, number) in [("of-gone", "gone", gone), ("of-here", "here", here)] {
-                tx.execute(
-                    "INSERT INTO repositories(id,path,source,last_used)
-                        VALUES (?1,?1,?1,1)",
-                    [key],
-                )?;
+                let checkout = std::path::Path::new("/").join(key);
+                let repository = shoal_protocol::test_support::repository(key, &checkout);
+                seeds::repository(tx, &repository)?;
                 tx.execute(
                     "INSERT INTO access_requests(id, repository_id, target_key, name, record,
                             space_number, number)

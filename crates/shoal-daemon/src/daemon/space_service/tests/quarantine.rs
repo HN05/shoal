@@ -1,6 +1,10 @@
 use crate::daemon::quarantine::*;
 use crate::daemon::store::Store;
 use crate::state::WorkspaceState;
+use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
+use std::path::Path;
 
 use crate::state::ExecutionState;
 use anyhow::Result;
@@ -18,22 +22,17 @@ fn records() -> Arc<dyn shoal_spaces::daemon::Records> {
 }
 
 fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);",
-    )?;
+    seeds::repository(db, &test_support::repository("repo", Path::new("/repo")))?;
     for state in WorkspaceState::ALL {
-        db.execute(
-            "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo',?1)",
-            [state],
-        )?;
-        db.execute(
-            "INSERT INTO workspaces(id,path,branch,state,error,base_commit,git_dir)
-                VALUES (?1,?1,?1,?1,'original error','abc','/admin')",
-            [state],
-        )?;
+        let id = state.to_string();
+        let path = Path::new("/work").join(&id);
+        let mut workspace = test_support::workspace(&id, "repo", &id, &path);
+        (workspace.state, workspace.error) = (*state, Some("original error".into()));
+        seeds::workspace(db, &workspace)?;
     }
-    db.execute_batch("INSERT INTO executions(id,space_id,state) VALUES ('execution','preparing','running');
-            INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
+    let preparing = SpaceId::from("preparing");
+    seeds::bare_execution(db, "execution", &preparing, ExecutionState::Running)?;
+    db.execute_batch("INSERT INTO simulator_clean_requests(request_id,workspace_id,record)
                 VALUES ('clean','preparing','{\"status\":\"requested\",\"reason\":\"keep audit\"}');")?;
     Ok(())
 }

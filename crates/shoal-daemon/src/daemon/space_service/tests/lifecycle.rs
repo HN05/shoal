@@ -1,5 +1,8 @@
 use crate::daemon::lifecycle::*;
 use crate::daemon::manager::Manager;
+use crate::state::ExecutionState;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
 
 use crate::model::EventCause;
 use crate::{
@@ -99,13 +102,7 @@ async fn unknown_execution_blocks_stop_and_unattended_removal_even_when_missing(
             let id = workspace.id.clone();
             manager
                 .store
-                .run(move |db| {
-                    db.execute(
-                        "INSERT INTO executions(id,space_id,state) VALUES ('legacy',?1,'unknown')",
-                        [id],
-                    )?;
-                    Ok(())
-                })
+                .run(move |db| seeds::bare_execution(db, "legacy", &id, ExecutionState::Unknown))
                 .await
                 .unwrap();
             if missing {
@@ -191,16 +188,11 @@ async fn acknowledged_stop_forgets_an_execution_without_launch_identity() {
     let dead = identity::capture(wrapper.id().unwrap()).unwrap().unwrap();
     wrapper.kill().await.unwrap();
     wrapper.wait().await.unwrap();
-    let (id, dead) = (workspace.id.clone(), serde_json::to_string(&dead).unwrap());
+    let mut legacy = test_support::execution("legacy", workspace.id.as_str());
+    (legacy.state, legacy.wrapper) = (ExecutionState::Unknown, Some(dead));
     manager
         .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper) VALUES ('legacy',?1,'unknown',?2)",
-                rusqlite::params![id, dead],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::execution(db, &legacy, None))
         .await
         .unwrap();
     // Waiting for confirmation is not a failure the workspace records.
@@ -285,19 +277,18 @@ async fn stale_birth_identity_never_authorizes_signaling_a_live_group() {
             .spawn()
             .unwrap();
         let live = identity::capture(child.id().unwrap()).unwrap().unwrap();
-        let stale = serde_json::to_string(&identity::Identity {
+        let stale = identity::Identity {
             birth: "different-process".into(),
             ..live.clone()
-        })
-        .unwrap();
-        let (id, pid) = (workspace.id.clone(), live.pid);
-        manager.store.run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state,wrapper,child,group_id) VALUES ('stale',?1,'unknown',?2,?2,?3)",
-                rusqlite::params![id, stale, pid],
-            )?;
-            Ok(())
-        }).await.unwrap();
+        };
+        let mut recorded = test_support::execution("stale", workspace.id.as_str());
+        recorded.state = ExecutionState::Unknown;
+        (recorded.wrapper, recorded.child) = (Some(stale.clone()), Some(stale));
+        recorded.group_id = Some(live.pid);
+        (manager.store)
+            .run(move |db| seeds::execution(db, &recorded, None))
+            .await
+            .unwrap();
         let stopped = manager
             .agents
             .stop_space(

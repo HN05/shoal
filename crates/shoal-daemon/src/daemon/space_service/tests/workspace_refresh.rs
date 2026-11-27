@@ -4,9 +4,11 @@ use crate::daemon::scope::Caller;
 use crate::model::Refreshed;
 use crate::model::Repository;
 use crate::model::Workspace;
+use crate::state::ExecutionState;
 use crate::state::WorkspaceState;
 use anyhow::Result;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::seeds;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::{
@@ -218,13 +220,7 @@ async fn another_execution_refuses_a_refresh_and_the_callers_own_does_not() {
     let main = add_commit(&f.repo.path, "later");
     let id = workspace.id.clone();
     (f.manager.store)
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')",
-                [id],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "agent", &id, ExecutionState::Running))
         .await
         .unwrap();
     let refused = f.refresh(&workspace).await.unwrap_err().to_string();

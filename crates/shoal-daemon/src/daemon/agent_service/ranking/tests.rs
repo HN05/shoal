@@ -1,4 +1,5 @@
 use shoal_protocol::progress::Blocker;
+use shoal_store::test_support::seeds;
 use std::collections::HashSet;
 
 use rusqlite::params;
@@ -33,10 +34,7 @@ async fn a_launch_in_a_child_ranks_with_its_ready_parent_ahead_of_earlier_launch
         .store
         .run(move |db| {
             let (parent, child) = &ids;
-            db.execute(
-                "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
-                params![child, parent],
-            )?;
+            seeds::parent(db, child, parent)?;
             // A ready mark makes the parent's work finishing.
             db.execute(
                 "INSERT INTO space_review(space_id,url,kind) VALUES (?1,'',NULL)",
@@ -114,10 +112,7 @@ async fn waits_come_from_blockers_threads_stacks_and_leases() {
                 "UPDATE workspaces SET base_workspace_id=?1 WHERE id=?2",
                 params![base, stacked],
             )?;
-            db.execute(
-                "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
-                params![asking, stacked],
-            )?;
+            seeds::parent(db, asking, stacked)?;
             db.execute(
                 "INSERT INTO threads(id,space_id,space_number,number,kind,name,created_at,opener,
                         opener_id,holder_id)

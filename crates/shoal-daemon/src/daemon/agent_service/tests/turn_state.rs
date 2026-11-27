@@ -12,6 +12,7 @@ use crate::{
 use rusqlite::params;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_protocol::space_names::SpaceSelector;
+use shoal_store::test_support::seeds;
 
 async fn state_events(manager: &Manager) -> Vec<Option<AgentState>> {
     manager
@@ -51,13 +52,7 @@ async fn changes_record_events_and_end_with_the_reporting_execution() {
     let id = workspace.id.clone();
     manager
         .store
-        .run(move |db| {
-            db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,'running')",
-                [id],
-            )?;
-            Ok(())
-        })
+        .run(move |db| seeds::bare_execution(db, "agent", &id, ExecutionState::Running))
         .await
         .unwrap();
     let selected = SpaceSelector::id(&workspace.id);
@@ -147,18 +142,19 @@ async fn workspaces_show_no_state_while_the_reporting_execution_is_unknown() {
     let (temp, manager) = manager().await;
     let workspace = workspace(&manager, &temp).await;
     let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| seeds::bare_execution(db, "agent", &id, ExecutionState::Running))
+        .await
+        .unwrap();
     let set_execution = |state: ExecutionState| {
-        let id = id.clone();
         manager.store.run(move |db| {
             db.execute(
-                "INSERT INTO executions(id,space_id,state) VALUES ('agent',?1,?2)
-                 ON CONFLICT(id) DO UPDATE SET state=excluded.state",
-                params![id, state],
+                "UPDATE executions SET state=?1 WHERE id='agent'",
+                params![state],
             )?;
             Ok(())
         })
     };
-    set_execution(ExecutionState::Running).await.unwrap();
     let idle = manager
         .agents
         .set_agent_state(
