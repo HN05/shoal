@@ -357,9 +357,12 @@ pub fn record_absorb(
 
 /// Record that the agent of the space `id` started, stopped or exited,
 /// returning whether it did. An execution's agent ends once: a stop that
-/// saved it for a restore, then its wrapper's end, records one stop.
+/// saved it for a restore, then its wrapper's end, records one stop. An exit
+/// without a code says only that the wrapper went without reporting how the
+/// agent ended, so a stop learned later, such as from its recovery record,
+/// still follows it.
 fn insert_agent(db: &Connection, id: &SpaceId, kind: EventKind, agent: AgentEvent) -> Result<bool> {
-    if kind != EventKind::AgentStarted && agent_ended(db, id, agent.execution_id.as_ref())? {
+    if kind != EventKind::AgentStarted && agent_ended(db, id, kind, agent.execution_id.as_ref())? {
         return Ok(false);
     }
     let agent = Box::new(agent);
@@ -393,8 +396,14 @@ pub fn removal(db: &Connection, id: &SpaceId) -> Result<Option<EventDetails>> {
     newest_of(db, id, &[EventKind::Removed])
 }
 
-/// Whether the space's newest agent event is the end of `execution`'s agent.
-fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -> Result<bool> {
+/// Whether the space's newest agent event is the end of `execution`'s agent
+/// that an event of `kind` would repeat.
+fn agent_ended(
+    db: &Connection,
+    id: &SpaceId,
+    kind: EventKind,
+    execution: Option<&ExecutionId>,
+) -> Result<bool> {
     let kinds = [
         EventKind::AgentStarted,
         EventKind::AgentStopped,
@@ -402,12 +411,13 @@ fn agent_ended(db: &Connection, id: &SpaceId, execution: Option<&ExecutionId>) -
     ];
     let newest = newest_of(db, id, &kinds)?;
     Ok(newest.is_some_and(|newest| {
+        let Some(ended) = newest.event.agent() else {
+            return false;
+        };
+        let unreported = newest.kind() == EventKind::AgentExited && ended.exit_code.is_none();
         newest.kind() != EventKind::AgentStarted
-            && newest
-                .event
-                .agent()
-                .and_then(|agent| agent.execution_id.as_ref())
-                == execution
+            && ended.execution_id.as_ref() == execution
+            && !(unreported && kind == EventKind::AgentStopped)
     }))
 }
 

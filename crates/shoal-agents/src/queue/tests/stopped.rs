@@ -788,6 +788,20 @@ async fn an_oom_kill_whose_report_was_lost_counts_as_its_restore_is_queued() {
     .unwrap();
     signal_stop(&fixture, &workspace.id, "second-agent");
     stop(&fixture, &workspace.id, "second-agent", killed);
+    // Its wrapper went without reporting the pause, which logs an exit
+    // without a code.
+    let exited = shoal_daemon_base::events::AgentEvent {
+        mode: None,
+        name: "claude".into(),
+        execution_id: Some("second-agent".into()),
+        exit_code: None,
+        oom_kills: 0,
+        cause: None,
+        source: None,
+    };
+    let kind = shoal_daemon_base::events::EventKind::AgentExited;
+    shoal_daemon_base::events::record_agent(&fixture.agents.store, &workspace.id, kind, exited)
+        .await;
 
     dispatch(&fixture).await;
 

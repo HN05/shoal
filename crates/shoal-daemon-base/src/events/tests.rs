@@ -38,6 +38,11 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
         (EventKind::AgentStarted, agent("e1", None)),
         (EventKind::AgentExited, agent("e1", Some(3))),
         (EventKind::AgentStarted, agent("e2", None)),
+        // Its wrapper went without reporting how the agent ended, which its
+        // recovery record later says.
+        (EventKind::AgentExited, agent("e2", None)),
+        (EventKind::AgentStopped, agent("e2", None)),
+        (EventKind::AgentStopped, agent("e2", None)),
     ];
     let events = store
         .run(move |db| {
@@ -71,6 +76,8 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
             (EventKind::AgentStarted, "e1".to_owned(), None),
             (EventKind::AgentExited, "e1".to_owned(), Some(3)),
             (EventKind::AgentStarted, "e2".to_owned(), None),
+            (EventKind::AgentExited, "e2".to_owned(), None),
+            (EventKind::AgentStopped, "e2".to_owned(), None),
         ]
     );
 }
