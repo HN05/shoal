@@ -2,7 +2,6 @@
 //! step by the key its plan tool gave it, or by name without one, and goes
 //! with the step.
 use anyhow::{Context as _, Result, bail, ensure};
-use serde::{Deserialize, Serialize};
 
 use super::Plan;
 use crate::blockers::{Lookup, Lookups, Target};
@@ -12,16 +11,13 @@ use shoal_protocol::{
     progress::{PlanStep, RecordedBlocker, Step},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Stored {
-    #[serde(flatten)]
     pub blocker: RecordedBlocker,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step: Option<StepRef>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepRef {
     Key(String),
     Name(String),

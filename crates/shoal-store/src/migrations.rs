@@ -22,10 +22,11 @@ mod post_surfaces;
 mod removed_space_columns;
 mod review_targets;
 mod simulator_columns;
+mod space_blockers;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 333;
+pub const SCHEMA_VERSION: i64 = 334;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -233,6 +234,11 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         333,
         include_str!("migrations/0333_completion_error_trigger.sql"),
         None,
+    ),
+    (
+        334,
+        include_str!("migrations/0334_space_blockers.sql"),
+        Some(Step::After(space_blockers::move_blockers)),
     ),
 ];
 

@@ -1182,6 +1182,19 @@ CREATE TABLE agent_oom_kills (
     execution_id TEXT NOT NULL
 ) WITHOUT ROWID;
 
+CREATE TABLE space_blockers (
+    space_id TEXT NOT NULL REFERENCES space_progress(space_id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    target TEXT NOT NULL,
+    name TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    lookup_failed TEXT,
+    step_key TEXT,
+    step_name TEXT CHECK(step_key IS NULL OR step_name IS NULL),
+    PRIMARY KEY(space_id, position)
+);
+
 CREATE UNIQUE INDEX repository_names ON repositories(name) WHERE name IS NOT NULL;
 
 CREATE INDEX resource_lease_pool ON resource_leases(scope,pool);

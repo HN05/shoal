@@ -257,6 +257,7 @@ mod removed_space_columns;
 mod review_targets;
 mod schema;
 mod simulator_columns;
+mod space_blockers;
 mod thread_outcomes;
 
 /// A thread at the floor where the holder offered choices twice, the user

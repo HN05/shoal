@@ -100,7 +100,7 @@ fn blocked_plans(db: &Transaction<'_>) -> Result<Vec<Blocked>> {
         .prepare(
             "SELECT p.space_id,s.repository_id FROM space_progress p
              LEFT JOIN spaces s ON s.id=p.space_id
-             WHERE json_array_length(p.record,'$.blockers') > 0",
+             WHERE EXISTS (SELECT 1 FROM space_blockers b WHERE b.space_id=p.space_id)",
         )?
         .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .collect::<rusqlite::Result<Vec<(SpaceId, Option<RepositoryId>)>>>()?;

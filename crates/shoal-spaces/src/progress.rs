@@ -3,7 +3,7 @@
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::{Result, ensure};
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, Transaction};
 use serde::{Deserialize, Serialize};
 use shoal_ids::space_ids::SpaceId;
 
@@ -21,10 +21,12 @@ pub mod blockers;
 mod clearing;
 mod naming;
 pub mod publish;
+mod rows;
 pub mod section;
 
 pub use clearing::Cleared;
 pub use publish::{Publications, run};
+use rows::stored;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plan {
@@ -32,7 +34,8 @@ pub struct Plan {
     pub status: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<PlanStep>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Kept in rows of their own, which queries read.
+    #[serde(skip)]
     pub blockers: Vec<blockers::Stored>,
 }
 
@@ -145,21 +148,14 @@ pub fn current(db: &Connection, id: &SpaceId) -> Result<Option<Progress>> {
         .map(|(plan, updated_at)| plan.progress(updated_at)))
 }
 
-fn stored(db: &Connection, id: &SpaceId) -> Result<Option<(Plan, UnixTime)>> {
-    let row: Option<(String, UnixTime)> = db
-        .prepare_cached("SELECT record,updated_at FROM space_progress WHERE space_id=?1")?
-        .query_row([id], |row| Ok((row.get(0)?, row.get(1)?)))
-        .optional()?;
-    row.map(|(record, updated_at)| Ok((serde_json::from_str(&record)?, updated_at)))
-        .transpose()
-}
-
 /// Records nothing when the plan changed after the PRs were written.
-fn mark_published(db: &Connection, id: &SpaceId, plan: &Plan) -> Result<()> {
-    db.execute(
-        "UPDATE space_progress SET published_at=updated_at WHERE space_id=?1 AND record=?2",
-        params![id, serde_json::to_string(plan)?],
-    )?;
+fn mark_published(tx: &Transaction<'_>, id: &SpaceId, plan: &Plan) -> Result<()> {
+    if stored(tx, id)?.is_some_and(|(stored, _)| stored == *plan) {
+        tx.execute(
+            "UPDATE space_progress SET published_at=updated_at WHERE space_id=?1",
+            [id],
+        )?;
+    }
     Ok(())
 }
 
@@ -192,12 +188,7 @@ fn write(
     for (kind, event) in events {
         super::events::record_blocker(tx, id, *kind, event)?;
     }
-    tx.execute(
-        "INSERT INTO space_progress(space_id,record,updated_at) VALUES (?1,?2,?3)
-         ON CONFLICT(space_id) DO UPDATE
-         SET record=excluded.record,updated_at=excluded.updated_at,published_at=NULL",
-        params![id, serde_json::to_string(&after)?, now],
-    )?;
+    rows::write(tx, id, &after, now)?;
     let progress = after.progress(now);
     super::events::record_progress(tx, id, &progress)?;
     Ok(Some(progress))
