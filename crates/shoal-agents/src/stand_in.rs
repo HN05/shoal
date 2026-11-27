@@ -779,6 +779,10 @@ impl Runner for StandIn {
         Default::default()
     }
 
+    fn job_claim_deferred(&self, _: &RepositoryId, _: &QueuedJob) -> Option<usize> {
+        None
+    }
+
     fn job_cost<'a>(
         &'a self,
         _: &'a RepositoryId,

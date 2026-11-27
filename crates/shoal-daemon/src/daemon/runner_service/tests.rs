@@ -620,6 +620,28 @@ pub(super) async fn hold_the_builds_permit(fixture: &Fixture) -> crate::model::W
 }
 
 #[tokio::test]
+async fn a_job_ranked_behind_another_machine_is_claimed_once_its_delay_passes() {
+    let fixture = fixture(vec![job("h1", 4, 1)], "").await;
+    let manager = &fixture.manager;
+    refresh_waiting_jobs(manager).await;
+    let deferrals = manager.runner.jobs().deferrals();
+    // Ranked far enough behind that no runner's speed lapses the delay.
+    let ahead = 1_000;
+    deferrals.defer(&fixture.repository, "h1", ahead);
+
+    admit_and_claim(manager).await;
+    assert!(manager.runner.claimed_jobs().await.unwrap().is_empty());
+    assert_eq!(
+        job_entries(manager).await[0].held_by,
+        Some(crate::model::HeldBy::RankedBehind { ahead })
+    );
+
+    deferrals.age(shoal_runner::jobs::STEP * 1_000);
+    admit_and_claim(manager).await;
+    assert_eq!(manager.runner.claimed_jobs().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn a_job_waits_while_its_permit_pool_is_full() {
     let fixture = fixture(
         vec![job("h1", 4, 1)],

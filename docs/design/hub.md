@@ -686,6 +686,10 @@ shows what it read. The stages, in order:
 `balanced` never clones a repository onto a machine; that stays with
 `--machine`.
 
+`balanced`'s stages also rank the machines for a waiting CI job, which delays
+the claims of those ranked behind, as
+[Placement delays a claim](runner.md#placement-delays-a-claim) says.
+
 `external` lets an app on the hub's machine take the decision over, registered
 as the placer. A start waits for it only briefly, and otherwise places by
 `balanced`, so a slow or absent app never holds starts up.

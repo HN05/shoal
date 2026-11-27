@@ -71,6 +71,7 @@ impl Runner {
                 move |tx| forget_unlisted_jobs(&*records, tx, &id, &listed)
             })
             .await?;
+        self.jobs.deferrals.keep_listed(&repository.id, &listed);
         if let Some(ours) = &registration.runner {
             (self.end_untaken_jobs(daemon, &repository.id, &forge, ours, &listed)).await?;
         }
@@ -81,6 +82,7 @@ impl Runner {
             if known.contains(&job.handle) {
                 continue;
             }
+            self.defer_by_rank(daemon, repository, &job.handle).await;
             let run = forge.job_run(&account, job.run).await?;
             let linked = self.link_job(daemon, &forge, &repository.id, job, run);
             let mut job = linked.await?;

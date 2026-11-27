@@ -526,6 +526,10 @@ pub trait Runner: Send + Sync {
 
     fn job_permits_busy(&self, id: &RepositoryId) -> bool;
 
+    /// The machines of the hub ranked ahead of this one for `repository`'s
+    /// `job`, while this machine holds its claim back for them.
+    fn job_claim_deferred(&self, repository: &RepositoryId, job: &QueuedJob) -> Option<usize>;
+
     fn job_cost<'a>(
         &'a self,
         id: &'a RepositoryId,

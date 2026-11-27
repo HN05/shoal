@@ -62,9 +62,9 @@ struct WaitingWork {
     entries: Vec<Waiting>,
     /// Each restore that something can carry out, by entry ID.
     restores: HashMap<QueueEntryId, QueuedRestore>,
-    /// The jobs left out of `entries` while their repository's permits are
-    /// all held.
-    permits_busy: Vec<QueueEntryId>,
+    /// The jobs left out of `entries`, which wait before admission weighs
+    /// them, with what holds each back.
+    held_jobs: Vec<(QueueEntryId, HeldBy)>,
     /// The entries of `entries` whose tool's upstream is under a limit,
     /// which wait it out.
     upstream_limited: HashMap<QueueEntryId, HeldBy>,
@@ -239,10 +239,7 @@ impl Agents {
             true => Admission::default(),
             false => self.admission(daemon, work, recovered).await?,
         };
-        let permits = work.permits_busy.iter().cloned();
-        admission
-            .held
-            .extend(permits.map(|id| (id, HeldBy::Permits)));
+        admission.held.extend(work.held_jobs.iter().cloned());
         admission.held.extend(work.upstream_holds());
         Ok(admission)
     }
@@ -328,7 +325,7 @@ impl Agents {
         let upstream_limited = self.upstream_limited(&queued).await?;
         let carriers = self.carriers();
         let mut restores = HashMap::new();
-        let mut permits_busy = Vec::new();
+        let mut held_jobs = Vec::new();
         let mut waiting = Vec::new();
         for QueuedRow {
             id,
@@ -346,20 +343,13 @@ impl Agents {
             let is_light = kind != QueueKind::Job
                 && light.entry(execution.as_ref(), repository.as_ref(), mode.as_ref());
             let work = match (kind, execution, workspace) {
-                (QueueKind::Job, ..) => {
-                    let repository = repository
-                        .as_ref()
-                        .context("a job's entry names no repository")?;
-                    // A job waits while its repository's permits are all held.
-                    if daemon.job_permits_busy(repository) {
-                        permits_busy.push(id);
+                (QueueKind::Job, ..) => match job_work(daemon, repository.as_ref(), job).await? {
+                    Ok(work) => work,
+                    Err(held) => {
+                        held_jobs.push((id, held));
                         continue;
                     }
-                    let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
-                    Work::Job {
-                        cost: daemon.job_cost(repository, &job).await?,
-                    }
-                }
+                },
                 (QueueKind::Restore, Some(execution), Some(workspace)) => {
                     let Some(carrier) = carriers.of(started_here, &execution) else {
                         continue;
@@ -399,7 +389,7 @@ impl Agents {
         Ok(WaitingWork {
             entries: waiting,
             restores,
-            permits_busy,
+            held_jobs,
             upstream_limited,
             light,
         })
@@ -590,4 +580,26 @@ impl Agents {
             })
             .await
     }
+}
+
+/// The work of a job entry of `repository` for `job`, its queued job's
+/// JSON, or what holds it back before admission weighs it: its
+/// repository's permits, all held, or the machines of the hub ranked ahead
+/// of this one for it, which may claim it first.
+async fn job_work(
+    daemon: &dyn Daemon,
+    repository: Option<&shoal_ids::repository_ids::RepositoryId>,
+    job: Option<String>,
+) -> Result<Result<Work, HeldBy>> {
+    let repository = repository.context("a job's entry names no repository")?;
+    if daemon.job_permits_busy(repository) {
+        return Ok(Err(HeldBy::Permits));
+    }
+    let job = serde_json::from_str(&job.context("a job's entry names no job")?)?;
+    if let Some(ahead) = daemon.job_claim_deferred(repository, &job) {
+        return Ok(Err(HeldBy::RankedBehind { ahead }));
+    }
+    Ok(Ok(Work::Job {
+        cost: daemon.job_cost(repository, &job).await?,
+    }))
 }

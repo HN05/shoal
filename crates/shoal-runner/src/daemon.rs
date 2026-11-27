@@ -229,6 +229,11 @@ pub trait Hub: Send + Sync {
     /// place, returning whether it keeps them now: false on the hub's own
     /// machine and on one in no hub.
     fn hand_cut_off_jobs(&self, jobs: Vec<CutOffJob>) -> BoxFuture<'_, Result<bool>>;
+
+    /// Where this machine ranks, 0 first, among the hub's machines for a
+    /// CI job of `repository`: 0 in no hub. It fails while the hub cannot
+    /// be asked.
+    fn rank_job<'a>(&'a self, repository: &'a Repository) -> BoxFuture<'a, Result<usize>>;
 }
 
 pub trait Daemon:

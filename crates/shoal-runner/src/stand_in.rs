@@ -90,6 +90,7 @@ impl Fixture {
             admitted: Mutex::default(),
             executions: Mutex::default(),
             handed: Mutex::default(),
+            rank: Mutex::new(Ok(0)),
         });
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
@@ -210,7 +211,7 @@ async fn runner(root: &tempfile::TempDir, daemon: &Arc<StandIn>) -> Arc<Runner> 
 
 /// A daemon with one registered repository.
 pub(crate) struct StandIn {
-    repository: Repository,
+    pub(crate) repository: Repository,
     config: Arc<ConfigState>,
     pub(crate) tracked: Mutex<String>,
     pub(crate) local: Mutex<String>,
@@ -235,6 +236,8 @@ pub(crate) struct StandIn {
     /// The CI jobs cut off that the hub keeps, none for a machine in no
     /// hub.
     pub(crate) handed: Mutex<Option<Vec<CutOffJob>>>,
+    /// This machine's rank for every job, or why the hub cannot give it.
+    pub(crate) rank: Mutex<Result<usize, String>>,
 }
 
 impl StandIn {
@@ -397,6 +400,11 @@ impl crate::daemon::Hub for StandIn {
         let mut handed = self.handed.lock().unwrap();
         let kept = handed.as_mut().map(|handed| handed.extend(jobs)).is_some();
         Box::pin(async move { Ok(kept) })
+    }
+
+    fn rank_job<'a>(&'a self, _: &'a Repository) -> BoxFuture<'a, Result<usize>> {
+        let rank = self.rank.lock().unwrap().clone();
+        Box::pin(async move { rank.map_err(anyhow::Error::msg) })
     }
 }
 

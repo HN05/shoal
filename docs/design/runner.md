@@ -80,6 +80,38 @@ another runner beat to its job, or whose job a cancel ended, stops at the next
 poll. It then holds neither its slot nor the memory its job is expected to use.
 Conditional reads keep unchanged answers off the forge's rate limit.
 
+### Placement delays a claim
+
+Every machine with a repository registered polls its jobs, so without a delay
+whichever polls first claims a job. A job is disposable work, so it should go
+where [placement](hub.md#policies) puts disposable work: first to an
+`intermittent` machine with room, which leaves the `always_on` machines' room
+to lasting work.
+
+CI stays pull-based, so a slow or absent hub never holds a job up. When the
+runner first sees a job, it asks the hub where this machine ranks among the
+connected machines for it, under `balanced`'s stages. The job counts as
+disposable, heavy work of its repository, since the agent queue never counts
+a job light, and needs no agent tool. Admission holds the job back for about
+15 seconds for each machine ranked ahead, which may claim it first. This is
+delay scheduling, as Hadoop's scheduler does it.
+
+The delay never keeps a job from running:
+
+- The best-ranked machine claims at once, and so does one that is the only
+  machine able to run the job.
+- A machine that cannot reach the hub, or is in none, claims at once. So does
+  one whose hub's policy is `local`, which keeps work where it is found. An
+  `external` placer places starts, not jobs.
+- Once its delay passes, the job goes to whichever machine admits it.
+- A daemon restart forgets the delays, and its waiting jobs are claimed at
+  once.
+
+A machine that is away or paused already admits nothing new, so it claims
+nothing. Placement ranks only by the repositories each machine reports, so a
+machine whose runner is off or lacks the job's labels still ranks, and the
+job waits out its delay.
+
 ### A job runs in a disposable workspace
 
 Each job runs as a tracked execution in a disposable workspace at its commit.

@@ -308,6 +308,13 @@ A job also waits for a permit of the pool
 [`runner.permit`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#runner)
 names.
 
+On a machine joined to a [hub](hub.md#placement), a job waits 15 seconds for
+each machine its hub's placement ranks ahead of this one, since that machine
+may claim it first. The queue shows it held by `N machines rank ahead`. The
+best-ranked machine claims at once, an `intermittent` one with room before an
+`always_on` one. A job waits for no machine when the hub cannot be reached,
+under the `local` placement policy, and after a daemon restart.
+
 ### Run a job
 
 An admitted job runs the forge's runner at nice 10, as a tracked execution. It

@@ -50,6 +50,7 @@ async fn pass(runner: &Arc<Runner>, daemon: &Arc<dyn Daemon>) -> Result<()> {
     runner.rerun_stopped_jobs().await?;
     runner.follow_taken_jobs(&**daemon).await?;
     runner.release_idle_runners().await?;
+    runner.admit_lapsed_claims(&**daemon);
     claim_admitted_jobs(runner, daemon).await?;
     runner.poll_waiting_jobs(&**daemon).await
 }

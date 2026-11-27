@@ -80,6 +80,10 @@ impl Runner for Manager {
         self.runner.jobs().permits_busy(id)
     }
 
+    fn job_claim_deferred(&self, repository: &RepositoryId, job: &QueuedJob) -> Option<usize> {
+        (self.runner.jobs().deferrals()).ahead(repository, &job.job.handle)
+    }
+
     fn job_cost<'a>(
         &'a self,
         id: &'a RepositoryId,

@@ -46,6 +46,8 @@ pub fn held_by_label(held: &HeldBy) -> String {
         HeldBy::MaxJobs => "machine.max_jobs".into(),
         HeldBy::RepositoryLimit => "agent.max_heavy_running".into(),
         HeldBy::Permits => "runner.permit pool".into(),
+        HeldBy::RankedBehind { ahead: 1 } => "1 machine ranks ahead".into(),
+        HeldBy::RankedBehind { ahead } => format!("{ahead} machines rank ahead"),
         HeldBy::Reading => "critical or missing reading".into(),
         HeldBy::Cpu { busy, level } => format!("CPU: {busy}% busy, {level}% level"),
         HeldBy::UpstreamLimit { limit, until } => {

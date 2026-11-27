@@ -15,6 +15,7 @@ mod cancels;
 mod claimed;
 mod claims;
 mod costs;
+mod deferrals;
 mod ends;
 mod linked;
 mod listing;
@@ -32,6 +33,7 @@ mod untaken;
 mod waiting;
 
 pub use claimed::ClaimedJob;
+pub use deferrals::{Deferrals, STEP};
 pub use load::JobLoad;
 pub use overrun::GRACE;
 pub use passes::run;
@@ -82,6 +84,8 @@ pub struct Runners {
     permits_busy: Mutex<HashMap<RepositoryId, Instant>>,
     /// When the forge's waiting jobs were last read.
     waiting_read: Mutex<Option<Instant>>,
+    /// The claims held back while other machines rank ahead of this one.
+    deferrals: Deferrals,
     /// The queue entries of the jobs whose claim runs.
     claiming: Mutex<HashSet<QueueEntryId>>,
     /// The runs of the running jobs, by queue entry.
@@ -129,6 +133,10 @@ impl Runners {
 
     pub fn failed(&self, repository_id: &RepositoryId) {
         lock(&self.failures).insert(repository_id.to_owned(), Instant::now());
+    }
+
+    pub fn deferrals(&self) -> &Deferrals {
+        &self.deferrals
     }
 
     /// Whether `repository_id`'s permit pool was full a moment ago.

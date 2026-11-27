@@ -101,6 +101,9 @@ pub enum HeldBy {
     RepositoryLimit,
     /// The repository's `runner.permit` pool has no free permit.
     Permits,
+    /// `ahead` machines of the hub rank ahead of this one for the CI job,
+    /// which may claim it first.
+    RankedBehind { ahead: usize },
     /// A memory or disk reading is critical or missing, or, for a job beside
     /// running ones, the CPU reading.
     Reading,

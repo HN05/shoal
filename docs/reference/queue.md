@@ -483,6 +483,7 @@ without attaching to the agent it starts, or cancels it.
   - `memory_kept`, with the higher-ranked entry's name in `behind`,
   - `disk`, `max_heavy_agents`, `max_jobs`, `repository_limit`, `permits` or
     `reading`,
+  - `ranked_behind`, with the number of machines ranked `ahead` for a job,
   - `cpu`, with the `busy` and `level` percentages,
   - `upstream_limit`, with the `limit`, `rate_limited` or `exhausted`, and the
     Unix-seconds `until`;
