@@ -36,10 +36,14 @@ with (root / 'sim-events').open('a') as log:
 if (root / 'sim-observe-db').exists() and command in {
         'create', 'shutdown', 'erase', 'delete', 'bootstatus'}:
     with sqlite3.connect(f"file:{root / 'state/state.db'}?mode=ro", uri=True) as db:
+        db.row_factory = sqlite3.Row
         snapshot = {'command': command, 'args': args}
+        # Each row as one object: its columns beside the fields of its record.
         for table in ['simulators', 'simulator_clean_requests']:
             snapshot[table] = [
-                json.loads(row[0]) for row in db.execute(f'SELECT record FROM {table}')
+                {**json.loads(row['record']),
+                 **{key: row[key] for key in row.keys() if key != 'record'}}
+                for row in db.execute(f'SELECT * FROM {table}')
             ]
     with (root / 'sim-persistence-events').open('a') as log:
         log.write(json.dumps(snapshot) + '\n')
