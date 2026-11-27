@@ -1,10 +1,10 @@
 //! Placing a launch that names no machine on a machine of the hub. A launch
-//! stays here when its agent runs in the caller's terminal, when it needs
-//! this machine (an existing workspace, one it would reopen, a copy, a
-//! fork, a worktree path, a repository setup, blockers, or a repository
-//! this machine has not registered or that has no origin, since placement
-//! never clones one), and when the hub cannot be asked. See
-//! `docs/design/hub.md`.
+//! stays here when it needs this machine (an agent that runs its own way in
+//! the caller, or a space's process that runs it, an existing workspace,
+//! one it would reopen, a copy, a fork, a worktree path, a repository
+//! setup, blockers, or a repository this machine has not registered or that
+//! has no origin, since placement never clones one), and when the hub
+//! cannot be asked. See `docs/design/hub.md`.
 use crate::Spaces;
 use crate::daemon::Daemon;
 use anyhow::Result;
@@ -105,7 +105,7 @@ impl Spaces {
         launch: &mut Launch,
         caller: Option<&Caller>,
     ) -> Result<Option<Decision>> {
-        if !placeable(launch) {
+        if !placeable(launch, caller) {
             return Ok(None);
         }
         let Some(this) = daemon.this_machine().await? else {
@@ -134,6 +134,9 @@ impl Spaces {
             .filter(|decision| decision.machine != this.id);
         if let Some(decision) = elsewhere {
             launch.machine = Some(decision.machine.to_string());
+            // That machine starts the agent detached, and a caller that
+            // would have run it attaches to it there.
+            launch.here = false;
         }
         Ok(decision)
     }
@@ -243,12 +246,14 @@ impl Spaces {
     }
 }
 
-/// It names no machine, runs its agent detached, and needs nothing of this
-/// machine's, as blockers, which wait on its spaces and queue entries, do.
-pub fn placeable(launch: &Launch) -> bool {
+/// It names no machine and needs nothing of this machine's, as blockers,
+/// which wait on its spaces and queue entries, do. Nor does a caller that
+/// runs its agent here: the user attaches to one on another machine, which
+/// a space's process cannot, nor anyone to one that runs its own way.
+pub fn placeable(launch: &Launch, caller: Option<&Caller>) -> bool {
     launch.machine.is_none()
         && launch.forwarded.is_none()
-        && !launch.here
+        && !(launch.here && (launch.own_way || caller.is_some()))
         && launch.in_workspace.is_none()
         && launch.copy.is_none()
         && launch.carried_copy.is_none()

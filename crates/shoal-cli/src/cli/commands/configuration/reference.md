@@ -389,15 +389,16 @@ These options configure the [hub](../../../../../../docs/reference/hub.md).
   above with an agent on a connected machine, or to you.
 - `default_machine`, on the hub, names the machine, by name or ID, that a
   device's start goes to when it names none.
-- `placement`, on the hub, picks where a detached start that names no machine
-  goes, as described below.
+- `placement`, on the hub, picks where a start that names no machine goes, as
+  described below.
 - `forward` maps path prefixes, each starting and ending with `/`, to local
   addresses, such as an app's own server. See
   [path forwarding](../../../../../../docs/reference/hub.md#path-forwarding).
 
-Only a start that runs its agent detached is placed, such as a background
-chat, a child an agent starts or a trigger's launch. A start that runs in your
-terminal stays on its machine, and `--machine` always picks the machine.
+A start is placed whether its agent runs detached or in your terminal, unless
+it needs its machine, as
+[placement](../../../../../../docs/reference/hub.md#placement) lists.
+`--machine` always picks the machine.
 `placement` takes these values:
 
 - `local` keeps every start on the machine it was made on.

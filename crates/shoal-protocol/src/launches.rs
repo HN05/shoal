@@ -112,9 +112,16 @@ pub struct Launch {
     pub now: bool,
     /// The caller runs the agent of the workspace it starts in its own
     /// terminal or process, holding the agent's queue entry until the
-    /// workspace is prepared and the queue lets it start.
+    /// workspace is prepared and the queue lets it start. A launch the hub
+    /// places on another machine starts there detached instead, and the
+    /// caller attaches to its agent.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub here: bool,
+    /// The caller runs an agent that runs its own way, outside Shoal's
+    /// terminal hosts, which it cannot attach to on another machine, so
+    /// the launch stays on this one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own_way: bool,
     /// What the agent is told to do, passed on to it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub task: Vec<String>,

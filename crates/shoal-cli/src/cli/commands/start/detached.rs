@@ -50,7 +50,8 @@ pub(in crate::cli::commands) fn place_agent(
         if let Some(agent) = agent {
             crate::agents::ensure_available(agent, settings)?;
         }
-        super::placement::in_caller(ctx, (launch, issue_linked), settings, options);
+        let placed = (agent, settings);
+        super::placement::in_caller(ctx, (launch, issue_linked), placed, options);
     }
     Ok(())
 }

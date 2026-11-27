@@ -88,6 +88,9 @@ detached session. An agent that `start` or `contribute` then starts runs as the
 launches above do, such as in a zmx session attached here. A chat runs in
 place.
 
+The hub can [place](hub.md#placement) such a start, or one that would open a
+tab, on another machine. This terminal then attaches to its agent there.
+
 `start --here` and `contribute --here` return the agent's exit code. For a
 caller outside Shoal, `resume --focus` also runs the agent in place and returns
 its exit code.

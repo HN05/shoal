@@ -491,18 +491,22 @@ else to the machine the device sent it to.
 
 ## Placement
 
-A start without `--machine` whose agent runs detached goes where the hub's
+A start without `--machine` goes where the hub's
 [`[machine.hub] placement`](../../crates/shoal-cli/src/cli/commands/configuration/reference.md#hub)
-policy puts it. Such starts include a background chat, a child an agent starts
-and a trigger's launch. The start then continues there as a start with
-`--machine` does.
+policy puts it. The start then continues there as a start with `--machine`
+and the same options does. That includes a start whose agent would run in
+your terminal, or in a place beside it: the agent starts on that machine and
+your terminal attaches to it, as `--here` with `--machine` does.
 
-A start stays on your machine when it runs in your terminal or needs your
-machine:
+A start stays on your machine when it needs your machine:
 
-- it takes `--in`, `--copy`, `--fork`, `--path` or `--add-blocker`;
+- it takes `--in`, `--copy`, `--checkpoint`, `--fork`, `--path` or
+  `--add-blocker`, or sets up a repository;
 - it reopens a workspace of yours on its branch or issue;
-- your machine lacks its repository, or the repository has no origin.
+- your machine lacks its repository, or the repository has no origin;
+- its agent runs its own way, outside Shoal's terminal hosts, which your
+  terminal cannot attach to on another machine;
+- a space's process runs its agent with `--here`.
 
 The hub places a start from what each connected machine last reported with
 its spaces, which `hub ls --json` shows as `capacity`:
@@ -536,10 +540,10 @@ it rank equal:
    with the most spare memory, then to the one where the least heavy work
    waits.
 
-`shoal start` names the machine with the policy's reason, which under
-`balanced` is the first rule that put it ahead. It also names each
-connected machine it skipped, for lacking the repository or the agent tool,
-or for a user who walked away or paused it. `--json` gives these as
+`shoal start` names the machine with the policy's reason before it attaches
+your terminal. Under `balanced`, the reason is the first rule that put it
+ahead. It also names each connected machine it skipped, for lacking the
+repository or the agent tool, or for a user who walked away or paused it. `--json` gives these as
 `placement`, in a chat's start and as a last document after a workspace's.
 
 A start stays on your machine, with a warning, when the hub cannot be asked.

@@ -1,6 +1,6 @@
-//! Placement: a detached start that names no machine goes where the hub's
-//! placement policy puts it, among the machines that have its repository
-//! and agent tool.
+//! Placement: a start that names no machine goes where the hub's placement
+//! policy puts it, among the machines that have its repository and agent
+//! tool.
 use serde_json::Value;
 use shoal_client::{
     connection::Connector,
@@ -84,6 +84,12 @@ fn placed(machines: &Machines, args: &[&str]) -> Value {
     let token = scope_of(&machines.hub, &machines.coordinator);
     let mut command = machines.hub.command();
     command.env("SHOAL_SCOPE_TOKEN", &token);
+    placed_by(machines, command, args)
+}
+
+/// Where the hub placed the start that `command` makes with `args`, as it
+/// printed it.
+fn placed_by(machines: &Machines, mut command: std::process::Command, args: &[&str]) -> Value {
     let repo = machines.hub.repo.to_str().unwrap();
     command
         .args(["start", repo, "--agent", "pi", "--json"])
@@ -112,13 +118,28 @@ fn a_heavy_start_goes_to_an_always_on_machine_with_a_free_heavy_slot() {
     );
     assert_eq!(placement["reason"], "heavy_slot", "{placement}");
     assert_eq!(placement["policy"], "balanced", "{placement}");
-    // The server created the space.
-    wait_for("the child on the server", || {
+    created_on_server(&machines, "child");
+}
+
+#[test]
+fn a_start_whose_agent_would_run_in_the_users_process_goes_to_an_always_on_machine() {
+    let machines = machines("machine.max_heavy_agents = 2\n");
+    // Without a terminal to attach, the start leaves its agent running there.
+    let user = machines.hub.command();
+    let placement = placed_by(&machines, user, &["--branch", "child", "--here"]);
+    assert_eq!(
+        placement["machine"],
+        machines.server_id.as_str(),
+        "{placement}"
+    );
+    created_on_server(&machines, "child");
+}
+
+fn created_on_server(machines: &Machines, name: &str) {
+    wait_for("the space on the server", || {
         let listed = machines.hub.ok(&["list"]);
         (listed.as_array().unwrap().iter())
-            .find(|space| {
-                space["name"] == "child" && space["machine"] == machines.server_id.as_str()
-            })
+            .find(|space| space["name"] == name && space["machine"] == machines.server_id.as_str())
             .map(|_| ())
     });
 }

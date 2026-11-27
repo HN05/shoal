@@ -42,8 +42,7 @@ pub(in crate::cli::commands) fn attach(
     if launch.machine.is_some() {
         return None;
     }
-    let own_way = !crate::env::is_scoped()
-        && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings));
+    let own_way = own_way(agent, settings);
     if leaves_caller(ctx, options.here) {
         return own_way.then_some(Attach::Here);
     }
@@ -70,10 +69,11 @@ pub(in crate::cli::commands) fn attach(
 pub(in crate::cli::commands) fn in_caller(
     ctx: &Context,
     (launch, issue_linked): (&mut Launch, bool),
-    settings: &Effective,
+    (agent, settings): (Option<&crate::agent::Agent>, &Effective),
     options: &StartOptions,
 ) {
     launch.here = true;
+    launch.own_way = own_way(agent, settings);
     let setting = settings.focus(&mode(launch));
     let waits_for_user = ctx.on_terminal() && waits(launch, issue_linked);
     let now = starts_now(launch, setting, options, waits_for_user);
@@ -91,6 +91,13 @@ fn starts_now(
     waits_for_user: bool,
 ) -> bool {
     options.focus || (launch.blockers.is_empty() && waits_for_user && setting != Some(false))
+}
+
+/// Whether `agent` runs its own way in this caller, which a scoped caller's
+/// queue starts instead.
+fn own_way(agent: Option<&crate::agent::Agent>, settings: &Effective) -> bool {
+    !crate::env::is_scoped()
+        && agent.is_some_and(|agent| shoal_workers::launch::runs_its_own_way(agent, settings))
 }
 
 fn mode(launch: &Launch) -> ModeName {
