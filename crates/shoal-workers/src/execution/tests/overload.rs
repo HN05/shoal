@@ -25,6 +25,7 @@ mod admitted_commands;
 mod agent_restart;
 mod idle_cleanup;
 mod idle_stop;
+mod outside_ends;
 mod restart;
 
 fn launch(

@@ -308,6 +308,27 @@ pub async fn report_session(manager: &Manager, workspace: &crate::model::Workspa
         .unwrap();
 }
 
+/// Record a merge conflict of `workspace`'s branch for its agent, as its
+/// conflict watch records one.
+pub async fn queue_merge_conflict(manager: &Manager, workspace: &crate::model::Workspace) {
+    let branch = workspace
+        .branch()
+        .expect("the fixture's workspace has a branch");
+    let update = crate::forge::updates::Update {
+        url: branch.to_string(),
+        kind: crate::forge::updates::UpdateKind::MergeConflict,
+        message: "conflicts with main: tracked".into(),
+        delivery: "merge-conflict".into(),
+        check: None,
+        workspace: None,
+    };
+    let id = workspace.id.clone();
+    (manager.store)
+        .run(move |db| shoal_links::wait::changes::queue_update(db, &id, update))
+        .await
+        .unwrap();
+}
+
 /// Wait until a committed state change satisfies `reached`.
 pub async fn store_reaches(manager: &Manager, mut reached: impl AsyncFnMut() -> bool) {
     // Subscribe before the first check so a concurrent commit cannot be missed.
