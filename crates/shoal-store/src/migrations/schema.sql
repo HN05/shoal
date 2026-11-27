@@ -8,7 +8,7 @@ CREATE TABLE repositories (
 
 CREATE TABLE executions (
             id TEXT PRIMARY KEY, space_id TEXT NOT NULL, state TEXT NOT NULL
-        , wrapper TEXT, child TEXT, group_id INTEGER, scope_token TEXT, origin TEXT, agent TEXT, agent_execution TEXT, model TEXT, effort TEXT, mode TEXT, narrowing TEXT);
+        , wrapper TEXT, child TEXT, group_id INTEGER, scope_token TEXT, origin TEXT, agent TEXT, agent_execution TEXT, model TEXT, effort TEXT, mode TEXT, narrowing TEXT, origin_host TEXT, origin_place TEXT, origin_instance TEXT);
 
 CREATE TABLE ports (
             workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -281,12 +281,12 @@ CREATE TABLE "ci_jobs" (
     CHECK(oom_killed IN (0,1)));
 
 CREATE TABLE "owned_places" (
-            host TEXT NOT NULL,
+            origin_host TEXT NOT NULL,
             server TEXT NOT NULL,
-            place TEXT NOT NULL,
+            origin_place TEXT NOT NULL,
             space_id TEXT NOT NULL,
-            origin TEXT NOT NULL,
-            PRIMARY KEY (host, server, place)
+            origin TEXT NOT NULL, origin_instance TEXT,
+            PRIMARY KEY (origin_host, server, origin_place)
         );
 
 CREATE TABLE "workspace_renames" (

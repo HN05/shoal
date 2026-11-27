@@ -18,6 +18,7 @@ mod journal_shapes;
 mod json_rows;
 mod move_destination_kind;
 mod pending_plan_columns;
+mod place_origins;
 mod post_files;
 mod post_surfaces;
 mod queued_plans;
@@ -28,7 +29,7 @@ mod space_blockers;
 mod thread_outcomes;
 
 /// The schema version this build writes.
-pub const SCHEMA_VERSION: i64 = 337;
+pub const SCHEMA_VERSION: i64 = 339;
 
 /// The schema version [`FLOOR_RELEASE`] wrote, the oldest a migration
 /// starts from. Raising it also replaces the fixture the tests start from.
@@ -256,6 +257,12 @@ pub(super) const MIGRATIONS: &[Migration] = &[
         337,
         include_str!("migrations/0337_queued_plans.sql"),
         Some(Step::Before(queued_plans::drop_column_copies)),
+    ),
+    (338, include_str!("migrations/0338_place_columns.sql"), None),
+    (
+        339,
+        include_str!("migrations/0339_place_origins.sql"),
+        Some(Step::Before(place_origins::move_into_columns)),
     ),
 ];
 

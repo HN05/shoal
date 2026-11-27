@@ -6,6 +6,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use shoal_core::sessions::OriginExt;
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
+use shoal_store::origins::{OriginColumns, origin};
 
 use crate::Agents;
 use crate::daemon::Daemon;
@@ -32,9 +33,17 @@ pub fn record_execution_place(
     workspace: &SpaceId,
     place: &ExecutionPlace,
 ) -> Result<()> {
+    let origin = OriginColumns::of(&place.origin)?;
     tx.execute(
-        "UPDATE executions SET origin=?2 WHERE id=?1",
-        params![execution, serde_json::to_string(&place.origin)?],
+        "UPDATE executions SET origin_host=?2,origin_place=?3,origin_instance=?4,origin=?5
+         WHERE id=?1",
+        params![
+            execution,
+            origin.host,
+            origin.place,
+            origin.instance,
+            origin.origin
+        ],
     )?;
     if place.agent {
         take_over(tx, workspace, &place.origin)?;
@@ -59,12 +68,10 @@ pub fn record_chat_place(db: &Connection, chat: &SpaceId, place: &Origin) -> Res
 /// a nested command takes nothing.
 pub fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -> Result<bool> {
     let mut statement = db.prepare(
-        "SELECT origin FROM executions WHERE space_id IS NOT ?1 AND agent IS NOT NULL
-           AND json_extract(origin,'$.host')=?2 AND json_extract(origin,'$.place')=?3",
+        "SELECT origin_host,origin_place,origin_instance,origin FROM executions
+         WHERE space_id IS NOT ?1 AND agent IS NOT NULL AND origin_host=?2 AND origin_place=?3",
     )?;
-    let origins = statement.query_map(params![space, place.host, place.id()], |row| {
-        row.get::<_, String>(0)
-    })?;
+    let origins = statement.query_map(params![space, place.host, place.id()], origin)?;
     on_server_of(origins, place)
 }
 
@@ -72,23 +79,21 @@ pub fn runs_elsewhere(db: &Connection, place: &Origin, space: &SpaceId) -> Resul
 /// `place`.
 pub fn occupied(db: &Connection, place: &Origin) -> Result<bool> {
     let mut statement = db.prepare(
-        "SELECT origin FROM executions
-         WHERE json_extract(origin,'$.host')=?1 AND json_extract(origin,'$.place')=?2",
+        "SELECT origin_host,origin_place,origin_instance,origin FROM executions
+         WHERE origin_host=?1 AND origin_place=?2",
     )?;
-    let origins = statement.query_map(params![place.host, place.id()], |row| {
-        row.get::<_, String>(0)
-    })?;
+    let origins = statement.query_map(params![place.host, place.id()], origin)?;
     on_server_of(origins, place)
 }
 
 /// Whether any of `origins`, places of `place`'s host under its ID as
 /// executions record them, is on `place`'s server.
 fn on_server_of(
-    origins: impl Iterator<Item = rusqlite::Result<String>>,
+    origins: impl Iterator<Item = rusqlite::Result<Option<Origin>>>,
     place: &Origin,
 ) -> Result<bool> {
     for origin in origins {
-        if serde_json::from_str::<Origin>(&origin?)?.server() == place.server() {
+        if origin?.is_some_and(|origin| origin.server() == place.server()) {
             return Ok(true);
         }
     }
@@ -98,7 +103,8 @@ fn on_server_of(
 /// Make `space` the owner of `place` when the daemon records it.
 fn take_over(db: &Connection, space: &SpaceId, place: &Origin) -> Result<()> {
     db.execute(
-        "UPDATE owned_places SET space_id=?1 WHERE host=?2 AND server=?3 AND place=?4",
+        "UPDATE owned_places SET space_id=?1
+         WHERE origin_host=?2 AND server=?3 AND origin_place=?4",
         params![space, place.host, place.server(), place.id()],
     )?;
     Ok(())
@@ -216,15 +222,16 @@ impl Agents {
         let (host, server, place) = (place.host, place.server(), place.id().to_owned());
         self.store
             .run(move |db| {
-                db.query_row(
-                    "SELECT space_id,origin FROM owned_places
-                     WHERE host=?1 AND server=?2 AND place=?3",
-                    params![host, server, place],
-                    |row| Ok((row.get::<_, SpaceId>(0)?, row.get::<_, String>(1)?)),
-                )
-                .optional()?
-                .map(|(space, origin)| Ok((space, serde_json::from_str(&origin)?)))
-                .transpose()
+                Ok(db
+                    .query_row(
+                        &format!(
+                            "SELECT {OWNED_COLUMNS} FROM owned_places
+                             WHERE origin_host=?1 AND server=?2 AND origin_place=?3"
+                        ),
+                        params![host, server, place],
+                        owned_place,
+                    )
+                    .optional()?)
             })
             .await
     }
@@ -239,8 +246,8 @@ impl Agents {
 /// under its ID keeps its own record.
 fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
     db.execute(
-        "DELETE FROM owned_places WHERE host=?1 AND server=?2 AND place=?3
-         AND json_extract(origin,'$.instance') IS ?4",
+        "DELETE FROM owned_places WHERE origin_host=?1 AND server=?2 AND origin_place=?3
+         AND origin_instance IS ?4",
         params![place.host, place.server(), place.id(), place.instance],
     )?;
     Ok(())
@@ -250,37 +257,45 @@ fn forget_owned(db: &Connection, place: &Origin) -> Result<()> {
 /// already. A record of an earlier instance under the same ID, which a host
 /// that reuses IDs left, gives way to it.
 fn insert_owned(db: &Connection, space: &SpaceId, origin: &Origin) -> Result<()> {
+    let server = origin.server();
+    let columns = OriginColumns::of(origin)?;
     db.execute(
-        "INSERT INTO owned_places(host,server,place,space_id,origin)
-         VALUES (?1,?2,?3,?4,?5) ON CONFLICT(host,server,place) DO UPDATE
-         SET space_id=excluded.space_id, origin=excluded.origin
-         WHERE json_extract(excluded.origin,'$.instance') IS NOT NULL
-           AND json_extract(excluded.origin,'$.instance')
-               IS NOT json_extract(owned_places.origin,'$.instance')",
+        "INSERT INTO owned_places(origin_host,server,origin_place,origin_instance,space_id,origin)
+         VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(origin_host,server,origin_place) DO UPDATE
+         SET space_id=excluded.space_id, origin_instance=excluded.origin_instance,
+             origin=excluded.origin
+         WHERE excluded.origin_instance IS NOT NULL
+           AND excluded.origin_instance IS NOT owned_places.origin_instance",
         params![
-            origin.host,
-            origin.server(),
+            columns.host,
+            server,
             origin.id(),
+            columns.instance,
             space,
-            serde_json::to_string(origin)?
+            columns.origin
         ],
     )?;
     Ok(())
 }
 
 pub fn owned(db: &Connection, space: Option<&SpaceId>) -> Result<Vec<(SpaceId, Origin)>> {
-    let mut statement = db.prepare(
-        "SELECT space_id,origin FROM owned_places
-         WHERE ?1 IS NULL OR space_id=?1 ORDER BY rowid",
-    )?;
-    let rows = statement.query_map([space], |row| {
-        Ok((row.get::<_, SpaceId>(0)?, row.get::<_, String>(1)?))
+    let mut statement = db.prepare(&format!(
+        "SELECT {OWNED_COLUMNS} FROM owned_places WHERE ?1 IS NULL OR space_id=?1 ORDER BY rowid"
+    ))?;
+    let rows = statement.query_map([space], owned_place)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// The columns [`owned_place`] reads.
+const OWNED_COLUMNS: &str = "space_id,origin_host,origin_place,origin_instance,origin";
+
+/// The place an owned place's `row` records, with its owner.
+fn owned_place(row: &rusqlite::Row<'_>) -> rusqlite::Result<(SpaceId, Origin)> {
+    let origin = origin(row)?.ok_or_else(|| {
+        let index = row.as_ref().column_index("origin").unwrap_or_default();
+        rusqlite::Error::InvalidColumnType(index, "origin".into(), rusqlite::types::Type::Null)
     })?;
-    rows.map(|row| {
-        let (space, origin) = row?;
-        Ok((space, serde_json::from_str(&origin)?))
-    })
-    .collect()
+    Ok((row.get("space_id")?, origin))
 }
 
 #[cfg(test)]

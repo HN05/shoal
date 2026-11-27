@@ -7,6 +7,7 @@ mod guards;
 pub mod journal;
 pub mod lifecycle;
 mod migrations;
+pub mod origins;
 mod ports;
 mod rows;
 pub mod spaces;

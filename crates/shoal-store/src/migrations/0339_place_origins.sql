@@ -1,0 +1,2 @@
+-- A place's JSON leaves out its host, ID and instance, which the
+-- migration's preparation moved into their columns.

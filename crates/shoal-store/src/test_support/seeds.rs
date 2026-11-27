@@ -20,6 +20,7 @@ use shoal_protocol::{
     time::UnixTime,
 };
 
+use crate::origins::OriginColumns;
 use crate::{json_text, narrowing_column};
 
 /// Record `repository`, unless a repository of its ID is recorded.
@@ -143,9 +144,13 @@ pub fn execution(
     execution: &Execution,
     scope_token: Option<&ScopeToken>,
 ) -> Result<()> {
+    let origin = (execution.origin.as_ref())
+        .map(OriginColumns::of)
+        .transpose()?;
     db.execute(
-        "INSERT INTO executions(id,space_id,state,wrapper,child,group_id,origin,agent,model,
-            effort,mode,narrowing,scope_token) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        "INSERT INTO executions(id,space_id,state,wrapper,child,group_id,origin_host,origin_place,
+            origin_instance,origin,agent,model,effort,mode,narrowing,scope_token)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
         params![
             execution.id,
             execution.space_id,
@@ -153,7 +158,10 @@ pub fn execution(
             json_text(execution.wrapper.as_ref())?,
             json_text(execution.child.as_ref())?,
             execution.group_id,
-            json_text(execution.origin.as_ref())?,
+            origin.as_ref().map(|origin| origin.host),
+            origin.as_ref().map(|origin| &origin.place),
+            origin.as_ref().map(|origin| &origin.instance),
+            origin.as_ref().map(|origin| &origin.origin),
             execution.agent,
             execution.model.model,
             execution.model.effort,

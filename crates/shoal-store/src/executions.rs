@@ -13,8 +13,8 @@ use shoal_protocol::state::ExecutionState;
 
 use crate::sql::json_column;
 
-pub const EXECUTION_COLUMNS: &str =
-    "id,space_id,state,wrapper,child,group_id,origin,agent,model,effort,mode,narrowing";
+pub const EXECUTION_COLUMNS: &str = "id,space_id,state,wrapper,child,group_id,origin_host,
+    origin_place,origin_instance,origin,agent,model,effort,mode,narrowing";
 
 pub fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
     Ok(Execution {
@@ -24,7 +24,7 @@ pub fn execution(row: &Row<'_>) -> rusqlite::Result<Execution> {
         wrapper: json_column(row, "wrapper")?,
         child: json_column(row, "child")?,
         group_id: row.get("group_id")?,
-        origin: json_column(row, "origin")?,
+        origin: crate::origins::origin(row)?,
         agent: row.get("agent")?,
         model: ModelChoice {
             model: row.get("model")?,
