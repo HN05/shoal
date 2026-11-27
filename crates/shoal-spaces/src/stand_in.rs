@@ -72,6 +72,7 @@ use shoal_protocol::status::IssueStatus;
 use shoal_protocol::threads::{Outcome, Thread};
 use shoal_refs::CommitId;
 use shoal_schedule::placement::snapshot::Request;
+use shoal_store::test_support::seeds;
 use shoal_store::tree::TrackedAgents;
 use tokio::sync::{MutexGuard, OwnedMutexGuard};
 
@@ -270,22 +271,8 @@ impl StandIn {
         };
         std::fs::create_dir_all(&repository.workspaces_dir)?;
         let recorded = repository.clone();
-        self.store
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO repositories(id,path,source,last_used,name,workspaces_dir)
-                     VALUES (?1,?2,?3,?4,?5,?6)",
-                    rusqlite::params![
-                        recorded.id,
-                        recorded.path.to_str(),
-                        recorded.source,
-                        recorded.last_used,
-                        recorded.name,
-                        recorded.workspaces_dir.to_str(),
-                    ],
-                )?;
-                Ok(())
-            })
+        (self.store)
+            .write(move |tx| seeds::repository(tx, &recorded))
             .await?;
         Ok(repository)
     }
@@ -572,17 +559,12 @@ impl StandIn {
     /// [`Self::end_agent`].
     pub(crate) async fn run_named_agent(&self, id: &SpaceId, agent: &str) -> ExecutionId {
         let execution = ExecutionId::generate();
-        let (recorded, space, name) = (execution.clone(), id.clone(), agent.to_owned());
-        (self.store.write(move |tx| {
-            tx.execute(
-                "INSERT INTO executions(id,space_id,state,agent,mode)
-                 VALUES (?1,?2,'running',?3,'worker')",
-                rusqlite::params![recorded, space, name],
-            )?;
-            Ok(())
-        }))
-        .await
-        .unwrap();
+        let mut run = shoal_protocol::test_support::execution(execution.as_str(), id.as_str());
+        run.agent = Some(Agent::from(agent));
+        run.mode = Some("worker".parse().unwrap());
+        (self.store.write(move |tx| seeds::execution(tx, &run, None)))
+            .await
+            .unwrap();
         let ran = Ran {
             space: id.clone(),
             agent: agent.into(),

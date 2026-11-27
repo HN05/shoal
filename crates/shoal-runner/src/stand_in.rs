@@ -31,6 +31,8 @@ use shoal_protocol::{
     protocol::ItemContext,
 };
 
+use shoal_store::test_support::seeds;
+
 use crate::{
     Runner,
     daemon::{Agents, Daemon, Permissions, Records, Repositories, Spaces, WaitingEntry},
@@ -92,13 +94,7 @@ impl Fixture {
         let runner = runner(&root, &daemon).await;
         let record = daemon.repository.clone();
         (runner.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?2,?3,1)",
-                    rusqlite::params![record.id, record.path.to_str(), record.source],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::repository(tx, &record))
             .await
             .unwrap();
         Self {
@@ -176,21 +172,16 @@ impl Fixture {
     /// Record a workspace of the repository named `name`, as a claimed
     /// job's runs in.
     pub(crate) async fn record_workspace(&self, name: &str) -> SpaceId {
-        let (id, repository) = (SpaceId::generate(), self.repository().clone());
-        let (row, name) = (id.clone(), name.to_owned());
+        let id = SpaceId::generate();
+        let path = std::path::Path::new("/work").join(name);
+        let workspace = shoal_protocol::test_support::workspace(
+            id.as_str(),
+            self.repository().as_str(),
+            name,
+            &path,
+        );
         (self.runner.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
-                    rusqlite::params![row, repository, name],
-                )?;
-                tx.execute(
-                    "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES (?1,'/work/'||?2,?2,'ready','abc','/admin')",
-                    rusqlite::params![row, name],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::workspace(tx, &workspace))
             .await
             .unwrap();
         id

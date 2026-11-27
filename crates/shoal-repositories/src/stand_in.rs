@@ -23,13 +23,16 @@ use shoal_daemon_base::{
 };
 use shoal_ids::{repository_ids::RepositoryId, space_ids::SpaceId};
 use shoal_protocol::{
-    model::{Chat, Repository, RepositoryRemoval, Space, SyncedRepository, Workspace},
+    model::{
+        Base, Chat, Checkout, Repository, RepositoryRemoval, Space, SyncedRepository, Workspace,
+    },
     paths::Paths,
     space_names::SpaceSelector,
     state::WorkspaceState,
 };
 use shoal_refs::BranchName;
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 
 use crate::{
     Repositories,
@@ -138,32 +141,30 @@ impl Fixture {
         workspace
     }
 
-    /// Insert the row of the ready workspace `name` of `repo` in
-    /// `worktree`, and read it back as the spaces would.
+    /// Record the ready workspace `name` of `repo` in `worktree`.
     async fn insert_workspace(
         &self,
         repo: &Repository,
         name: &str,
         worktree: Worktree,
     ) -> Workspace {
-        let (id, repository, name) = (SpaceId::generate(), repo.id.clone(), name.to_owned());
-        let recorded = self.store.write(move |tx| {
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
-                rusqlite::params![id, repository, name],
-            )?;
-            tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                 VALUES (?1,?2,?3,'ready',?4,?5)",
-                rusqlite::params![id, worktree.path, name, worktree.base, worktree.git_dir],
-            )?;
-            let query = format!(
-                "SELECT {} FROM spaces JOIN workspaces USING(id) WHERE id=?1",
-                shoal_store::WORKSPACE_COLUMNS
-            );
-            Ok(tx.query_row(&query, [&id], shoal_store::workspace)?)
-        });
-        recorded.await.unwrap()
+        let id = SpaceId::generate();
+        let path = Path::new(&worktree.path);
+        let mut workspace =
+            shoal_protocol::test_support::workspace(id.as_str(), repo.id.as_str(), name, path);
+        workspace.checkout = Checkout::Created {
+            base: Base {
+                commit: worktree.base.into(),
+                reference: None,
+            },
+            git_dir: worktree.git_dir.into(),
+        };
+        let recorded = workspace.clone();
+        workspace.number = (self.store)
+            .write(move |tx| seeds::workspace(tx, &recorded))
+            .await
+            .unwrap();
+        workspace
     }
 
     /// Record a chat running in the worktree of `workspace`.

@@ -14,6 +14,8 @@ use shoal_protocol::{
     state::WorkspaceState,
 };
 
+use shoal_store::test_support::seeds;
+
 use super::{StandIn, StandInRecords, StandInRemovals};
 use crate::Agents;
 
@@ -114,14 +116,7 @@ impl Fixture {
         };
         let recorded = repository.clone();
         (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT OR IGNORE INTO repositories(id,path,source,last_used)
-                     VALUES (?1,?2,?3,1)",
-                    rusqlite::params![recorded.id, recorded.path.to_str(), recorded.source],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::repository(tx, &recorded))
             .await
             .unwrap();
         let mut repositories = self.daemon.repositories.lock().unwrap();
@@ -151,24 +146,11 @@ impl Fixture {
     ) -> Workspace {
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
-        let workspace =
+        let mut workspace =
             shoal_protocol::test_support::workspace(id, repository.id.as_str(), name, &path);
-        let (id, repository) = (workspace.id.clone(), repository.id.clone());
-        let name = name.to_owned();
-        (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES (?1,'workspace',?2,?3)",
-                    rusqlite::params![id, repository, name],
-                )?;
-                tx.execute(
-                    "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES (?1,'/work/'||?1,?2,'ready','abc','/admin')",
-                    rusqlite::params![id, name],
-                )?;
-                Ok(())
-            })
+        let recorded = workspace.clone();
+        workspace.number = (self.agents.store)
+            .write(move |tx| seeds::workspace(tx, &recorded))
             .await
             .unwrap();
         let mut spaces = self.daemon.spaces.lock().unwrap();
@@ -191,13 +173,7 @@ impl Fixture {
     pub(crate) async fn place_below(&self, child: &SpaceId, parent: &SpaceId) {
         let (child, parent) = (child.clone(), parent.clone());
         (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
-                    [&child, &parent],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::parent(tx, &child, &parent))
             .await
             .unwrap();
     }
@@ -255,19 +231,14 @@ impl Fixture {
         repository: Option<&Repository>,
     ) -> SpaceId {
         let id = self.stopped_chat(name, mode, repository).await;
-        let (recorded, mode) = (id.clone(), mode.to_owned());
+        let execution = ExecutionId::from(name);
+        let mut run = shoal_protocol::test_support::execution(name, id.as_str());
+        run.agent = Some(Agent::from("claude"));
+        run.mode = Some(mode.parse().unwrap());
         (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO executions(id,space_id,state,agent,mode)
-                     VALUES (?1,?1,'running','claude',?2)",
-                    rusqlite::params![recorded, mode],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::execution(tx, &run, None))
             .await
             .unwrap();
-        let execution = ExecutionId::from(name);
         (self.agents)
             .track_unconnected(&execution, &id, &name.into(), Agent::from("claude"))
             .await;
@@ -285,18 +256,10 @@ impl Fixture {
         let path = repository.map_or_else(|| self.root.path().into(), |found| found.path.clone());
         let repository = repository.map(|repository| repository.id.clone());
         let given = repository.as_ref().map(RepositoryId::as_str);
-        let chat = shoal_protocol::test_support::chat(name, given, mode, &path);
-        let (id, mode) = (chat.id.clone(), mode.to_owned());
-        let recorded = id.clone();
-        (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,name,repository_id,mode)
-                     VALUES (?1,'chat',?1,?2,?3)",
-                    rusqlite::params![recorded, repository, mode],
-                )?;
-                Ok(())
-            })
+        let mut chat = shoal_protocol::test_support::chat(name, given, mode, &path);
+        let (id, recorded) = (chat.id.clone(), chat.clone());
+        chat.number = (self.agents.store)
+            .write(move |tx| seeds::chat(tx, &recorded))
             .await
             .unwrap();
         self.daemon.spaces.lock().unwrap().push(Space::from(chat));
@@ -356,15 +319,9 @@ impl Fixture {
         agent: Option<Agent>,
     ) -> ExecutionId {
         let (space, execution) = (workspace.id.clone(), ExecutionId::from(id));
-        let recorded = execution.clone();
+        let run = shoal_protocol::test_support::execution(id, space.as_str());
         (self.agents.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO executions(id,space_id,state) VALUES (?1,?2,'running')",
-                    rusqlite::params![recorded, space],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::execution(tx, &run, None))
             .await
             .unwrap();
         if let Some(agent) = agent {

@@ -44,6 +44,7 @@ use shoal_protocol::{
 };
 use shoal_refs::{BranchName, CommitId};
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 use tokio::sync::watch;
 
 use crate::{
@@ -78,24 +79,13 @@ pub fn service(root: &std::path::Path, store: Store, text: &str) -> Arc<Links> {
 
 /// Record `workspace` and its repository in `store`.
 pub async fn record(store: &Store, workspace: &Workspace) {
-    let path = workspace.path.to_str().unwrap().to_owned();
-    let (id, repository) = (workspace.id.clone(), workspace.repository_id.clone());
-    let (name, branch) = (workspace.name.clone(), workspace.branch().cloned());
+    let recorded = workspace.clone();
     store
         .write(move |tx| {
-            tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES (?1,?2,?2,1)",
-                rusqlite::params![repository, path],
-            )?;
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace',?2,?3)",
-                rusqlite::params![id, repository, name],
-            )?;
-            tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                    VALUES (?1,?2,?3,'ready','abc','/admin')",
-                rusqlite::params![id, path, branch],
-            )?;
+            let id = recorded.repository_id.as_ref().unwrap().as_str();
+            let repository = shoal_protocol::test_support::repository(id, &recorded.path);
+            seeds::repository(tx, &repository)?;
+            seeds::workspace(tx, &recorded)?;
             Ok(())
         })
         .await

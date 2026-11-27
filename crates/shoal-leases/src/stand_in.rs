@@ -22,6 +22,7 @@ use shoal_protocol::acquirers::Acquirer;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, DecisionStatus, Target};
 use shoal_protocol::space_names::{SpaceName, SpaceSelector};
+use shoal_store::test_support::seeds;
 
 use crate::{
     Leases,
@@ -186,22 +187,12 @@ fn workspace(path: PathBuf) -> Workspace {
 
 /// Record `workspace` and its repository in `store`.
 async fn record(store: &shoal_store::Store, workspace: &Workspace) {
-    let path = workspace.path.to_str().unwrap().to_owned();
+    let recorded = workspace.clone();
     store
         .write(move |tx| {
-            tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-                [],
-            )?;
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('workspace','workspace','repo','worker')",
-                [],
-            )?;
-            tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('workspace',?1,'worker','ready','abc','/admin')",
-                [path],
-            )?;
+            let repository = shoal_protocol::test_support::repository("repo", "/repo".as_ref());
+            seeds::repository(tx, &repository)?;
+            seeds::workspace(tx, &recorded)?;
             Ok(())
         })
         .await

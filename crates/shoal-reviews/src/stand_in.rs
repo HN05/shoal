@@ -36,6 +36,7 @@ use shoal_protocol::time::UnixTime;
 use shoal_protocol::views::Viewed;
 use shoal_refs::CommitId;
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 use tokio::sync::watch;
 
 use crate::{
@@ -213,18 +214,11 @@ pub(crate) async fn store(path: PathBuf, id: &'static str) -> Store {
         .unwrap();
     store
         .write(move |tx| {
-            tx.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-                [],
-            )?;
-            tx.execute(
-                "INSERT INTO spaces(id,kind,repository_id,name) VALUES (?1,'workspace','repo',?1)",
-                [id],
-            )?;
-            tx.execute(
-                "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES (?1,'/work',?1,'ready','abc','/admin')",
-                [id],
-            )?;
+            let repository = shoal_protocol::test_support::repository("repo", "/repo".as_ref());
+            seeds::repository(tx, &repository)?;
+            let workspace =
+                shoal_protocol::test_support::workspace(id, "repo", id, "/work".as_ref());
+            seeds::workspace(tx, &workspace)?;
             Ok(())
         })
         .await

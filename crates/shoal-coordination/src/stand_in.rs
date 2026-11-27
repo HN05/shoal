@@ -20,20 +20,21 @@ use shoal_daemon_base::{
 use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_ids::repository_ids::RepositoryId;
-use shoal_ids::space_ids::{SpaceId, SpaceNumber};
+use shoal_ids::space_ids::SpaceId;
 use shoal_protocol::alerts::AlertKind;
 use shoal_protocol::approvals::{ApprovalRequest, ProposalDecision};
 use shoal_protocol::config::permissions::Permissions;
 use shoal_protocol::files::{Attacher, FileSource, NewFile, SentFile};
 use shoal_protocol::hub::Member;
 use shoal_protocol::hub::directory::HubView;
-use shoal_protocol::model::{Located, QueueEntry, Repository, Space, SpaceTarget, Workspace};
+use shoal_protocol::model::{Chat, Located, QueueEntry, Repository, Space, SpaceTarget, Workspace};
 use shoal_protocol::paths::Paths;
 use shoal_protocol::protocol::{Body, Operation};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_protocol::threads::{Outcome, Thread};
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 use shoal_store::tree::TrackedAgents;
 
 use crate::{
@@ -110,17 +111,11 @@ impl Fixture {
 
     /// Register the repository `id`.
     pub(crate) async fn repository(&self, id: &str) -> RepositoryId {
-        let id = RepositoryId::from(id);
-        let registered = id.clone();
+        let path = std::path::Path::new("/").join(id);
+        let registered = shoal_protocol::test_support::repository(id, &path);
+        let id = registered.id.clone();
         (self.daemon.store)
-            .write(move |tx| {
-                tx.execute(
-                    "INSERT OR IGNORE INTO repositories(id,path,source,last_used)
-                     VALUES (?1,'/'||?1,'/'||?1,1)",
-                    [&registered],
-                )?;
-                Ok(())
-            })
+            .write(move |tx| seeds::repository(tx, &registered))
             .await
             .unwrap();
         id
@@ -147,30 +142,15 @@ impl Fixture {
         std::fs::create_dir_all(&path).unwrap();
         let mut workspace =
             shoal_protocol::test_support::workspace(name, repository.as_str(), name, &path);
-        let number = self.daemon.next_number();
-        workspace.number = number;
         workspace.mode = mode.map(|mode| mode.parse().unwrap());
-        let (id, parent) = (workspace.id.clone(), parent.cloned());
-        let mode = mode.map(str::to_owned);
-        (self.daemon.store)
+        let (recorded, parent) = (workspace.clone(), parent.cloned());
+        workspace.number = (self.daemon.store)
             .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,repository_id,name,number,mode)
-                     VALUES (?1,'workspace',?2,?1,?3,?4)",
-                    rusqlite::params![id, repository, number, mode],
-                )?;
-                tx.execute(
-                    "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES (?1,'/work/'||?1,?1,'ready','abc','/admin')",
-                    [&id],
-                )?;
+                let number = seeds::workspace(tx, &recorded)?;
                 if let Some(parent) = parent {
-                    tx.execute(
-                        "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
-                        [&id, &parent],
-                    )?;
+                    seeds::parent(tx, &recorded.id, &parent)?;
                 }
-                Ok(())
+                Ok(number)
             })
             .await
             .unwrap();
@@ -199,12 +179,10 @@ impl Fixture {
         repository: Option<&RepositoryId>,
         parent: Option<&SpaceId>,
     ) -> Space {
-        let number = self.daemon.next_number();
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
-        let chat: Space = serde_json::from_value(serde_json::json!({
+        let mut chat: Chat = serde_json::from_value(serde_json::json!({
             "id": name,
-            "number": number,
             "name": name,
             "repository_id": repository,
             "mode": mode,
@@ -213,26 +191,18 @@ impl Fixture {
             "started_at": 0,
         }))
         .unwrap();
-        let (id, repository, parent) = (chat.id.clone(), repository.cloned(), parent.cloned());
-        let mode = mode.to_owned();
-        (self.daemon.store)
+        let (recorded, parent) = (chat.clone(), parent.cloned());
+        chat.number = (self.daemon.store)
             .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,repository_id,name,number,mode)
-                     VALUES (?1,'chat',?2,?1,?3,?4)",
-                    rusqlite::params![id, repository, number, mode],
-                )?;
-                tx.execute("INSERT INTO chats(id) VALUES (?1)", [&id])?;
+                let number = seeds::chat(tx, &recorded)?;
                 if let Some(parent) = parent {
-                    tx.execute(
-                        "INSERT INTO space_parents(space_id,parent_id) VALUES (?1,?2)",
-                        [&id, &parent],
-                    )?;
+                    seeds::parent(tx, &recorded.id, &parent)?;
                 }
-                Ok(())
+                Ok(number)
             })
             .await
             .unwrap();
+        let chat: Space = chat.into();
         self.daemon.spaces.lock().unwrap().push(chat.clone());
         chat
     }
@@ -313,11 +283,6 @@ impl StandIn {
 }
 
 impl StandIn {
-    fn next_number(&self) -> SpaceNumber {
-        let count = self.spaces.lock().unwrap().len();
-        SpaceNumber::from(count as u32 + 1)
-    }
-
     fn find(&self, id: &SpaceId) -> Option<Space> {
         let spaces = self.spaces.lock().unwrap();
         spaces.iter().find(|space| space.id == *id).cloned()

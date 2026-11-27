@@ -13,6 +13,7 @@ use shoal_protocol::demos::{Launch, Running};
 use shoal_protocol::scope_tokens::ScopeToken;
 use shoal_protocol::space_names::SpaceSelector;
 use shoal_store::Store;
+use shoal_store::test_support::seeds;
 
 use crate::{
     Demos,
@@ -57,26 +58,13 @@ impl Fixture {
     pub(crate) async fn workspace(&self, name: &str) -> Workspace {
         let path = self.root.path().join(name);
         std::fs::create_dir_all(&path).unwrap();
-        let workspace = shoal_protocol::test_support::workspace(name, "repo", name, &path);
-        let id = workspace.id.clone();
-        (self.demos.store)
+        let mut workspace = shoal_protocol::test_support::workspace(name, "repo", name, &path);
+        let recorded = workspace.clone();
+        workspace.number = (self.demos.store)
             .write(move |tx| {
-                tx.execute(
-                    "INSERT OR IGNORE INTO repositories(id,path,source,last_used)
-                     VALUES ('repo','/repo','/repo',1)",
-                    [],
-                )?;
-                tx.execute(
-                    "INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES (?1,'workspace','repo',?1)",
-                    [&id],
-                )?;
-                tx.execute(
-                    "INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES (?1,'/work/'||?1,?1,'ready','abc','/admin')",
-                    [&id],
-                )?;
-                Ok(())
+                let repository = shoal_protocol::test_support::repository("repo", "/repo".as_ref());
+                seeds::repository(tx, &repository)?;
+                seeds::workspace(tx, &recorded)
             })
             .await
             .unwrap();
@@ -92,11 +80,9 @@ impl Fixture {
         let (space, recorded) = (workspace.clone(), execution.clone());
         (self.demos.store)
             .write(move |tx| {
-                tx.execute(
-                    "INSERT INTO executions(id,space_id,state,scope_token)
-                     VALUES (?1,?2,'running',?3)",
-                    rusqlite::params![recorded, space, ScopeToken::generate()],
-                )?;
+                let run =
+                    shoal_protocol::test_support::execution(recorded.as_str(), space.as_str());
+                seeds::execution(tx, &run, Some(&ScopeToken::generate()))?;
                 records::record(tx, &recorded, &space, &launch)
             })
             .await
