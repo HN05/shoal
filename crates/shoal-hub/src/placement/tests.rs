@@ -82,3 +82,40 @@ async fn the_registered_placer_decides_under_the_external_policy() {
     assert_eq!(decision.policy, Policy::External);
     assert_eq!(decision.unanswered, None);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_placement_waits_briefly_for_a_machine_to_describe_itself() {
+    use shoal_core::config::Config;
+
+    use crate::stand_in::{self, StandIn};
+
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::default()).await;
+    let own = hub.own_member().await.unwrap();
+    let mut request = snapshot().request;
+    request.caller = own.clone();
+    let daemon = StandIn::default();
+    let reporting = async {
+        tokio::time::sleep(super::DESCRIBED_WITHIN / 2).await;
+        stand_in::describe(&hub, &own, &["claude"]);
+    };
+    let (decision, ()) = tokio::join!(hub.place_for(&daemon, request.clone()), reporting);
+    assert_eq!(decision.unwrap().unwrap().machine, own);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_placement_skips_a_machine_that_does_not_describe_itself_in_time() {
+    use shoal_core::config::Config;
+
+    use crate::stand_in::{self, StandIn};
+
+    let root = tempfile::tempdir().unwrap();
+    let hub = stand_in::hub(&root, Config::default()).await;
+    let own = hub.own_member().await.unwrap();
+    let mut request = snapshot().request;
+    request.caller = own.clone();
+    let started = tokio::time::Instant::now();
+    let decision = hub.place_for(&StandIn::default(), request).await.unwrap();
+    assert!(decision.is_none());
+    assert_eq!(started.elapsed(), super::DESCRIBED_WITHIN);
+}

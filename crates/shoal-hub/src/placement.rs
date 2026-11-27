@@ -1,5 +1,5 @@
 //! Where a new space starts among the hub's machines.
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, sync::Mutex, time::Duration};
 
 use anyhow::{Result, anyhow};
 use shoal_ids::member_ids::MemberId;
@@ -14,6 +14,7 @@ use shoal_schedule::placement::{
     Balanced, Local, Placement, Placer, Policy,
     snapshot::{Capacity, Machine, Request, Snapshot},
 };
+use tokio::{sync::watch, time::Instant};
 
 use crate::{
     Hub,
@@ -27,9 +28,17 @@ mod placer;
 pub(crate) use placer::Placers;
 pub use placer::Registration;
 
+/// How long a placement waits for the connected machines that have not
+/// reported their capacity since their link opened.
+const DESCRIBED_WITHIN: Duration = Duration::from_secs(2);
+
 /// The capacity each machine last reported.
 #[derive(Default)]
-pub(crate) struct Capacities(Mutex<HashMap<MemberId, Capacity>>);
+pub(crate) struct Capacities {
+    reported: Mutex<HashMap<MemberId, Capacity>>,
+    /// Counts the reports kept, for those who wait for one.
+    kept: watch::Sender<u64>,
+}
 
 impl Capacities {
     /// Keep `capacity` as what the machine `member` reported with
@@ -37,7 +46,8 @@ impl Capacities {
     /// replaces what the hub had, so one that has not measured since has
     /// none; a report of changes without one keeps it.
     pub fn keep(&self, member: &MemberId, report: &Report, capacity: Option<Capacity>) {
-        let mut capacities = self.0.lock().unwrap();
+        let mut capacities = self.reported.lock().unwrap();
+        self.kept.send_modify(|kept| *kept += 1);
         match (capacity, report) {
             (Some(capacity), _) => {
                 capacities.insert(member.clone(), capacity);
@@ -51,8 +61,13 @@ impl Capacities {
 
     /// What the machine `member` reported last, none before it reported.
     pub fn of(&self, member: &MemberId) -> Option<Capacity> {
-        let capacities = self.0.lock().unwrap();
+        let capacities = self.reported.lock().unwrap();
         capacities.get(member).cloned()
+    }
+
+    /// Changes as each report is kept.
+    pub fn watch(&self) -> watch::Receiver<u64> {
+        self.kept.subscribe()
     }
 }
 
@@ -88,13 +103,34 @@ impl Hub {
         request: Request,
         eligible: impl Fn(&Member) -> bool,
     ) -> Result<Option<Decision>> {
-        let members = self.local_hub_overview(daemon).await?.members;
-        let snapshot = Snapshot {
-            request,
-            machines: placed_machines(members.iter().filter(|member| eligible(member))),
-        };
+        let (snapshot, members) = (self.described_snapshot(daemon, request, eligible)).await?;
         let (placement, decided) = self.rank(&snapshot).await;
         Ok(decision(placement, decided, &members))
+    }
+
+    /// The snapshot of `request` among the connected machines that are
+    /// `eligible`, with the hub's members, once each of those machines has
+    /// reported its capacity, or [`DESCRIBED_WITHIN`] passed.
+    async fn described_snapshot(
+        &self,
+        daemon: &dyn Daemon,
+        request: Request,
+        eligible: impl Fn(&Member) -> bool,
+    ) -> Result<(Snapshot, Vec<Member>)> {
+        let mut kept = self.capacities.watch();
+        let deadline = Instant::now() + DESCRIBED_WITHIN;
+        loop {
+            kept.borrow_and_update();
+            let members = self.local_hub_overview(daemon).await?.members;
+            let snapshot = Snapshot {
+                request: request.clone(),
+                machines: placed_machines(members.iter().filter(|member| eligible(member))),
+            };
+            let undescribed = (snapshot.machines.iter()).any(|machine| machine.capacity.is_none());
+            if !undescribed || !kept_by(&mut kept, deadline).await {
+                return Ok((snapshot, members));
+            }
+        }
     }
 
     /// The placement of `snapshot` by the configured policy, with the
@@ -146,6 +182,12 @@ impl Hub {
             member.capacity = self.capacities.of(&member.id);
         }
     }
+}
+
+/// Whether a report is kept by `deadline`, as `kept` watches them.
+async fn kept_by(kept: &mut watch::Receiver<u64>, deadline: Instant) -> bool {
+    let changed = tokio::time::timeout_at(deadline, kept.changed()).await;
+    matches!(changed, Ok(Ok(())))
 }
 
 /// The policy that made a placement, and why the placer an `external` one

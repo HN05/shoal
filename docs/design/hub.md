@@ -587,7 +587,9 @@ shows in the next report. The hub matches agents by name alone: the machine
 that runs a start launches that name under its own definition.
 
 A connected machine that has not reported yet is `undescribed`. Placement
-skips it as such, never as lacking the repository or the agent.
+skips it as such, never as lacking the repository or the agent. A placement
+that meets one first waits 2 seconds for its report, as such a machine sends
+one soon after its link opens, then places without it.
 
 ### Policies
 
