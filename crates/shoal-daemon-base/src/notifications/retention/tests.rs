@@ -1,5 +1,6 @@
 use super::*;
 use futures_util::future::BoxFuture;
+use shoal_store::test_support::seeds;
 use std::time::Duration;
 
 const DAY: i64 = 24 * 3600;
@@ -31,12 +32,10 @@ async fn notifications() -> (tempfile::TempDir, Notifications) {
         .unwrap();
     store
         .run(|db| {
+            seeds::ready_workspace(db, "short", "in-short", "a")?;
+            seeds::ready_workspace(db, "long", "in-long", "b")?;
             db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used)
-                    VALUES ('short','/short','/short',1), ('long','/long','/long',1);
-                INSERT INTO spaces(id,kind,repository_id,name)
-                    VALUES ('in-short','workspace','short','a'), ('in-long','workspace','long','b');
-                INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
+                "INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
                     VALUES ('removed-short','short',0,'c',unixepoch()+60,'{}');",
             )?;
             Ok(())

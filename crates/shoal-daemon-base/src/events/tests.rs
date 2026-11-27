@@ -2,6 +2,8 @@ use super::*;
 use crate::forge::items::change::ItemChange;
 use crate::store::Store;
 use anyhow::Result;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
 
 /// A store in a temporary state directory.
 async fn store() -> (tempfile::TempDir, Store) {
@@ -37,15 +39,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
     ];
     let events = store
         .run(move |db| {
-            db.execute_batch(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('r','/r','/r',1);
-                 BEGIN;
-                 INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-                     VALUES ('w','/work','worker','ready','abc','/admin');
-                 INSERT INTO spaces(id,kind,repository_id,name)
-                     VALUES ('w','workspace','r','worker');
-                 COMMIT;",
-            )?;
+            seeds::ready_workspace(db, "r", "w", "worker")?;
             for (kind, agent) in recorded {
                 insert_agent(db, &SpaceId::from("w"), kind, agent)?;
             }
@@ -82,17 +76,7 @@ async fn an_agent_ends_once_whether_a_stop_or_its_exit_reports_it() {
 #[test]
 fn link_events_include_item_kind_and_url() -> Result<()> {
     let db = shoal_store::test_support::migrated()?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
-            VALUES ('w','/work','worker','ready','worker','abc','/admin');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
+    seeds::ready_workspace(&db, "repo", "w", "worker")?;
     super::record_link(
         &db,
         &SpaceId::from("w"),
@@ -118,17 +102,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
 #[test]
 fn item_activity_events_include_item_and_update_details() -> Result<()> {
     let db = shoal_store::test_support::migrated()?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
-            VALUES ('w','/work','worker','ready','worker','abc','/admin');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
+    seeds::ready_workspace(&db, "repo", "w", "worker")?;
     let update = crate::forge::updates::Update {
         url: "https://forge.example/team/repo/pulls/7".into(),
         kind: crate::forge::updates::UpdateKind::Comment,
@@ -162,17 +136,7 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
     use super::EventDetails;
     use crate::forge::items::link::LinkKind;
     let db = shoal_store::test_support::migrated()?;
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,observed_branch,base_commit,git_dir)
-            VALUES ('w','/work','worker','ready','worker','abc','/admin');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
+    seeds::ready_workspace(&db, "repo", "w", "worker")?;
     let url = "https://forge.example/team/repo/actions/runs/2765";
     super::record_link(
         &db,
@@ -223,15 +187,14 @@ fn run_link_activity_and_approval_events_read_back() -> Result<()> {
 fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
     use super::{EventDetails, EventKind};
     let db = shoal_store::test_support::migrated()?;
-    db.execute_batch(
-        "BEGIN;
-         INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         INSERT INTO chats(id)
-             VALUES ('c');
-         INSERT INTO spaces(id,kind,repository_id,name,mode)
-             VALUES ('c','chat','repo','planner','chat');
-         INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL);
-         COMMIT;",
+    let checkout = std::path::Path::new("/repo");
+    seeds::repository(&db, &test_support::repository("repo", checkout))?;
+    let mut chat = test_support::chat("c", Some("repo"), "chat", checkout);
+    chat.name = "planner".into();
+    seeds::chat(&db, &chat)?;
+    db.execute(
+        "INSERT INTO space_review(space_id,url,kind) VALUES ('c','',NULL)",
+        [],
     )?;
     super::record_link(
         &db,
@@ -293,14 +256,7 @@ fn chat_events_reach_the_journal_under_the_chat() -> Result<()> {
 fn each_writer_s_events_decode_and_round_trip() -> Result<()> {
     use serde_json::json;
     let db = shoal_store::test_support::migrated()?;
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-         BEGIN;
-         INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-            VALUES ('w','/work','worker','ready','abc','/admin');
-         INSERT INTO spaces(id,kind,repository_id,name) VALUES ('w','workspace','repo','worker');
-         COMMIT;",
-    )?;
+    seeds::ready_workspace(&db, "repo", "w", "worker")?;
     let id = SpaceId::from("w");
     let url = "https://forge.example/team/repo/pulls/12";
     let blocker = serde_json::from_value(json!({

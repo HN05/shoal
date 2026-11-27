@@ -48,9 +48,9 @@ pub fn workspace(db: &Connection, workspace: &Workspace) -> Result<SpaceNumber> 
     };
     in_savepoint(db, || {
         db.execute(
-            "INSERT INTO workspaces(id,path,branch,start_commit,made_for,state,error,
-            base_commit,base_ref,git_dir,setup_skipped,disposable)
-            VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            "INSERT INTO workspaces(id,path,branch,observed_branch,start_commit,made_for,state,
+            error,base_commit,base_ref,git_dir,setup_skipped,disposable)
+            VALUES (?1,?2,?3,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
             params![
                 workspace.id,
                 workspace.path.to_str(),

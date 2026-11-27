@@ -1,6 +1,9 @@
 use super::*;
 use futures_util::future::BoxFuture;
 use rusqlite::params;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
+use std::path::Path;
 use std::time::Duration;
 
 /// A removed space's events stay a month, and Shoal's own a year.
@@ -57,10 +60,8 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
             journal(db, "long-gone", "file_removed", 0)?;
             journal(db, "just-removed", "removed", 0)?;
             journal(db, "restorable", "removed", decade)?;
-            db.execute(
-                "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-                [],
-            )?;
+            let repository = test_support::repository("repo", Path::new("/repo"));
+            seeds::repository(db, &repository)?;
             db.execute(
                 "INSERT INTO removed_spaces(space_id,repository_id,chat,name,expires_at,record)
                     VALUES ('restorable','repo',0,'restorable',unixepoch()+60,'{}')",

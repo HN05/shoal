@@ -1,18 +1,13 @@
 use super::*;
 use shoal_ids::space_ids::SpaceId;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
+use std::path::Path;
 
 fn spaces(db: &Connection) -> Result<()> {
-    db.execute_batch(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-        INSERT INTO spaces(id,kind,repository_id,name)
-            VALUES ('first','workspace','repo','first');
-        INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir)
-            VALUES ('first','/first','first','ready','abc','/admin');
-        INSERT INTO spaces(id,kind,repository_id,name,mode)
-            VALUES ('chat','chat','repo','planning','chat');
-        INSERT INTO chats(id)
-            VALUES ('chat');",
-    )?;
+    seeds::ready_workspace(db, "repo", "first", "first")?;
+    let chat = test_support::chat("chat", Some("repo"), "chat", Path::new("/repo"));
+    seeds::chat(db, &chat)?;
     Ok(())
 }
 

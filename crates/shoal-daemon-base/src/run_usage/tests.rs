@@ -1,15 +1,15 @@
 use super::*;
+use shoal_protocol::test_support;
+use shoal_store::test_support::seeds;
+use std::path::Path;
 
 const GIB: u64 = 1 << 30;
 
 /// A store with one repository, `repo`.
 fn database() -> Connection {
     let db = shoal_store::test_support::migrated().unwrap();
-    db.execute(
-        "INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1)",
-        [],
-    )
-    .unwrap();
+    let repository = test_support::repository("repo", Path::new("/repo"));
+    seeds::repository(&db, &repository).unwrap();
     db
 }
 

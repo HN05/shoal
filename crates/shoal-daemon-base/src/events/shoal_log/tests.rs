@@ -1,14 +1,16 @@
 use super::*;
 use crate::store::Store;
+use shoal_store::test_support::seeds;
 
-/// The live workspace `plan`, and the journal of `fix`, removed by cleanup
-/// and restored, between Shoal's own events.
+/// Record the live workspace `plan`, and the journal of `fix`, removed by
+/// cleanup and restored, between Shoal's own events.
+fn journal(db: &mut rusqlite::Connection) -> anyhow::Result<()> {
+    seeds::ready_workspace(db, "repo", "plan", "plan")?;
+    Ok(db.execute_batch(JOURNAL)?)
+}
+
+/// What [`journal`] records after the workspace `plan`.
 const JOURNAL: &str = "
-    INSERT INTO repositories(id,path,source,last_used) VALUES ('repo','/repo','/repo',1);
-    BEGIN;
-    INSERT INTO workspaces(id,path,branch,state,base_commit,git_dir) VALUES ('plan','/plan','plan','ready','abc','/admin');
-    INSERT INTO spaces(id,kind,repository_id,name) VALUES ('plan','workspace','repo','plan');
-    COMMIT;
     INSERT INTO space_events(space_id,kind,bulk,record) VALUES
         (NULL,'daemon_started',0,json_object('kind','daemon_started','version','1.0.0')),
         ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
@@ -52,7 +54,6 @@ fn lines(entries: &[LogEntry]) -> Vec<String> {
 #[tokio::test]
 async fn shoal_s_log_holds_every_space_s_entries_and_shoal_s_own() {
     let (_temp, store) = store().await;
-    let journal = |db: &mut rusqlite::Connection| Ok(db.execute_batch(JOURNAL)?);
     store.run(journal).await.unwrap();
     let entries = read(&store, LogFilter::Entries, 50).await.unwrap();
     assert_eq!(
