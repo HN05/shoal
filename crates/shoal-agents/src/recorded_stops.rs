@@ -38,26 +38,25 @@ impl Agents {
         let Some(cause) = record.cause else {
             return;
         };
-        self.log_recorded_stop(space_id, id, record.agent, cause)
-            .await;
+        self.log_recorded_stop(space_id, id, &record, cause).await;
         if cause == StopCause::OomKill {
             self.record_oom_kill(space_id, id).await;
         }
     }
 
-    /// Log that `agent`, which `execution` ran in the space `id`, stopped for
-    /// `cause`, unless its pause report logged it already.
+    /// Log that the agent of `record`, which `execution` ran in the space
+    /// `id`, stopped for `cause`, unless its pause report logged it already.
     async fn log_recorded_stop(
         &self,
         id: &SpaceId,
         execution: &ExecutionId,
-        agent: crate::agent::Agent,
+        record: &recovery::Record,
         cause: StopCause,
     ) {
         let stopped = shoal_daemon_base::events::AgentEvent {
-            mode: None,
-            name: agent,
+            name: record.agent.clone(),
             execution_id: Some(execution.clone()),
+            mode: Some(record.mode.clone()),
             exit_code: None,
             oom_kills: 0,
             cause: Some(cause),
