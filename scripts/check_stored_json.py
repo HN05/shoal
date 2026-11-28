@@ -6,8 +6,9 @@ literals of its Rust files there. It leaves out the store's migrations and
 their tests, which read the shapes older releases stored, but reads the
 schema they generate. `json_each` and `json_tree` may read a bound parameter,
 and a `journal_append` call takes a `json_object` source, whose keys are its
-table's column names. It reads `->` and `->>` in a Rust literal only when the
-literal holds a keyword of SQL."""
+table's column names. In a Rust literal it reads `->` only when the literal
+holds a keyword of SQL or an operand of SQL follows the arrow, since text
+such as `{name} -> {port}` uses arrows too."""
 import re
 import sys
 from dataclasses import dataclass
@@ -41,11 +42,13 @@ FUNCTIONS = (
      ARRAY),
 )
 # Whatever their right operand, such as a path, a label or a column.
-OPERATORS = ((re.compile(r"(->>?)"), PATHS),)
-# A word only SQL puts in a Rust literal that also holds `->`, which text
-# such as `{name} -> {port}` does too.
+OPERATOR = re.compile(r"(->>?)")
+# A word only SQL puts in a Rust literal.
 SQL_KEYWORD = re.compile(r"\b(?:select|insert|update|delete|from|where|values|join)\b",
                          re.IGNORECASE)
+# What follows an arrow that only SQL writes: a string, a number or a bound
+# parameter.
+SQL_OPERAND = re.compile(r"\s*(?:'|-?\d|\?|[:@$]\w)")
 JOURNAL_SOURCE = re.compile(r"\bjournal_append\s*\(", re.IGNORECASE)
 JSON_OBJECT = re.compile(r"json_object(?=\s*\()", re.IGNORECASE)
 # A string, a quoted identifier or a comment, each to the end of the text
@@ -122,12 +125,22 @@ def without_journal_sources(sql):
 
 def sql_problems(sql, path, line_of, statement=True):
     """Each refused use in *sql*, at the line `line_of` gives its offset.
-    Unless *sql* is a `statement`, it reads the operators only when *sql*
-    holds a keyword of SQL."""
-    sql = without_journal_sources(executable(sql))
-    refused = FUNCTIONS + (OPERATORS if statement or SQL_KEYWORD.search(sql) else ())
+    Unless *sql* is a `statement`, it reads an arrow only as [`operators`]
+    says."""
+    code = without_journal_sources(executable(sql))
+    found = [(match, reason) for pattern, reason in FUNCTIONS for match in pattern.finditer(code)]
+    found += [(match, PATHS) for match in operators(code, sql, statement)]
     return [Problem(path, line_of(match.start(1)), match.group(1), reason)
-            for pattern, reason in refused for match in pattern.finditer(sql)]
+            for match, reason in found]
+
+
+def operators(code, sql, statement):
+    """The arrows of the [`executable`] *code*, which keeps the offsets of
+    *sql*. Outside a `statement`, an arrow is SQL's when *code* holds a
+    keyword of SQL, when it is `->>`, or when an operand of SQL follows it."""
+    keyword = statement or SQL_KEYWORD.search(code)
+    return [match for match in OPERATOR.finditer(code)
+            if keyword or match.group(1) == "->>" or SQL_OPERAND.match(sql, match.end())]
 
 
 def rust_literals(source):

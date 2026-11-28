@@ -94,8 +94,12 @@ class CheckStoredJsonTests(unittest.TestCase):
                    "SELECT record ->> ('kind'), record->>key, record -> 0 FROM t;\n")
         self.write("crates/core/src/lib.rs",
                    'const Q: &str = "SELECT id FROM t WHERE record->>name=?1";\n'
-                   'const P: &str = "{name} -> {port} [{state}]";\n')
+                   'const P: &str = "{name} -> {port} [{state}]";\n'
+                   'const F: &str = "record ->> name"; const G: &str = "record -> \'$.kind\'";\n'
+                   'const H: &str = "{} -> {} ({})";\n')
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "->>"),
+                                        ("crates/core/src/lib.rs", 3, "->"),
+                                        ("crates/core/src/lib.rs", 3, "->>"),
                                         ("crates/core/tests/queries.sql", 1, "->"),
                                         ("crates/core/tests/queries.sql", 1, "->>"),
                                         ("crates/core/tests/queries.sql", 1, "->>")])
