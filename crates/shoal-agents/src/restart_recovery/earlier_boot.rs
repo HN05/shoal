@@ -41,7 +41,8 @@ impl Agents {
     /// for the agent queue to restore, as a system shutdown's stop saves it.
     /// A record its wrapper finished saving chose its restore already. One a
     /// stop left `stopping`, whose wrapper never finished, gets the request
-    /// a new record does.
+    /// a new record does. The record names the cause, which forgetting the
+    /// execution logs, so a pass cut off after the save still logs it.
     async fn save_ended_agent(&self, daemon: &dyn Daemon, execution: &Execution) -> Result<()> {
         let (space_id, id) = (&execution.space_id, &execution.id);
         let path = record_path(&self.paths, space_id, id);
@@ -53,28 +54,13 @@ impl Agents {
                 None => return Ok(()),
             },
         };
-        let restore = self.unattended_restore(daemon, execution, &record).await;
-        let agent = record.agent.clone();
-        recovery::save_stopped(&self.paths, space_id, id, record, restore)?;
-        self.record_machine_down(execution, agent).await;
-        Ok(())
-    }
-
-    /// Record that `agent`, which `execution` ran, stopped as its machine
-    /// went down.
-    async fn record_machine_down(&self, execution: &Execution, agent: crate::agent::Agent) {
-        let stopped = shoal_daemon_base::events::AgentEvent {
-            mode: None,
-            name: agent,
-            execution_id: Some(execution.id.clone()),
-            exit_code: None,
-            oom_kills: 0,
-            cause: Some(StopCause::MachineDown),
-            source: None,
+        let record = Record {
+            cause: record.cause.or(Some(StopCause::MachineDown)),
+            ..record
         };
-        let kind = shoal_daemon_base::events::EventKind::AgentStopped;
-        let space = &execution.space_id;
-        shoal_daemon_base::events::record_agent(&self.store, space, kind, stopped).await;
+        let restore = self.unattended_restore(daemon, execution, &record).await;
+        recovery::save_stopped(&self.paths, space_id, id, record, restore)?;
+        Ok(())
     }
 
     /// The record of the agent `execution` ran, which saved none, in the

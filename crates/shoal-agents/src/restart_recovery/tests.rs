@@ -155,6 +155,29 @@ fn blocked(fixture: &Fixture) -> Vec<String> {
         .collect()
 }
 
+/// The cause of the stop of `execution`'s agent that the space's log
+/// records, if it records one.
+async fn stop_cause(
+    locked: &Locked,
+    execution: &str,
+) -> Option<shoal_protocol::stop_causes::StopCause> {
+    let store = &locked.fixture.agents.store;
+    let (items, _) = shoal_daemon_base::events::page(store, None, None, 100)
+        .await
+        .unwrap();
+    items.into_iter().find_map(|item| match item {
+        shoal_protocol::events::EventItem::Event(event)
+            if event.details.kind() == shoal_daemon_base::events::EventKind::AgentStopped =>
+        {
+            let agent = event.details.event.agent()?;
+            (agent.execution_id.as_ref().map(|id| id.as_str()) == Some(execution))
+                .then_some(agent.cause)
+                .flatten()
+        }
+        _ => None,
+    })
+}
+
 /// Reconcile once, as startup does.
 async fn reconcile_once(fixture: &Fixture) -> Pending {
     (fixture
@@ -188,6 +211,12 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
     // A wrapper that finished saving chose its agent's restore itself.
     let stopped = Some(Stage::Stopped);
     interrupted(&locked, "stopped", &earlier, None, stopped).await;
+    // A pass cut off after it saved its record, before the stop was logged.
+    interrupted(&locked, "logged-late", &earlier, None, stopped).await;
+    let late = record_path(paths, &workspace.id, &"logged-late".into());
+    let saved =
+        r#"{"agent":"fixture","mode":"worker","stage":"stopped","cause":{"kind":"machine_down"}}"#;
+    fs::write(&late, saved).unwrap();
     // A recorded child keeps an execution of this boot that saved nothing.
     let wrapper = exited().await;
     interrupted(&locked, "this-boot", &wrapper, Some(&wrapper), None).await;
@@ -243,20 +272,10 @@ async fn reconciliation_forgets_executions_of_an_earlier_boot_saving_their_agent
         .map(|(id, _)| id.into())
         .collect();
     assert_eq!(requested, ["half-saved", "rebooted", "unrecorded"]);
-    let id = locked.workspace.id.clone();
-    let stopped = (locked.fixture.agents.store)
-        .run(move |db| {
-            let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
-            shoal_daemon_base::events::newest_of(db, &id, &kinds)
-        })
-        .await
-        .unwrap()
-        .unwrap();
-    let cause = stopped.event.agent().and_then(|agent| agent.cause);
-    assert_eq!(
-        cause,
-        Some(shoal_protocol::stop_causes::StopCause::MachineDown)
-    );
+    let machine_down = Some(shoal_protocol::stop_causes::StopCause::MachineDown);
+    for id in ["unrecorded", "logged-late"] {
+        assert_eq!(stop_cause(&locked, id).await, machine_down, "{id}");
+    }
     assert!(
         LastSession::all(paths, &locked.workspace.id)
             .unwrap()
