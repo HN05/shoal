@@ -16,7 +16,10 @@ use crate::{
         manager::Manager,
         notifications::AlertKind,
         scope::{Caller, ScopedExecution},
-        test_support::{away_on_offline_machine, caller_in, manager, repository, track_agent},
+        test_support::{
+            away_of_kind_on_offline_machine, away_on_offline_machine, caller_in, manager,
+            repository, track_agent,
+        },
         workspace_files::Attacher,
     },
     model::Workspace,
@@ -630,18 +633,7 @@ async fn a_thread_names_a_space_on_another_machine_as_the_hub_lists_it() {
 /// parent towards the space `away` lists on its offline machine, as `kind`.
 async fn open_towards_offline(tree: &Tree, kind: &str) -> anyhow::Result<Thread> {
     let manager = &tree.manager;
-    away_on_offline_machine(manager, Some(&tree.parent.id)).await;
-    let kind = kind.to_owned();
-    (manager.store)
-        .write(move |tx| {
-            tx.execute(
-                "UPDATE hub_spaces SET summary=json_set(summary,'$.kind',?1)",
-                [kind],
-            )?;
-            Ok(())
-        })
-        .await
-        .unwrap();
+    away_of_kind_on_offline_machine(manager, Some(&tree.parent.id), kind).await;
     let away = SpaceSelector::Number(90.into());
     (manager.coordination.open_thread(
         &**manager,

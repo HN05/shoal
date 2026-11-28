@@ -70,14 +70,14 @@ fn seed_interrupted_operations(db: &mut Connection) -> Result<()> {
 }
 
 fn operation_snapshot(db: &mut Connection) -> Result<Vec<String>> {
-    Ok(db
-        .prepare(
-            "SELECT json_array(id,state,error) FROM workspaces
-            UNION ALL SELECT json_array(id,state) FROM executions
-            UNION ALL SELECT json_array(request_id,status) FROM simulator_clean_requests ORDER BY 1",
-        )?
-        .query_map([], |row| row.get(0))?
-        .collect::<rusqlite::Result<_>>()?)
+    crate::test_support::text_rows(
+        db,
+        &[
+            "SELECT id,state,error FROM workspaces",
+            "SELECT id,state FROM executions",
+            "SELECT request_id,status FROM simulator_clean_requests",
+        ],
+    )
 }
 
 #[tokio::test]

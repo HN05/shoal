@@ -39,3 +39,22 @@ pub fn migrated() -> Result<Connection> {
 pub async fn unsynced_store(path: PathBuf) -> Result<Store> {
     Store::open_with(path, crate::store::Syncs::Skipped).await
 }
+
+/// Each row that one of `queries` selects, as the JSON array of its
+/// columns, each text or null, sorted.
+pub fn text_rows(db: &Connection, queries: &[&str]) -> Result<Vec<String>> {
+    let mut rows = Vec::new();
+    for query in queries {
+        let mut statement = db.prepare(query)?;
+        let columns = statement.column_count();
+        let mut selected = statement.query([])?;
+        while let Some(row) = selected.next()? {
+            let values = (0..columns)
+                .map(|column| row.get::<_, Option<String>>(column))
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows.push(serde_json::to_string(&values)?);
+        }
+    }
+    rows.sort();
+    Ok(rows)
+}

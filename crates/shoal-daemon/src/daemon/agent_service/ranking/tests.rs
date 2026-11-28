@@ -306,12 +306,10 @@ async fn queue_labelled(
                 "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                 params![id, url],
             )?;
+            let record = serde_json::json!({"details": {"labels": ["later", "urgent", "bug"]}});
             db.execute(
-                &format!(
-                    "INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,
-                        json_object('details',json_object('labels',json_array('later','urgent','bug'))))"
-                ),
-                params![id, url],
+                &format!("INSERT INTO {table}(space_id,url,record) VALUES (?1,?2,?3)"),
+                params![id, url, record.to_string()],
             )?;
             Ok(())
         })
@@ -384,10 +382,10 @@ async fn a_space_with_several_issues_takes_the_highest_any_of_their_labels_maps_
                     "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                     params![id, url],
                 )?;
+                let record = serde_json::json!({"details": {"labels": [label]}});
                 db.execute(
-                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
-                        json_object('details',json_object('labels',json_array(?3))))",
-                    params![id, url, label],
+                    "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
+                    params![id, url, record.to_string()],
                 )?;
             }
             Ok(())
@@ -498,8 +496,8 @@ async fn assign_labelled(
                 params![id, issue_url],
             )?;
             db.execute(
-                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,json_object('urls',json_array(?2)))",
-                params![id, pr_url],
+                "INSERT INTO pr_cleanup(space_id,record) VALUES (?1,?2)",
+                params![id, serde_json::json!({"urls": [pr_url]}).to_string()],
             )?;
             for (url, record) in records {
                 db.execute(
@@ -570,10 +568,10 @@ async fn a_launch_shares_the_areas_of_existing_workspaces_issues_and_prs() {
                 "INSERT INTO space_issue(space_id,url) VALUES (?1,?2)",
                 params![chat_id, chat_issue],
             )?;
+            let record = serde_json::json!({"details": {"labels": ["area/docs"]}});
             db.execute(
-                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,
-                    json_object('details',json_object('labels',json_array('area/docs'))))",
-                params![chat_id, chat_issue],
+                "INSERT INTO space_item_activity(space_id,url,record) VALUES (?1,?2,?3)",
+                params![chat_id, chat_issue, record.to_string()],
             )?;
             Ok(())
         })

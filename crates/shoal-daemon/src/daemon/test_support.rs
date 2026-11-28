@@ -237,12 +237,21 @@ pub async fn configure(manager: &Manager, text: &str) {
     manager.reload_config().await.unwrap();
 }
 
-/// Make the daemon the hub, with the space `away`, number 90, below
+/// Make the daemon the hub, with the chat `away`, number 90, below
 /// `parent`, on its offline member machine `desk`.
 pub async fn away_on_offline_machine(manager: &Manager, parent: Option<&SpaceId>) {
+    away_of_kind_on_offline_machine(manager, parent, "chat").await;
+}
+
+/// [`away_on_offline_machine`], with `away` a space of `kind`.
+pub async fn away_of_kind_on_offline_machine(
+    manager: &Manager,
+    parent: Option<&SpaceId>,
+    kind: &str,
+) {
     configure(manager, "[machine.hub]\nenabled = true\n").await;
     let away = serde_json::json!({
-        "name": "away", "kind": "chat",
+        "name": "away", "kind": kind,
         "status": "working", "agent": true, "parent": parent,
     });
     (manager.store)
