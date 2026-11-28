@@ -59,7 +59,10 @@ RUST_TOKEN = re.compile(
     r"|(?<!\w)[bc]?\"(?P<text>(?:\\.|[^\"\\])*)\""
     r"|'(?:\\.|[^'\\\n])'",
     re.DOTALL)
-RUST_ESCAPE = re.compile(r"\\(.)", re.DOTALL)
+RUST_ESCAPE = re.compile(r"\\(x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)", re.DOTALL)
+# What the escapes that stand for no character of their own stand for; a
+# line continuation is one line break.
+RUST_ESCAPED = {"n": "\n", "r": "\n", "t": " ", "0": " ", "\n": "\n"}
 
 
 @dataclass(frozen=True, order=True)
@@ -118,15 +121,23 @@ def sql_problems(sql, path, line_of, statement=True):
 
 def rust_literals(source):
     """(offset, text) of each string literal in Rust *source*, outside
-    comments. An escape's text is the character it stands for, padded to
-    the escape's length, so that offsets stay."""
+    comments."""
     for token in RUST_TOKEN.finditer(source):
         if token.group("raw") is not None:
             yield token.start("raw"), token.group("raw")
         elif token.group("text") is not None:
-            yield token.start("text"), RUST_ESCAPE.sub(
-                lambda escape: " " + (escape.group(1) if escape.group(1) in "\"'\n" else " "),
-                token.group("text"))
+            yield token.start("text"), RUST_ESCAPE.sub(unescaped, token.group("text"))
+
+
+def unescaped(escape):
+    """The character the Rust *escape* stands for, after spaces that pad it
+    to the escape's length, so that offsets stay."""
+    code = escape.group(1)
+    if code[0] in "xu" and len(code) > 1:
+        character = chr(int(code.strip("xu{}"), 16))
+    else:
+        character = RUST_ESCAPED.get(code, code)
+    return " " * (len(escape.group(0)) - 1) + character
 
 
 def file_problems(path, text):

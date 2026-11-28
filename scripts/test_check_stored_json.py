@@ -58,6 +58,14 @@ class CheckStoredJsonTests(unittest.TestCase):
                                         ("crates/core/tests/queries.sql", 1, "json_extract"),
                                         ("crates/core/tests/queries.sql", 3, "json_type")])
 
+    def test_a_rust_escape_reads_as_the_character_it_stands_for(self):
+        self.write("crates/core/src/lib.rs",
+                   'const A: &str = "SELECT 1 -- note\\n, json_extract(record, \'$.x\') FROM t";\n'
+                   'const B: &str = "SELECT \\x27--\\x27, json_set(a, \'$.b\', 1) FROM t";\n'
+                   'const C: &str = "SELECT \\u{27}json_type(a)\\u{27} FROM t";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract"),
+                                        ("crates/core/src/lib.rs", 2, "json_set")])
+
     def test_an_operator_is_refused_whatever_its_right_operand(self):
         self.write("crates/core/tests/queries.sql",
                    "SELECT record ->> ('kind'), record->>key, record -> 0 FROM t;\n")
