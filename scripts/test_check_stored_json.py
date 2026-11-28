@@ -115,6 +115,13 @@ class CheckStoredJsonTests(unittest.TestCase):
                    "const C: char = '\"'; const P: &str = \"a -> b\";\n")
         self.assertEqual(self.found(), [])
 
+    def test_a_nested_block_comment_ends_where_rust_ends_it(self):
+        self.write("crates/core/src/lib.rs",
+                   '/* outer /* inner */ "json_extract(record)" " */\n'
+                   'const R: &str = r#"say "hi""#; fn f() -> u8 { 0 }\n'
+                   'const Q: &str = "SELECT json_set(a, \'$.b\', 1) FROM t";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 3, "json_set")])
+
     def test_a_journal_append_takes_a_json_object_source_whose_values_are_still_read(self):
         self.write("crates/core/src/triggers.sql",
                    "SELECT journal_append('linked', NEW.space_id,\n"

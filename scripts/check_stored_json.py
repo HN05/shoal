@@ -55,10 +55,11 @@ SQL_QUOTED = re.compile(
     r"|\[(?:(?P<bracketed>\w+)\]|[^\]]*(?:\]|$))"
     r"|--[^\n]*|/\*.*?(?:\*/|$)",
     re.DOTALL)
-# A Rust comment, or a literal with its body as group `raw` or `text`.
+# A Rust line comment, the start of a block comment, or a literal with its
+# body as group `raw` or `text`.
 RUST_TOKEN = re.compile(
-    r"//[^\n]*|/\*.*?\*/"
-    r"|(?<!\w)[bc]?r(#*)\"(?P<raw>.*?)\"\1"
+    r"//[^\n]*|(?P<block>/\*)"
+    r"|(?<!\w)[bc]?r(?P<hashes>#*)\"(?P<raw>.*?)\"(?P=hashes)"
     r"|(?<!\w)[bc]?\"(?P<text>(?:\\.|[^\"\\])*)\""
     r"|'(?:\\.|[^'\\\n])'",
     re.DOTALL)
@@ -131,12 +132,27 @@ def rust_literals(source):
     """(text, offsets) of each string literal in Rust *source*, outside
     comments: its text with each escape decoded, and the offset in *source*
     of each character of that text."""
-    for token in RUST_TOKEN.finditer(source):
-        if token.group("raw") is not None:
+    at = 0
+    while token := RUST_TOKEN.search(source, at):
+        at = token.end()
+        if token.group("block"):
+            at = block_comment_end(source, at)
+        elif token.group("raw") is not None:
             start = token.start("raw")
             yield token.group("raw"), range(start, token.end("raw"))
         elif token.group("text") is not None:
             yield decoded(token.group("text"), token.start("text"))
+
+
+def block_comment_end(source, at):
+    """The offset past the end of the Rust block comment whose `/*` ends
+    at *at*; Rust nests block comments."""
+    depth = 1
+    for mark in re.finditer(r"/\*|\*/", source[at:]):
+        depth += 1 if mark.group(0) == "/*" else -1
+        if depth == 0:
+            return at + mark.end()
+    return len(source)
 
 
 def decoded(body, start):
