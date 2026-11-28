@@ -258,13 +258,21 @@ fn record_escalated(tx: &Transaction<'_>, waiting: &Waiting) -> Result<()> {
 /// post they were passed on for.
 fn forget_answered(tx: &Transaction<'_>, waiting: &[Waiting]) -> Result<()> {
     let waiting: HashSet<_> = waiting.iter().map(Waiting::escalation).collect();
-    for (space_id, number, created_at) in escalations(tx)?.difference(&waiting) {
-        tx.execute(
-            "DELETE FROM hub_escalated_threads
-                WHERE space_id=?1 AND number=?2 AND created_at=?3",
-            params![space_id, number, created_at],
-        )?;
+    for answered in escalations(tx)?.difference(&waiting) {
+        forget_escalation(tx, answered)?;
     }
+    Ok(())
+}
+
+fn forget_escalation(
+    tx: &Transaction<'_>,
+    (space_id, number, created_at): &Escalation,
+) -> Result<()> {
+    tx.execute(
+        "DELETE FROM hub_escalated_threads
+            WHERE space_id=?1 AND number=?2 AND created_at=?3",
+        params![space_id, number, created_at],
+    )?;
     Ok(())
 }
 
