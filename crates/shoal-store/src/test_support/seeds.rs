@@ -12,6 +12,7 @@ use shoal_ids::{
     space_ids::{SpaceId, SpaceNumber},
 };
 use shoal_protocol::{
+    events::EventDetails,
     item_numbers::ItemNumber,
     model::{Chat, Checkout, Execution, Head, QueuedJob, Repository, Space, SpaceKind, Workspace},
     scope_tokens::ScopeToken,
@@ -311,6 +312,13 @@ pub fn space_file(db: &Connection, space: &SpaceId, name: &str, path: &Path) -> 
             VALUES (?1,?1,'thread',?2,?3,0,1,'{\"kind\":\"user\"}')",
         params![space, name, path.to_string_lossy()],
     )?;
+    Ok(db.last_insert_rowid())
+}
+
+/// Journal `details` as the journal stores an event, whether or not its
+/// space is still recorded, and return its row's ID.
+pub fn space_event(db: &Connection, details: &EventDetails) -> Result<i64> {
+    crate::journal::store_space_event(db, details)?;
     Ok(db.last_insert_rowid())
 }
 

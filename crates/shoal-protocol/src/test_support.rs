@@ -80,3 +80,25 @@ pub fn execution(id: &str, space: &str) -> crate::model::Execution {
     }))
     .unwrap()
 }
+
+/// The event `event` of the workspace `id`, named `name`, with its worktree
+/// at `path` and without a repository, branch, cause or error.
+pub fn workspace_event(
+    id: &str,
+    name: &str,
+    path: &Path,
+    event: crate::events::SpaceEvent,
+) -> crate::events::EventDetails {
+    crate::events::EventDetails {
+        space_id: id.into(),
+        space: crate::events::EventSpace::Workspace {
+            path: path.to_owned(),
+            branch: None,
+        },
+        repository_id: None,
+        name: name.into(),
+        cause: None,
+        error: None,
+        event,
+    }
+}

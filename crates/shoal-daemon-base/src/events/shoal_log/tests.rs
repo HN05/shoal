@@ -1,31 +1,62 @@
+use std::path::Path;
+
 use super::*;
 use crate::store::Store;
-use shoal_store::test_support::seeds;
+use shoal_protocol::events::{
+    AgentStateEvent, EventDetails, ShoalEventDetails, ShoalEventKind, SpaceEvent,
+};
+use shoal_protocol::model::EventCause;
+use shoal_protocol::state::AgentState;
+use shoal_protocol::test_support;
+use shoal_store::{journal, test_support::seeds};
 
 /// Record the live workspace `plan`, and the journal of `fix`, removed by
 /// cleanup and restored, between Shoal's own events.
 fn journal(db: &mut rusqlite::Connection) -> anyhow::Result<()> {
     seeds::ready_workspace(db, "repo", "plan", "plan")?;
-    Ok(db.execute_batch(JOURNAL)?)
+    let shoal = |kind, change: fn(&mut ShoalEventDetails)| {
+        let mut details = ShoalEventDetails::new(kind);
+        change(&mut details);
+        journal::append_shoal(db, &details)
+    };
+    let fix = |event, cause| {
+        let details = EventDetails {
+            cause,
+            ..test_support::workspace_event("fix-id", "fix", Path::new("/fix"), event)
+        };
+        seeds::space_event(db, &details).map(drop)
+    };
+    shoal(ShoalEventKind::DaemonStarted, |details| {
+        details.version = Some("1.0.0".into());
+    })?;
+    fix(created(), None)?;
+    let working = AgentStateEvent {
+        state: Some(AgentState::Working),
+    };
+    fix(
+        SpaceEvent::AgentState {
+            agent_state: working,
+        },
+        None,
+    )?;
+    fix(SpaceEvent::Removed, Some(EventCause::Idle))?;
+    shoal(ShoalEventKind::CleanupRan, |details| {
+        details.removed = vec!["fix".into()];
+    })?;
+    fix(created(), None)?;
+    fix(SpaceEvent::Restored, None)?;
+    shoal(ShoalEventKind::ConfigReloaded, |details| {
+        details.error = Some("expected a table".into());
+    })
 }
 
-/// What [`journal`] records after the workspace `plan`.
-const JOURNAL: &str = "
-    INSERT INTO space_events(space_id,kind,bulk,record) VALUES
-        (NULL,'daemon_started',0,json_object('kind','daemon_started','version','1.0.0')),
-        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix')),
-        ('fix-id','agent_state',1,json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix',
-            'agent_state',json_object('state','working'))),
-        ('fix-id','removed',0,json_object('kind','removed','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix','cause','idle')),
-        (NULL,'cleanup_ran',0,json_object('kind','cleanup_ran','removed',json_array('fix'))),
-        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix')),
-        ('fix-id','restored',0,json_object('kind','restored','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix')),
-        (NULL,'config_reloaded',0,json_object('kind','config_reloaded','error','expected a table'));";
+fn created() -> SpaceEvent {
+    SpaceEvent::Created {
+        base_ref: None,
+        base_workspace: None,
+        parent: None,
+    }
+}
 
 /// A store in a temporary state directory.
 async fn store() -> (tempfile::TempDir, Store) {
@@ -80,12 +111,12 @@ async fn shoal_s_log_holds_every_space_s_entries_and_shoal_s_own() {
 async fn shoal_s_log_reads_the_newest_entries_across_batches() {
     let (_temp, store) = store().await;
     let journal = |db: &mut rusqlite::Connection| {
-        Ok(db.execute_batch(
-            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i<1200)
-             INSERT INTO space_events(kind,bulk,record)
-                 SELECT 'daemon_started',0,json_object('kind','daemon_started','version',CAST(i AS TEXT))
-                 FROM n;",
-        )?)
+        for version in 1..=1200 {
+            let mut started = ShoalEventDetails::new(ShoalEventKind::DaemonStarted);
+            started.version = Some(version.to_string());
+            journal::append_shoal(db, &started)?;
+        }
+        anyhow::Ok(())
     };
     store.run(journal).await.unwrap();
     let entries = read(&store, LogFilter::Entries, 1000).await.unwrap();

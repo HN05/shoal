@@ -1,7 +1,12 @@
 use super::*;
 use crate::daemon::scope::Access;
 use crate::daemon::{events::EventKind, test_support::manager};
+use shoal_protocol::events::{AgentEvent, AgentStateEvent, EventDetails, SpaceEvent};
+use shoal_protocol::model::{EventCause, RefPart, SpaceRef};
+use shoal_protocol::state::AgentState;
+use shoal_protocol::test_support;
 use shoal_store::test_support::seeds;
+use std::path::Path;
 
 mod journal;
 
@@ -11,29 +16,56 @@ mod journal;
 fn journal(db: &mut rusqlite::Connection) -> anyhow::Result<()> {
     seeds::ready_workspace(db, "repo", "plan", "plan")?;
     seeds::ready_workspace(db, "repo", "other", "other")?;
-    Ok(db.execute_batch(JOURNAL)?)
+    let fix = |event| test_support::workspace_event("fix-id", "fix", Path::new("/fix"), event);
+    let agent = |exit_code| {
+        Box::new(AgentEvent {
+            name: "claude".into(),
+            execution_id: Some("e".into()),
+            mode: None,
+            exit_code,
+            oom_kills: 0,
+            source: None,
+            cause: None,
+        })
+    };
+    let working = AgentStateEvent {
+        state: Some(AgentState::Working),
+    };
+    let removed = EventDetails {
+        cause: Some(EventCause::Manual),
+        ..fix(SpaceEvent::Removed)
+    };
+    let child = SpaceRef {
+        id: "fix-id".into(),
+        name: "fix".into(),
+        part: RefPart::Workspace { branch: None },
+    };
+    let events = [
+        fix(SpaceEvent::Created {
+            base_ref: None,
+            base_workspace: None,
+            parent: None,
+        }),
+        fix(SpaceEvent::AgentStarted { agent: agent(None) }),
+        fix(SpaceEvent::AgentState {
+            agent_state: working,
+        }),
+        fix(SpaceEvent::AgentExited {
+            agent: agent(Some(0)),
+        }),
+        removed,
+        test_support::workspace_event(
+            "plan",
+            "plan",
+            Path::new("/plan"),
+            SpaceEvent::ChildRemoved { child },
+        ),
+    ];
+    for event in &events {
+        seeds::space_event(db, event)?;
+    }
+    Ok(())
 }
-
-/// What [`journal`] records after the live workspaces.
-const JOURNAL: &str = "
-    INSERT INTO space_events(space_id,kind,bulk,record) VALUES
-        ('fix-id','created',0,json_object('kind','created','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix')),
-        ('fix-id','agent_started',0,json_object('kind','agent_started','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix',
-            'agent',json_object('name','claude','execution_id','e','exit_code',NULL))),
-        ('fix-id','agent_state',1,json_object('kind','agent_state','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix',
-            'agent_state',json_object('state','working'))),
-        ('fix-id','agent_exited',0,json_object('kind','agent_exited','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix',
-            'agent',json_object('name','claude','execution_id','e','exit_code',0))),
-        ('fix-id','removed',0,json_object('kind','removed','space_id','fix-id','space_kind','workspace',
-            'name','fix','path','/fix','cause','manual'));
-    INSERT INTO space_events(space_id,kind,bulk,child_id,record) VALUES
-        ('plan','child_removed',0,'fix-id',json_object('kind','child_removed','space_id','plan',
-            'space_kind','workspace','name','plan','path','/plan',
-            'child',json_object('id','fix-id','name','fix','kind','workspace')));";
 
 fn kinds(entries: &[LogEntry]) -> Vec<EventKind> {
     entries

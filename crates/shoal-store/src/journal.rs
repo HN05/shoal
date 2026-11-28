@@ -37,10 +37,13 @@ pub fn append_caused(
     if workspaces_only(&event) && space.kind() == SpaceKind::Chat {
         return Ok(());
     }
-    insert(
-        db,
-        &Row::space_event(&space.details(id, event, cause, error))?,
-    )
+    store_space_event(db, &space.details(id, event, cause, error))
+}
+
+/// Store `details`, an event built whole, as [`append_caused`] stores the
+/// one it builds.
+pub(crate) fn store_space_event(db: &Connection, details: &EventDetails) -> Result<()> {
+    insert(db, &Row::space_event(details)?)
 }
 
 /// The workspace the workspace `id` builds on, as an event names it.

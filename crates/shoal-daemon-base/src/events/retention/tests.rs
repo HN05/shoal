@@ -1,8 +1,11 @@
 use super::*;
 use futures_util::future::BoxFuture;
 use rusqlite::params;
+use shoal_protocol::events::{
+    EventDetails, EventSpace, ShoalEventDetails, ShoalEventKind, SpaceEvent,
+};
 use shoal_protocol::test_support;
-use shoal_store::test_support::seeds;
+use shoal_store::{journal, test_support::seeds};
 use std::path::Path;
 use std::time::Duration;
 
@@ -36,15 +39,28 @@ fn spaces(db: &Connection) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Journal `kind` for the workspace `id`, `age` seconds ago.
-fn journal(db: &Connection, id: &str, kind: &str, age: i64) -> Result<()> {
+/// Journal `details`, `age` seconds ago.
+fn journal_at(db: &Connection, details: &EventDetails, age: i64) -> Result<()> {
+    let row = seeds::space_event(db, details)?;
     db.execute(
-        "INSERT INTO space_events(created_at,space_id,kind,bulk,record)
-            VALUES (unixepoch()-?3,?1,?2,0,
-                json_object('kind',?2,'space_id',?1,'space_kind','workspace'))",
-        params![id, kind, age],
+        "UPDATE space_events SET created_at=unixepoch()-?2 WHERE id=?1",
+        params![row, age],
     )?;
     Ok(())
+}
+
+/// Journal `event` for the workspace `id`, `age` seconds ago.
+fn journal(db: &Connection, id: &str, event: SpaceEvent, age: i64) -> Result<()> {
+    let details = test_support::workspace_event(id, id, Path::new("/work"), event);
+    journal_at(db, &details, age)
+}
+
+fn created() -> SpaceEvent {
+    SpaceEvent::Created {
+        base_ref: None,
+        base_workspace: None,
+        parent: None,
+    }
 }
 
 #[tokio::test]
@@ -53,13 +69,13 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
     let decade = 3651 * 24 * 3600;
     store
         .run(move |db| {
-            journal(db, "long-gone", "created", decade + 60)?;
-            journal(db, "long-gone", "removed", decade)?;
-            // A later event of a gone space, such as its kept files
-            // expiring, does not extend its retention.
-            journal(db, "long-gone", "file_removed", 0)?;
-            journal(db, "just-removed", "removed", 0)?;
-            journal(db, "restorable", "removed", decade)?;
+            journal(db, "long-gone", created(), decade + 60)?;
+            journal(db, "long-gone", SpaceEvent::Removed, decade)?;
+            // A later event of a gone space, such as one its kept files
+            // record as they expire, does not extend its retention.
+            journal(db, "long-gone", SpaceEvent::Renamed, 0)?;
+            journal(db, "just-removed", SpaceEvent::Removed, 0)?;
+            journal(db, "restorable", SpaceEvent::Removed, decade)?;
             let repository = test_support::repository("repo", Path::new("/repo"));
             seeds::repository(db, &repository)?;
             db.execute(
@@ -67,13 +83,11 @@ async fn gone_spaces_keep_their_events_for_the_retention_after_their_removal() {
                     VALUES ('restorable','repo',0,'restorable',unixepoch()+60,'{}')",
                 [],
             )?;
-            db.execute(
-                "INSERT INTO space_events(created_at,space_id,kind,bulk,record)
-                    VALUES (unixepoch()-?1,'chat','removed',0,
-                        json_object('kind','removed','space_id','chat','space_kind','chat'))",
-                [decade],
-            )?;
-            Ok(())
+            let chat = EventDetails {
+                space: EventSpace::Chat,
+                ..test_support::workspace_event("chat", "chat", Path::new("/"), SpaceEvent::Removed)
+            };
+            journal_at(db, &chat, decade)
         })
         .await
         .unwrap();
@@ -87,11 +101,14 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
     let (_temp, store) = store().await;
     let decade = 3651 * 24 * 3600;
     let shoal = |db: &Connection, version: &str, age: i64| {
+        let mut started = ShoalEventDetails::new(ShoalEventKind::DaemonStarted);
+        started.version = Some(version.into());
+        journal::append_shoal(db, &started)?;
         db.execute(
-            "INSERT INTO space_events(created_at,kind,bulk,record) VALUES (unixepoch()-?2,
-                'daemon_started',0,json_object('kind','daemon_started','version',?1))",
-            params![version, age],
-        )
+            "UPDATE space_events SET created_at=unixepoch()-?2 WHERE id=?1",
+            params![db.last_insert_rowid(), age],
+        )?;
+        anyhow::Ok(())
     };
     store
         .run(move |db| {
@@ -105,11 +122,15 @@ async fn shoal_s_own_events_stay_for_the_global_retention() {
     let left: Vec<String> = store
         .run(|db| {
             Ok(db
-                .prepare("SELECT json_extract(record,'$.version') FROM space_events")?
+                .prepare("SELECT record FROM space_events")?
                 .query_map([], |row| row.get(0))?
                 .collect::<rusqlite::Result<_>>()?)
         })
         .await
         .unwrap();
-    assert_eq!(left, ["new"]);
+    let left: Vec<_> = (left.iter())
+        .map(|record| serde_json::from_str::<ShoalEventDetails>(record).unwrap())
+        .map(|details| details.version)
+        .collect();
+    assert_eq!(left, [Some("new".to_owned())]);
 }
