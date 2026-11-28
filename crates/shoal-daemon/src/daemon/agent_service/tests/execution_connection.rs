@@ -845,3 +845,91 @@ async fn an_agents_pause_records_the_kills_of_the_run_it_stopped_and_its_cause()
     );
     assert!(alert.contains("killed 2"), "{alert}");
 }
+
+/// A wrapper that waits to restore its agent and reattaches after a daemon
+/// restart cut off its pause report logs the stop with the cause its
+/// recovery record saved.
+#[tokio::test]
+async fn a_waiting_wrapper_that_reattaches_logs_the_cause_its_record_saved() {
+    let (root, manager) = manager().await;
+    let path = repository(root.path(), "repo");
+    let repo = manager
+        .repositories
+        .register(path.to_str().unwrap().into(), None, None)
+        .await
+        .unwrap();
+    let workspace = manager
+        .create_workspace(&repo.id, "waiting".into(), None, None, None)
+        .await
+        .unwrap();
+    let wrapper = crate::process::identity::capture(std::process::id())
+        .unwrap()
+        .unwrap();
+    let started = (manager.agents)
+        .begin_execution(
+            &*manager,
+            workspace.id.as_str(),
+            Some(wrapper.clone()),
+            ExecutionKind::Command,
+            None,
+        )
+        .await
+        .unwrap();
+    let (id, scope_token) = (started.plan.id.clone(), started.plan.scope_token.clone());
+    drop(started);
+    manager.agents.detach_execution(&id).await;
+    manager.spaces.interrupted_operations().await.unwrap();
+    let record = crate::execution::recovery::record_path(&manager.paths, &workspace.id, &id);
+    std::fs::create_dir_all(record.parent().unwrap()).unwrap();
+    let saved = r#"{"agent":"codex","mode":"worker","stage":"stopped","cause":{"kind":"idle"}}"#;
+    std::fs::write(&record, saved).unwrap();
+    let request = Reattach {
+        narrowing: Default::default(),
+        mode: None,
+        model: Default::default(),
+        execution: id.clone(),
+        wrapper: wrapper.clone(),
+        child: Some(wrapper.clone()),
+        group_id: wrapper.pid,
+        scope_token,
+        agent: Some("codex".into()),
+        recover: true,
+        running_ms: 0,
+        awaiting_restore: Some(crate::model::Protection {
+            reason: "idle while the user is away".into(),
+            resumes_when: "an update arrives for it".into(),
+        }),
+        between_runs: false,
+        reports_status: false,
+    };
+    let (_client, server) = UnixStream::pair().unwrap();
+    let reattaching = tokio::spawn(reattach(
+        server,
+        1,
+        protocol::RESUME_NARROWING,
+        manager.agents.clone(),
+        manager.clone(),
+        request,
+        manager.gates.owned_operation().await,
+    ));
+    let space = workspace.id.clone();
+    let cause = bounded(async {
+        loop {
+            let space = space.clone();
+            let stopped = (manager.store)
+                .run(move |db| {
+                    let kinds = [shoal_daemon_base::events::EventKind::AgentStopped];
+                    shoal_daemon_base::events::newest_of(db, &space, &kinds)
+                })
+                .await
+                .unwrap();
+            if let Some(stopped) = stopped {
+                return stopped.event.agent().and_then(|agent| agent.cause);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await;
+    assert_eq!(cause, Some(StopCause::Idle));
+    reattaching.abort();
+}

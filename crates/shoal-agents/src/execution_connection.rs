@@ -596,7 +596,8 @@ async fn relay(
                 if let Some(tracked) = agent {
                     let stopped = AgentEvent {
                         oom_kills: reported.map_or(0, |memory| memory.oom_kills),
-                        cause: cause.or(*stop_cause),
+                        cause: (cause.or(*stop_cause))
+                            .or_else(|| agents.recorded_cause(&space.id, execution_id)),
                         ..agent_event(tracked, execution_id, None)
                     };
                     record_stop(agents, space, stopped).await;

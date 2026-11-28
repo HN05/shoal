@@ -44,6 +44,14 @@ impl Agents {
         }
     }
 
+    /// The cause the recovery record of `execution` in the space `id` names,
+    /// as a wrapper that reattaches while it waits finds it after a daemon
+    /// restart cut off its pause report.
+    pub fn recorded_cause(&self, id: &SpaceId, execution: &ExecutionId) -> Option<StopCause> {
+        let path = recovery::record_path(&self.paths, id, execution);
+        recovery::Record::load(&path).ok().flatten()?.cause
+    }
+
     /// Log that the agent of `record`, which `execution` ran in the space
     /// `id`, stopped for `cause`, unless its pause report logged it already.
     async fn log_recorded_stop(
