@@ -71,6 +71,13 @@ class CheckStoredJsonTests(unittest.TestCase):
                    'const Q: &str = "SELECT 1,\\n json_extr\\x61ct(record, \'$.x\') FROM t";\n')
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract")])
 
+    def test_a_line_continuation_joins_what_it_splits(self):
+        self.write("crates/core/src/lib.rs",
+                   'const Q: &str = "SELECT json_extr\\\n        act(record, \'$.x\'),\\\n'
+                   '    json_set(a, \'$.b\', 1) FROM t";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract"),
+                                        ("crates/core/src/lib.rs", 3, "json_set")])
+
     def test_a_quoted_function_name_is_still_the_function(self):
         self.write("crates/core/tests/queries.sql",
                    "SELECT \"json_extract\"(record, '$.x'), `json_set` (a, '$.b', 1) FROM t;\n"
@@ -95,8 +102,10 @@ class CheckStoredJsonTests(unittest.TestCase):
         self.write("crates/core/src/lib.rs",
                    'const A: &str = "SELECT value FROM json_each(?1)";\n'
                    'const B: &str = "SELECT value FROM json_each( ? )";\n'
-                   'const C: &str = "SELECT value FROM t, json_each(t.files)";\n')
-        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 3, "json_each")])
+                   'const C: &str = "SELECT value FROM t, json_each(t.files)";\n'
+                   'const D: &str = "SELECT value FROM t, jsonb_tree(t.record)";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 3, "json_each"),
+                                        ("crates/core/src/lib.rs", 4, "jsonb_tree")])
 
     def test_rust_code_comments_and_sql_comments_are_not_sql(self):
         self.write("crates/core/src/lib.rs",
