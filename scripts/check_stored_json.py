@@ -29,16 +29,18 @@ PATHS = "reads or writes a path inside stored JSON: read a column, or decode the
 BUILDS = "builds JSON in SQL: select the columns and build the value in Rust"
 ARRAY = ("reads the elements of stored JSON: keep them in a table of their own, "
          "or bind the array as a parameter")
+# SQLite reads function names whatever their case.
 REFUSED = (
     (re.compile(r"\b(jsonb?_(?:extract|set|insert|replace|remove|patch|type|valid|array_length))"
-                r"\s*\("), PATHS),
-    (re.compile(r"\b(jsonb?_(?:object|array|group_array|group_object))\s*\("), BUILDS),
-    (re.compile(r"\b(json_(?:each|tree))\s*\((?!\s*\?\d*\s*\))"), ARRAY),
+                r"\s*\(", re.IGNORECASE), PATHS),
+    (re.compile(r"\b(jsonb?_(?:object|array|group_array|group_object))\s*\(", re.IGNORECASE),
+     BUILDS),
+    (re.compile(r"\b(json_(?:each|tree))\s*\((?!\s*\?\d*\s*\))", re.IGNORECASE), ARRAY),
     # SQLite's operators take a path, a label or an index on their right.
     (re.compile(r"(->>?)\s*(?='|\?|-?\d)"), PATHS),
 )
-JOURNAL_SOURCE = re.compile(r"\bjournal_append\s*\(")
-JSON_OBJECT = re.compile(r"json_object(?=\s*\()")
+JOURNAL_SOURCE = re.compile(r"\bjournal_append\s*\(", re.IGNORECASE)
+JSON_OBJECT = re.compile(r"json_object(?=\s*\()", re.IGNORECASE)
 SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
 SQL_STRING = re.compile(r"'(?:[^']|'')*'")
 # A Rust comment, or a literal with its body as group `raw` or `text`.

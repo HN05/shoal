@@ -39,6 +39,14 @@ class CheckStoredJsonTests(unittest.TestCase):
             ("crates/core/tests/queries.sql", 2, "json_group_array"),
         ])
 
+    def test_a_function_is_refused_whatever_its_case(self):
+        self.write("crates/core/src/lib.rs",
+                   "const A: &str = \"SELECT JSON_EXTRACT(record,'$.kind') FROM t\";\n"
+                   "const B: &str = \"SELECT Json_Each(t.files), JSON_EACH(?1) FROM t\";\n"
+                   "const C: &str = \"SELECT JOURNAL_APPEND('x', id, JSON_OBJECT('a', 1))\";\n")
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "JSON_EXTRACT"),
+                                        ("crates/core/src/lib.rs", 2, "Json_Each")])
+
     def test_json_each_reads_only_a_bound_parameter(self):
         self.write("crates/core/src/lib.rs",
                    'const A: &str = "SELECT value FROM json_each(?1)";\n'
