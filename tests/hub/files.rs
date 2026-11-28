@@ -169,7 +169,12 @@ fn the_files_picker_prints_and_opens_a_file_another_machine_keeps() {
         install_test_script(hub.root.path().join("bin").join(opener), script);
     }
     picked(&hub, &space, "ctrl-o");
-    let copy = wait_for("the opener", || fs::read_to_string(&opened).ok());
+    // The shell creates the file before `printf` writes the path into it.
+    let copy = wait_for("the opener", || {
+        fs::read_to_string(&opened)
+            .ok()
+            .filter(|path| !path.is_empty())
+    });
     assert!(copy.contains("/.fetched/"), "{copy}");
     assert_eq!(fs::read_to_string(&copy).unwrap(), "plan");
 }
