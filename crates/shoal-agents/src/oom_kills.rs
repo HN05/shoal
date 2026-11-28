@@ -9,7 +9,7 @@ use shoal_ids::execution_ids::ExecutionId;
 use shoal_ids::space_ids::SpaceId;
 
 use crate::Agents;
-use crate::execution::recovery;
+use crate::execution::recovery::{self, RecordExt as _};
 use crate::state::AgentState;
 use crate::time::UnixTime;
 
@@ -39,7 +39,7 @@ impl Agents {
                 if new {
                     self.overload_recovery.reset();
                 }
-                let after = delay(kills).map(|delay| UnixTime::now() + delay);
+                let after = self.restore_deadline(space_id, execution, kills, new);
                 recovery::save_oom_kills(&self.paths, space_id, execution, kills, after)
             }
             Err(error) => Err(error),
@@ -47,6 +47,26 @@ impl Agents {
         if let Err(error) = saved {
             crate::log!("OOM kill of execution {execution} not counted: {error:#}");
         }
+    }
+}
+
+impl Agents {
+    /// The earliest time the restore of `execution` after `kills` OOM kills
+    /// in a row starts. A kill counted before keeps the time its record
+    /// saved then, so counting it again starts no new delay.
+    fn restore_deadline(
+        &self,
+        space_id: &SpaceId,
+        execution: &ExecutionId,
+        kills: u32,
+        new: bool,
+    ) -> Option<UnixTime> {
+        let path = recovery::record_path(&self.paths, space_id, execution);
+        let saved = (!new)
+            .then(|| recovery::Record::load(&path).ok().flatten())
+            .flatten()
+            .and_then(|record| record.restores_after);
+        saved.or_else(|| delay(kills).map(|delay| UnixTime::now() + delay))
     }
 }
 

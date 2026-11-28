@@ -1,5 +1,5 @@
 use super::*;
-use crate::execution::recovery::{Record, RecordExt as _, record_path, save_record};
+use crate::execution::recovery::{Record, record_path, save_record};
 use crate::stand_in::Fixture;
 use shoal_protocol::executions::TrackedAgent;
 use shoal_protocol::space_names::SpaceSelector;
@@ -81,15 +81,18 @@ async fn a_kill_counts_once_however_often_it_is_reported() {
     let workspace = fixture.workspace("killed").await;
     killed(&fixture, &workspace.id, "first").await;
     let second = killed(&fixture, &workspace.id, "second").await;
-    let execution = ExecutionId::from("second");
+    let (paths, execution) = (&fixture.agents.paths, ExecutionId::from("second"));
+    // The kill was counted a while ago, which its deadline shows.
+    let deadline = second.restores_after.unwrap() + Duration::from_secs(1);
+    recovery::save_oom_kills(paths, &workspace.id, &execution, 2, Some(deadline)).unwrap();
     fixture
         .agents
         .record_oom_kill(&workspace.id, &execution)
         .await;
-    let paths = &fixture.agents.paths;
     let again = Record::load(&record_path(paths, &workspace.id, &execution))
         .unwrap()
         .unwrap();
     assert_eq!(again.oom_kills, 2);
-    assert_eq!(again.oom_kills, second.oom_kills);
+    // Counting it again starts no new delay.
+    assert_eq!(again.restores_after, Some(deadline));
 }
