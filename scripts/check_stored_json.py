@@ -36,7 +36,9 @@ FUNCTIONS = (
                 r"\s*\(", re.IGNORECASE), PATHS),
     (re.compile(r"\b(jsonb?_(?:object|array|group_array|group_object))\s*\(", re.IGNORECASE),
      BUILDS),
-    (re.compile(r"\b(jsonb?_(?:each|tree))\s*\((?!\s*\?\d*\s*\))", re.IGNORECASE), ARRAY),
+    # A bound parameter: `?`, `?1`, or a name after `:`, `@` or `$`.
+    (re.compile(r"\b(jsonb?_(?:each|tree))\s*\((?!\s*(?:\?\d*|[:@$]\w+)\s*\))", re.IGNORECASE),
+     ARRAY),
 )
 # Whatever their right operand, such as a path, a label or a column.
 OPERATORS = ((re.compile(r"(->>?)"), PATHS),)
@@ -64,7 +66,7 @@ RUST_TOKEN = re.compile(
     r"|'(?:\\.|[^'\\\n])'",
     re.DOTALL)
 # A line continuation takes the whitespace that starts the next line with it.
-RUST_ESCAPE = re.compile(r"\\(\n\s*|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)", re.DOTALL)
+RUST_ESCAPE = re.compile(r"\\(\n\s*|x[0-9a-fA-F]{2}|u\{[0-9a-fA-F_]+\}|.)", re.DOTALL)
 # What the escapes that stand for no character of their own stand for.
 RUST_ESCAPED = {"n": "\n", "r": "\r", "t": "\t", "0": "\0"}
 
@@ -176,7 +178,7 @@ def escaped(code):
     if code[0] == "\n":
         return ""
     if code[0] in "xu" and len(code) > 1:
-        return chr(int(code.strip("xu{}"), 16))
+        return chr(int(code.strip("xu{}").replace("_", ""), 16))
     return RUST_ESCAPED.get(code, code)
 
 

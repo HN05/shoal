@@ -62,9 +62,11 @@ class CheckStoredJsonTests(unittest.TestCase):
         self.write("crates/core/src/lib.rs",
                    'const A: &str = "SELECT 1 -- note\\n, json_extract(record, \'$.x\') FROM t";\n'
                    'const B: &str = "SELECT \\x27--\\x27, json_set(a, \'$.b\', 1) FROM t";\n'
-                   'const C: &str = "SELECT \\u{27}json_type(a)\\u{27} FROM t";\n')
+                   'const C: &str = "SELECT \\u{27}json_type(a)\\u{27} FROM t";\n'
+                   'const D: &str = "SELECT json_extr\\u{6_1}ct(a, \'$.b\') FROM t";\n')
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract"),
-                                        ("crates/core/src/lib.rs", 2, "json_set")])
+                                        ("crates/core/src/lib.rs", 2, "json_set"),
+                                        ("crates/core/src/lib.rs", 4, "json_extract")])
 
     def test_an_escape_inside_a_name_reads_as_its_character(self):
         self.write("crates/core/src/lib.rs",
@@ -101,7 +103,7 @@ class CheckStoredJsonTests(unittest.TestCase):
     def test_json_each_reads_only_a_bound_parameter(self):
         self.write("crates/core/src/lib.rs",
                    'const A: &str = "SELECT value FROM json_each(?1)";\n'
-                   'const B: &str = "SELECT value FROM json_each( ? )";\n'
+                   'const B: &str = "SELECT value FROM json_each( ? ), json_tree(:items)";\n'
                    'const C: &str = "SELECT value FROM t, json_each(t.files)";\n'
                    'const D: &str = "SELECT value FROM t, jsonb_tree(t.record)";\n')
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 3, "json_each"),
