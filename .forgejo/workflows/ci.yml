@@ -163,6 +163,11 @@ jobs:
       - name: Crates declare only the dependencies they name
         run: python3 scripts/check_unused_dependencies.py
 
+      # Reads only the Rust and SQL sources, so it runs whatever the change
+      # affects.
+      - name: SQL reads no path inside stored JSON
+        run: python3 scripts/check_stored_json.py
+
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
 

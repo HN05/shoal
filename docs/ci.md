@@ -15,6 +15,11 @@ three jobs:
   dependencies or the workflow.
 - `crates` checks that each crate builds alone.
 
+The `rust` job also runs `scripts/check_stored_json.py`, whatever the change
+affects. It refuses the SQL that [stored JSON](design/daemon.md#stored-json)
+rules out, in the SQL files and Rust string literals of every package's `src/`
+and `tests/`, and names each one's file, line and function.
+
 A PR's jobs build, lint and test only when it changes a package or a file
 every package's build reads. They run the tests of the packages
 `scripts/affected_packages.py` names: those the PR changes and the packages

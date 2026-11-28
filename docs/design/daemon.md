@@ -147,6 +147,29 @@ transactions. Failures and migrations keep ownership as it was.
 The `states!` macro gives a closed set of Shoal names one spelling across
 serde, `Display`, SQLite and clap, and rejects unknown values everywhere.
 
+### Stored JSON
+
+A table keeps each value that a query filters, joins, groups or sorts on in a
+typed column, and the rest of its record as JSON that Rust decodes. SQL reads
+those columns and never a path inside stored JSON. A renamed field then fails
+to compile or fails a test, where SQL that reads its path would quietly match
+nothing.
+
+Each table has one writer, which fills its columns from the typed value. Code
+that changes a field of the JSON reads the row, changes the typed value and
+writes it back in one transaction, so no SQL writes a path either. A JSON
+array that a query reads is a table of its own, with a position where its
+order matters. SQL reads an array only when it is a bound parameter, as
+`json_each(?1)`.
+
+No SQL builds JSON with field names: a query selects columns, and Rust builds
+the value. The journal's triggers are the exception. Each passes
+`journal_append` a `json_object` whose keys are its table's column names, as
+the [journal](#journal) describes.
+
+CI's `scripts/check_stored_json.py` refuses any other such SQL. It leaves out
+the migrations, which read the shapes older releases stored.
+
 ### Migrations
 
 Shoal makes its earlier versions no compatibility promise, and the store
@@ -180,10 +203,10 @@ A trigger passes the row it saw to a function the store registers on each of
 its connections. The store's journal code builds every event from Shoal's
 types and writes it, whether a trigger or the code that made the change
 records it. No SQL builds an event's JSON. Queries filter on the columns the
-journal code fills from the event, such as its kind, and never read a path
-inside a record. A connection without the
-function, such as a `sqlite3` shell, reads the store but fails on a change
-that a trigger records.
+journal code fills from the event, such as its kind, as
+[stored JSON](#stored-json) says. A connection without the function, such as
+a `sqlite3` shell, reads the store but fails on a change that a trigger
+records.
 
 Each kind of event has one shape. Its kind decides the fields it records,
 and it records each of them, null when empty. When a kind's shape changes,

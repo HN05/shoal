@@ -71,6 +71,11 @@ should take another shape, change it now, while that is cheap.
 - Refuse a request only for a reason `docs/design/overview.md` accepts. Support
   any other request instead, or file an issue for it when that lies outside the
   change.
+- A query reads columns and never a path inside stored JSON. A value that a
+  query filters, joins, groups or sorts on is a typed column, which the
+  table's writer fills from the typed value, and Rust decodes the rest. CI's
+  `scripts/check_stored_json.py` refuses SQL that reads, writes or builds such
+  a path, and `docs/design/daemon.md` says why.
 - A scope token is a `ScopeToken`, whose `Debug` redacts it, never a bare
   string. Code reads its text with `expose` only where it sends it.
 - The daemon decides what a caller may do, and which account it acts as, from
