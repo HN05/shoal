@@ -1,6 +1,9 @@
 //! Passing a thread or approval request past a coordinator on a machine
 //! that is offline or lost its agent.
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use anyhow::Result;
 use rusqlite::{Transaction, params};
@@ -174,6 +177,15 @@ impl Waiting {
         let since = thread.last_turn()?.created_at;
         thread.is_waiting().then_some(Self { thread, since })
     }
+
+    /// The escalation that passes the thread on for its latest post.
+    fn escalation(&self) -> Escalation {
+        (
+            self.thread.space_id.clone(),
+            self.thread.number.item,
+            self.since,
+        )
+    }
 }
 
 /// What keeps a request's decider on another machine from deciding it.
@@ -245,23 +257,27 @@ fn record_escalated(tx: &Transaction<'_>, waiting: &Waiting) -> Result<()> {
 /// Forget the escalations of the threads that no longer wait since the
 /// post they were passed on for.
 fn forget_answered(tx: &Transaction<'_>, waiting: &[Waiting]) -> Result<()> {
-    let waiting: Vec<_> = (waiting.iter())
-        .map(|waiting| {
-            (
-                &waiting.thread.space_id,
-                waiting.thread.number.item,
-                waiting.since,
-            )
-        })
-        .collect();
-    tx.execute(
-        "DELETE FROM hub_escalated_threads WHERE NOT EXISTS (SELECT 1 FROM json_each(?1)
-            WHERE json_extract(value, '$[0]')=hub_escalated_threads.space_id
-                AND json_extract(value, '$[1]')=hub_escalated_threads.number
-                AND json_extract(value, '$[2]')=hub_escalated_threads.created_at)",
-        [serde_json::to_string(&waiting)?],
-    )?;
+    let waiting: HashSet<_> = waiting.iter().map(Waiting::escalation).collect();
+    for (space_id, number, created_at) in escalations(tx)?.difference(&waiting) {
+        tx.execute(
+            "DELETE FROM hub_escalated_threads
+                WHERE space_id=?1 AND number=?2 AND created_at=?3",
+            params![space_id, number, created_at],
+        )?;
+    }
     Ok(())
+}
+
+/// A thread's escalation: its space, its number in the space and when the
+/// post it was passed on for was made.
+type Escalation = (SpaceId, u32, UnixTime);
+
+/// Every recorded escalation.
+fn escalations(tx: &Transaction<'_>) -> Result<HashSet<Escalation>> {
+    let mut statement =
+        tx.prepare("SELECT space_id, number, created_at FROM hub_escalated_threads")?;
+    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
 #[cfg(test)]
