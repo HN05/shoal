@@ -180,15 +180,15 @@ async fn an_event_named_alone_takes_no_workspace_that_shares_its_name() {
 async fn logged_alerts(fixture: &Fixture, space: &SpaceId) -> Vec<Vec<i64>> {
     let id = space.clone();
     let logged = fixture.store().run(move |db| {
-        let mut statement = db.prepare(
-            "SELECT json_extract(record,'$.alert.alerts') FROM space_events
-             WHERE space_id=?1 AND json_extract(record,'$.alert') IS NOT NULL ORDER BY rowid",
-        )?;
+        let mut statement =
+            db.prepare("SELECT record FROM space_events WHERE space_id=?1 ORDER BY rowid")?;
         let rows = statement.query_map([id], |row| row.get::<_, String>(0))?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     });
     (logged.await.unwrap().iter())
-        .map(|alerts| serde_json::from_str(alerts).unwrap())
+        .map(|record| serde_json::from_str::<serde_json::Value>(record).unwrap())
+        .filter(|record| !record["alert"].is_null())
+        .map(|record| serde_json::from_value(record["alert"]["alerts"].clone()).unwrap())
         .collect()
 }
 

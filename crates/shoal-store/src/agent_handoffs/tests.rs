@@ -45,7 +45,7 @@ fn the_new_tools_first_session_completes_the_handoff_and_journals_it() -> Result
     assert_eq!(continued.len(), 1);
     assert_eq!(continued[&AgentSessionId::from("after")], from);
     let events: Vec<String> = db
-        .prepare("SELECT record FROM space_events WHERE json_extract(record,'$.kind')='converted'")?
+        .prepare("SELECT record FROM space_events WHERE kind='converted'")?
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let [event] = events.as_slice() else {

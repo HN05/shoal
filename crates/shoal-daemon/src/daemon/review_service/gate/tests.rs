@@ -209,12 +209,17 @@ impl Fixture {
             .store
             .read(move |tx| {
                 let mut statement = tx.prepare(
-                    "SELECT json_extract(record,'$.gate.verdict') FROM space_events
-                     WHERE space_id=?1 AND json_extract(record,'$.kind')='gate_decided'
-                     ORDER BY id",
+                    "SELECT record FROM space_events
+                     WHERE space_id=?1 AND kind='gate_decided' ORDER BY id",
                 )?;
-                let verdicts = statement.query_map([&id], |row| row.get(0))?;
-                Ok(verdicts.collect::<rusqlite::Result<Vec<String>>>()?)
+                let records = statement.query_map([&id], |row| row.get::<_, String>(0))?;
+                let records = records.collect::<rusqlite::Result<Vec<_>>>()?;
+                (records.iter())
+                    .map(|record| {
+                        let record: serde_json::Value = serde_json::from_str(record)?;
+                        Ok(serde_json::from_value(record["gate"]["verdict"].clone())?)
+                    })
+                    .collect()
             })
             .await
             .unwrap()

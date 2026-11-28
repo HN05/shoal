@@ -267,7 +267,7 @@ async fn restore_reopens_the_branch_with_its_files_and_issue() {
         .run(move |db| {
             Ok(db
                 .prepare(
-                    "SELECT json_extract(record,'$.kind') FROM space_events
+                    "SELECT kind FROM space_events
                         WHERE space_id=?1 ORDER BY id",
                 )?
                 .query_map([&id], |row| row.get(0))?

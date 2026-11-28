@@ -88,7 +88,7 @@ fn link_events_include_item_kind_and_url() -> Result<()> {
         "https://forge.example/team/repo/pulls/7",
     )?;
     let record: String = db.query_row(
-        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='linked'",
+        "SELECT record FROM space_events WHERE kind='linked'",
         [],
         |row| row.get(0),
     )?;
@@ -121,7 +121,7 @@ fn item_activity_events_include_item_and_update_details() -> Result<()> {
         &update,
     )?;
     let record: String = db.query_row(
-        "SELECT record FROM space_events WHERE json_extract(record,'$.kind')='item_activity'",
+        "SELECT record FROM space_events WHERE kind='item_activity'",
         [],
         |row| row.get(0),
     )?;

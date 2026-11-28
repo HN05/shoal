@@ -830,7 +830,10 @@ impl RunningAgent {
     /// Finish the run, its pause already reported, and return what the
     /// space's log records of each stop or exit of its agent: the event's
     /// kind, its kills and its cause.
-    async fn finish(mut self, manager: &Manager) -> Vec<(String, Option<i64>, Option<String>)> {
+    async fn finish(
+        mut self,
+        manager: &Manager,
+    ) -> Vec<(String, Option<i64>, Option<serde_json::Value>)> {
         let finished = ExecutionEvent::Finished {
             exit_code: 143,
             memory: None,
@@ -845,14 +848,19 @@ impl RunningAgent {
         (manager.store)
             .run(move |db| {
                 let mut query = db.prepare(
-                    "SELECT json_extract(record,'$.kind'), json_extract(record,'$.agent.oom_kills'),
-                         json_extract(record,'$.agent.cause')
-                     FROM space_events WHERE space_id=?1
-                     AND json_extract(record,'$.kind') IN ('agent_stopped','agent_exited')",
+                    "SELECT kind, record FROM space_events WHERE space_id=?1
+                     AND kind IN ('agent_stopped','agent_exited')",
                 )?;
-                Ok(query
-                    .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
-                    .collect::<rusqlite::Result<_>>()?)
+                let rows = query.query_map([id], |row| Ok((row.get(0)?, row.get(1)?)))?;
+                let rows = rows.collect::<rusqlite::Result<Vec<(String, String)>>>()?;
+                Ok((rows.into_iter())
+                    .map(|(kind, record)| {
+                        let record: serde_json::Value = serde_json::from_str(&record).unwrap();
+                        let agent = &record["agent"];
+                        let cause = Some(agent["cause"].clone()).filter(|cause| !cause.is_null());
+                        (kind, agent["oom_kills"].as_i64(), cause)
+                    })
+                    .collect())
             })
             .await
             .unwrap()
@@ -906,7 +914,7 @@ async fn an_agents_stop_records_the_cause_the_daemon_stopped_it_for() {
     run.send(&paused).await;
     let ends = run.finish(&manager).await;
     bounded(stopping).await.unwrap().unwrap();
-    let cause = r#"{"kind":"user_stop"}"#.to_owned();
+    let cause = serde_json::json!({"kind":"user_stop"});
     assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
 }
 
@@ -926,7 +934,7 @@ async fn an_agents_pause_records_the_signal_that_ended_its_session() {
     };
     run.send(&paused).await;
     let ends = run.finish(&manager).await;
-    let cause = r#"{"kind":"signal","signal":"SIGTERM","reached":"agent"}"#.to_owned();
+    let cause = serde_json::json!({"kind":"signal","signal":"SIGTERM","reached":"agent"});
     assert_eq!(ends, [("agent_stopped".to_owned(), None, Some(cause))]);
 }
 
@@ -952,7 +960,7 @@ async fn an_agents_pause_after_an_oom_kill_counts_the_kill() {
     run.send(&paused).await;
     let id = run.workspace.id.clone();
     let ends = run.finish(&manager).await;
-    let cause = r#"{"kind":"oom_kill"}"#.to_owned();
+    let cause = serde_json::json!({"kind":"oom_kill"});
     assert_eq!(ends, [("agent_stopped".to_owned(), Some(1), Some(cause))]);
     let kills = manager.agents.counted_oom_kills(&id).await.unwrap();
     assert_eq!(kills.map(|kills| kills.kills), Some(1));

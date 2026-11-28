@@ -460,11 +460,9 @@ async fn a_chat_has_its_own_tmpdir_until_it_is_removed() {
     let ended = (manager.store)
         .run(|db| {
             Ok(db.query_row(
-                "SELECT json_extract(record,'$.kind') FROM space_events
+                "SELECT kind FROM space_events
                  WHERE space_id=(SELECT space_id FROM space_events
-                     WHERE json_extract(record,'$.kind')='created'
-                         AND json_extract(record,'$.space_kind')='chat'
-                     ORDER BY id DESC LIMIT 1)
+                     WHERE kind='created' ORDER BY id DESC LIMIT 1)
                  ORDER BY id DESC LIMIT 1",
                 [],
                 |row| row.get::<_, String>(0),

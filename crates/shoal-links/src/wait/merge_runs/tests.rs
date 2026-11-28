@@ -218,7 +218,7 @@ impl Following {
         let counted = self.store.run(move |db| {
             let count: i64 = db.query_row(
                 "SELECT count(*) FROM space_events
-                 WHERE space_id=?1 AND json_extract(record,'$.kind')=?2",
+                 WHERE space_id=?1 AND kind=?2",
                 params![id, kind],
                 |row| row.get(0),
             )?;
