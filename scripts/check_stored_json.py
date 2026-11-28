@@ -6,7 +6,8 @@ literals of its Rust files there. It leaves out the store's migrations and
 their tests, which read the shapes older releases stored, but reads the
 schema they generate. `json_each` and `json_tree` may read a bound parameter,
 and a `journal_append` call takes a `json_object` source, whose keys are its
-table's column names."""
+table's column names. It reads `->` and `->>` in a Rust literal only when the
+literal holds a keyword of SQL."""
 import re
 import sys
 from dataclasses import dataclass
@@ -30,19 +31,27 @@ BUILDS = "builds JSON in SQL: select the columns and build the value in Rust"
 ARRAY = ("reads the elements of stored JSON: keep them in a table of their own, "
          "or bind the array as a parameter")
 # SQLite reads function names whatever their case.
-REFUSED = (
+FUNCTIONS = (
     (re.compile(r"\b(jsonb?_(?:extract|set|insert|replace|remove|patch|type|valid|array_length))"
                 r"\s*\(", re.IGNORECASE), PATHS),
     (re.compile(r"\b(jsonb?_(?:object|array|group_array|group_object))\s*\(", re.IGNORECASE),
      BUILDS),
     (re.compile(r"\b(json_(?:each|tree))\s*\((?!\s*\?\d*\s*\))", re.IGNORECASE), ARRAY),
-    # SQLite's operators take a path, a label or an index on their right.
-    (re.compile(r"(->>?)\s*(?='|\?|-?\d)"), PATHS),
 )
+# Whatever their right operand, such as a path, a label or a column.
+OPERATORS = ((re.compile(r"(->>?)"), PATHS),)
+# A word only SQL puts in a Rust literal that also holds `->`, which text
+# such as `{name} -> {port}` does too.
+SQL_KEYWORD = re.compile(r"\b(?:select|insert|update|delete|from|where|values|join)\b",
+                         re.IGNORECASE)
 JOURNAL_SOURCE = re.compile(r"\bjournal_append\s*\(", re.IGNORECASE)
 JSON_OBJECT = re.compile(r"json_object(?=\s*\()", re.IGNORECASE)
-SQL_COMMENT = re.compile(r"--[^\n]*|/\*.*?\*/", re.DOTALL)
-SQL_STRING = re.compile(r"'(?:[^']|'')*'")
+# What SQL reads as no expression: a string, a quoted identifier or a
+# comment, each to the end of the text when it is left open.
+SQL_INERT = re.compile(
+    r"'(?:[^']|'')*(?:'|$)|\"(?:[^\"]|\"\")*(?:\"|$)|`[^`]*(?:`|$)|\[[^\]]*(?:\]|$)"
+    r"|--[^\n]*|/\*.*?(?:\*/|$)",
+    re.DOTALL)
 # A Rust comment, or a literal with its body as group `raw` or `text`.
 RUST_TOKEN = re.compile(
     r"//[^\n]*|/\*.*?\*/"
@@ -50,6 +59,7 @@ RUST_TOKEN = re.compile(
     r"|(?<!\w)[bc]?\"(?P<text>(?:\\.|[^\"\\])*)\""
     r"|'(?:\\.|[^'\\\n])'",
     re.DOTALL)
+RUST_ESCAPE = re.compile(r"\\(.)", re.DOTALL)
 
 
 @dataclass(frozen=True, order=True)
@@ -69,43 +79,54 @@ def blank(match):
     return re.sub(r"[^\n]", " ", match.group(0))
 
 
+def executable(sql):
+    """*sql* with its strings, quoted identifiers and comments blanked."""
+    return SQL_INERT.sub(blank, sql)
+
+
 def call_end(sql, start):
     """The offset just past the parenthesis that closes the one before
-    *start* in *sql*, or its end when none does."""
+    *start* in the [`executable`] *sql*, or its end when none does."""
     depth = 1
-    for match in re.finditer(r"'(?:[^']|'')*'|[()]", sql[start:]):
-        depth += {"(": 1, ")": -1}.get(match.group(0), 0)
+    for match in re.finditer(r"[()]", sql[start:]):
+        depth += 1 if match.group(0) == "(" else -1
         if depth == 0:
             return start + match.end()
     return len(sql)
 
 
 def without_journal_sources(sql):
-    """*sql* with the `json_object` that starts each `journal_append` call's
-    source blanked; whatever the source holds is still read."""
+    """The [`executable`] *sql* with the `json_object` that starts each
+    `journal_append` call's source blanked; whatever the source holds is
+    still read."""
     for call in JOURNAL_SOURCE.finditer(sql):
-        arguments = sql[call.end():call_end(sql, call.end())]
-        source = JSON_OBJECT.search(SQL_STRING.sub(blank, arguments))
+        source = JSON_OBJECT.search(sql, call.end(), call_end(sql, call.end()))
         if source:
-            start, end = call.end() + source.start(), call.end() + source.end()
-            sql = sql[:start] + " " * (end - start) + sql[end:]
+            sql = sql[:source.start()] + " " * len(source.group(0)) + sql[source.end():]
     return sql
 
 
-def sql_problems(sql, path, line_of):
-    """Each refused use in *sql*, at the line `line_of` gives its offset."""
-    sql = without_journal_sources(SQL_COMMENT.sub(blank, sql))
+def sql_problems(sql, path, line_of, statement=True):
+    """Each refused use in *sql*, at the line `line_of` gives its offset.
+    Unless *sql* is a `statement`, it reads the operators only when *sql*
+    holds a keyword of SQL."""
+    sql = without_journal_sources(executable(sql))
+    refused = FUNCTIONS + (OPERATORS if statement or SQL_KEYWORD.search(sql) else ())
     return [Problem(path, line_of(match.start(1)), match.group(1), reason)
-            for pattern, reason in REFUSED for match in pattern.finditer(sql)]
+            for pattern, reason in refused for match in pattern.finditer(sql)]
 
 
 def rust_literals(source):
-    """(offset, body) of each string literal in Rust *source*, outside
-    comments."""
+    """(offset, text) of each string literal in Rust *source*, outside
+    comments. An escape's text is the character it stands for, padded to
+    the escape's length, so that offsets stay."""
     for token in RUST_TOKEN.finditer(source):
-        group = "raw" if token.group("raw") is not None else "text"
-        if token.group(group) is not None:
-            yield token.start(group), token.group(group)
+        if token.group("raw") is not None:
+            yield token.start("raw"), token.group("raw")
+        elif token.group("text") is not None:
+            yield token.start("text"), RUST_ESCAPE.sub(
+                lambda escape: " " + (escape.group(1) if escape.group(1) in "\"'\n" else " "),
+                token.group("text"))
 
 
 def file_problems(path, text):
@@ -115,7 +136,8 @@ def file_problems(path, text):
     if path.endswith(".sql"):
         return sql_problems(text, path, line_at)
     return [problem for start, body in rust_literals(text)
-            for problem in sql_problems(body, path, lambda offset, start=start: line_at(start + offset))]
+            for problem in sql_problems(body, path, lambda offset, start=start: line_at(start + offset),
+                                        statement=False)]
 
 
 def skipped(path):

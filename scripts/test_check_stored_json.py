@@ -47,6 +47,28 @@ class CheckStoredJsonTests(unittest.TestCase):
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "JSON_EXTRACT"),
                                         ("crates/core/src/lib.rs", 2, "Json_Each")])
 
+    def test_strings_quoted_names_and_comments_hold_no_sql(self):
+        self.write("crates/core/tests/queries.sql",
+                   "SELECT record FROM t WHERE name='--' AND json_extract(record,'$.kind')=1;\n"
+                   "SELECT 'json_extract(record)', \"json_set(\", [json_array(] FROM t;\n"
+                   "SELECT 'it''s' /* json_object( */, json_type(record) FROM t;\n")
+        self.write("crates/core/src/lib.rs",
+                   'const Q: &str = "SELECT \\"--\\", json_patch(a, b) FROM t";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_patch"),
+                                        ("crates/core/tests/queries.sql", 1, "json_extract"),
+                                        ("crates/core/tests/queries.sql", 3, "json_type")])
+
+    def test_an_operator_is_refused_whatever_its_right_operand(self):
+        self.write("crates/core/tests/queries.sql",
+                   "SELECT record ->> ('kind'), record->>key, record -> 0 FROM t;\n")
+        self.write("crates/core/src/lib.rs",
+                   'const Q: &str = "SELECT id FROM t WHERE record->>name=?1";\n'
+                   'const P: &str = "{name} -> {port} [{state}]";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "->>"),
+                                        ("crates/core/tests/queries.sql", 1, "->"),
+                                        ("crates/core/tests/queries.sql", 1, "->>"),
+                                        ("crates/core/tests/queries.sql", 1, "->>")])
+
     def test_json_each_reads_only_a_bound_parameter(self):
         self.write("crates/core/src/lib.rs",
                    'const A: &str = "SELECT value FROM json_each(?1)";\n'
