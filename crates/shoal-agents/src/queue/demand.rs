@@ -11,7 +11,7 @@ use shoal_ids::repository_ids::RepositoryId;
 use shoal_protocol::time::UnixTime;
 use shoal_schedule::placement::snapshot::{DEMAND_WINDOW, Demand};
 
-use super::{room::heavy_entries, store::queued_rows};
+use super::store::queued_rows;
 use crate::Agents;
 use crate::daemon::Daemon;
 
@@ -41,7 +41,11 @@ impl Agents {
         let heavy_agents = (agents.into_iter())
             .filter(|((repository, mode), _)| !light.mode(Some(repository), mode.as_ref()))
             .map(|((repository, _), ran)| (repository, ran));
-        let waiting = heavy_entries(&queued, &light).filter_map(|entry| entry.repository.clone());
+        let waiting = (self
+            .waiting_heavy(daemon, &queued, &light)
+            .await?
+            .into_iter())
+        .filter_map(|entry| entry.repository.clone());
         Ok(summed(heavy_agents.chain(runs), waiting))
     }
 }

@@ -1,11 +1,9 @@
 //! Executions whose processes ran in an earlier boot have ended, since a
 //! restart of the machine ends every process. The daemon forgets them,
 //! keeping the recovery records they saved for `shoal resume`, and the session
-//! of an agent that saved none as one of its workspace's last sessions. It
-//! records each agent's exit, which its wrapper could not report.
+//! of an agent that saved none as one of its workspace's last sessions.
 use crate::process::identity::IdentityExt;
 use anyhow::Result;
-use shoal_daemon_base::events::{self, AgentEvent, EventKind};
 
 use crate::Agents;
 use crate::daemon::Daemon;
@@ -29,7 +27,6 @@ impl Agents {
             .await?;
         for execution in ended {
             self.keep_unsaved_session(daemon, &execution).await?;
-            self.record_exit(&execution).await;
             self.forget_execution(daemon, &execution.id).await?;
             log!("forgot execution {} of an earlier boot", execution.id);
         }
@@ -62,24 +59,6 @@ impl Agents {
         let turn = self.reported_turn(&execution.id).await;
         self.keep_agent_session(daemon, &execution.space_id, &agent, &execution.id, turn)
             .await
-    }
-
-    /// Record that the agent of `execution`, if it runs one, exited, without
-    /// the code its wrapper never reported.
-    async fn record_exit(&self, execution: &Execution) {
-        let Some(name) = execution.agent.clone() else {
-            return;
-        };
-        let exited = AgentEvent {
-            name,
-            execution_id: Some(execution.id.clone()),
-            mode: execution.mode.clone(),
-            exit_code: None,
-            oom_kills: 0,
-            source: None,
-        };
-        let space = &execution.space_id;
-        events::record_agent(&self.store, space, EventKind::AgentExited, exited).await;
     }
 }
 

@@ -8,7 +8,7 @@ use shoal_ids::queue_entry_ids::QueueEntryId;
 use shoal_schedule::placement::snapshot::Capacity;
 
 use super::{
-    limits::{self, Limits, Waiting, Work},
+    limits::{self, Limits, Waiting, Wake, Work},
     store::{QueuedRow, queued_rows},
     weight::Light,
 };
@@ -45,31 +45,58 @@ impl Agents {
             heavy_free: heavy_free(&occupied, &limits),
             light_free: light_free(&occupied, &limits),
             memory_free: memory_free(sample, room),
-            heavy_waiting: self.heavy_waiting(&light).await?,
+            heavy_waiting: self.heavy_waiting(daemon, &light).await?,
             away: self.agent_queue.held_away(),
             paused: self.agent_queue.paused_since(),
         })
     }
 
-    /// The heavy agents waiting in the queue, which `light` tells from the
-    /// light ones.
-    async fn heavy_waiting(&self, light: &Light) -> Result<u32> {
+    /// The heavy agents waiting in the queue for room, which `light` tells
+    /// from the light ones.
+    async fn heavy_waiting(&self, daemon: &dyn Daemon, light: &Light) -> Result<u32> {
         let queued = self.store.run(|db| queued_rows(db)).await?;
-        let heavy = heavy_entries(&queued, light).count();
+        let heavy = self.waiting_heavy(daemon, &queued, light).await?.len();
         Ok(heavy.try_into().unwrap_or(u32::MAX))
+    }
+
+    /// The entries among `queued` that wait for room to start a heavy
+    /// agent, which `light` tells from the light ones.
+    pub(super) async fn waiting_heavy<'a>(
+        &self,
+        daemon: &dyn Daemon,
+        queued: &'a [QueuedRow],
+        light: &'a Light,
+    ) -> Result<Vec<&'a QueuedRow>> {
+        let mut waiting = Vec::new();
+        for row in heavy_entries(queued, light) {
+            if self.entry_waits_for_room(daemon, row).await? {
+                waiting.push(row);
+            }
+        }
+        Ok(waiting)
+    }
+
+    /// Whether the entry `row` waits for room, which a restore does unless
+    /// it waits for an update that has not come.
+    async fn entry_waits_for_room(&self, daemon: &dyn Daemon, row: &QueuedRow) -> Result<bool> {
+        let (QueueKind::Restore, Some(execution), Some(workspace)) =
+            (row.kind, &row.execution, &row.workspace)
+        else {
+            return Ok(true);
+        };
+        let wake = (self.restore_wake(daemon, workspace, execution, row.automatic)).await?;
+        Ok(waits_for_room(wake))
     }
 }
 
-/// The entries among `queued` that wait to start a heavy agent, which
-/// `light` tells from the light ones. An asleep agent's restore, which
-/// Shoal queued on its own, waits for an update rather than for room.
-pub(super) fn heavy_entries<'a>(
+/// The entries among `queued` that start a heavy agent, which `light`
+/// tells from the light ones.
+fn heavy_entries<'a>(
     queued: &'a [QueuedRow],
     light: &'a Light,
 ) -> impl Iterator<Item = &'a QueuedRow> {
     (queued.iter())
         .filter(|row| row.kind != QueueKind::Job)
-        .filter(|row| !(row.kind == QueueKind::Restore && row.automatic))
         .filter(|row| {
             !light.entry(
                 row.execution.as_ref(),
@@ -77,6 +104,12 @@ pub(super) fn heavy_entries<'a>(
                 row.mode.as_ref(),
             )
         })
+}
+
+/// Whether a restore that `wake` admits waits for room: one that waits for
+/// an update that has not come holds back nothing until then.
+fn waits_for_room(wake: Wake) -> bool {
+    wake != Wake::Update { due: false }
 }
 
 /// The heavy launches `limits` would admit beside the `occupied` slots, up

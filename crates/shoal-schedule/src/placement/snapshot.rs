@@ -102,8 +102,8 @@ pub struct Capacity {
     /// reads none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_free: Option<u64>,
-    /// The heavy agents waiting in its queue for room, without asleep
-    /// agents, which wait for an update.
+    /// The heavy agents waiting in its queue for room, without restores
+    /// that wait for an update that has not come.
     pub heavy_waiting: u32,
     /// Whether its user walked away, so it admits nothing new.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
