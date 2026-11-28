@@ -62,6 +62,7 @@ pub async fn comment_on_watched_pr(manager: &Manager, id: &SpaceId) {
 
 /// Have the space `id` watch a PR that background polls first find clean,
 /// then conflicting with a new base, twice, as a forge confirms a conflict.
+#[cfg(feature = "test-support")]
 pub async fn conflict_on_watched_pr(manager: &Manager, id: &SpaceId) {
     let pr = item_url("pulls/1");
     register_watch(manager, id, &pr).await;
@@ -72,6 +73,7 @@ pub async fn conflict_on_watched_pr(manager: &Manager, id: &SpaceId) {
 
 /// An open PR at the base commit spelled by `base`, conflicting with it or
 /// not.
+#[cfg(feature = "test-support")]
 fn pr_at(base: char, conflict: bool) -> Snapshot {
     let (head, base) = ("a".repeat(40), base.to_string().repeat(40));
     serde_json::from_value(json!({
