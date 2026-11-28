@@ -197,7 +197,8 @@ async fn shutdown_detaches_reattached_wrappers_and_stops_older_ones() {
         Control::Pause {
             reason: Some(_),
             removed: false,
-            shutdown: false
+            shutdown: false,
+            ..
         }
     ));
     protocol::write(

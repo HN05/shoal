@@ -184,7 +184,8 @@ async fn a_signal_stops_work_saved_first_keeping_its_restores() {
             Control::Pause {
                 reason: Some(_),
                 removed: false,
-                shutdown: true
+                shutdown: true,
+                ..
             }
         ),
         "{control:?}"
@@ -205,7 +206,8 @@ async fn daemon_stop_stops_work_as_stop_all_does() {
             Control::Pause {
                 reason: Some(_),
                 removed: false,
-                shutdown: false
+                shutdown: false,
+                ..
             }
         ),
         "{control:?}"

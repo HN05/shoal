@@ -1330,6 +1330,7 @@ async fn manual_stop_cancels_waiting_recovery_and_leaves_a_restore_record() {
             "stage": "stopped",
             "mode": "worker",
             "for_load": true,
+            "cause": {"kind": "protection"},
         })
     );
     assert!(

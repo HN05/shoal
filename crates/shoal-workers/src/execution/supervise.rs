@@ -99,27 +99,37 @@ impl Outcome {
                 recover,
                 reason,
                 resumes_when,
+                cause,
             }) => Self::Paused {
                 code,
                 stop: Halt::Protection {
                     recover,
                     reason,
                     resumes_when,
+                    cause,
                 },
             },
             Ok(Control::Pause {
                 reason,
                 shutdown: true,
+                cause,
                 ..
             }) => Self::Paused {
                 code,
-                stop: Halt::Shutdown { reason },
+                stop: Halt::Shutdown { reason, cause },
             },
             Ok(Control::Pause {
-                reason, removed, ..
+                reason,
+                removed,
+                cause,
+                ..
             }) => Self::Paused {
                 code,
-                stop: Halt::Pause { reason, removed },
+                stop: Halt::Pause {
+                    reason,
+                    removed,
+                    cause,
+                },
             },
             // A refused reattachment saves the session as a stop does.
             Err(error) if error.is::<Refused>() => Self::Paused {
@@ -127,6 +137,7 @@ impl Outcome {
                 stop: Halt::Pause {
                     reason: Some(error.to_string()),
                     removed: false,
+                    cause: None,
                 },
             },
             Ok(Control::Stop {
@@ -385,8 +396,8 @@ async fn wait_for_child(
                 if let Ok(Control::OverloadStop { reason, .. }) = &control {
                     eprintln!("shoal: stopping agent: {reason}; workspace and resource leases retained");
                 }
-                if let Ok(Control::Pause { reason, shutdown: true, .. }) = &control {
-                    ending(&Halt::Shutdown { reason: reason.clone() });
+                if let Ok(Control::Pause { reason, shutdown: true, cause, .. }) = &control {
+                    ending(&Halt::Shutdown { reason: reason.clone(), cause: *cause });
                 }
                 let status = stop(child, group, libc::SIGTERM).await?;
                 return Outcome::stopped_by(control, exit_code(status));

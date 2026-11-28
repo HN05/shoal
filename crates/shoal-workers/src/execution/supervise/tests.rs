@@ -59,6 +59,7 @@ async fn adjacent_controls_child() {
             recover: true,
             reason: "critical memory pressure".into(),
             resumes_when: "system load is healthy".into(),
+            cause: None,
         },
         Control::Stop {
             reason: Some("the workspace is being removed".into()),
@@ -365,7 +366,7 @@ async fn reattachment_child() {
             outcome,
             Outcome::Paused {
                 code: 143,
-                stop: Halt::Pause { reason: Some(reason), removed: false },
+                stop: Halt::Pause { reason: Some(reason), removed: false, cause: None },
             } if reason.contains("execution record is missing")
         ));
         let refusal = link.refusal().unwrap().to_string();
@@ -518,6 +519,7 @@ async fn ended_session_child() {
             reason: Some("the system is shutting down".into()),
             removed: false,
             shutdown: true,
+            cause: None,
         };
         protocol::write(daemon.get_mut(), &control).await.unwrap();
     };
@@ -548,7 +550,7 @@ async fn ended_session_child() {
             &outcome,
             Outcome::Paused {
                 code: 3,
-                stop: Halt::Shutdown { reason: Some(reason) },
+                stop: Halt::Shutdown { reason: Some(reason), cause: None },
             } if reason == "the system is shutting down"
         ),
         "{outcome:?}"
@@ -558,7 +560,8 @@ async fn ended_session_child() {
         format!(
             "{:?}",
             Halt::Shutdown {
-                reason: Some("the system is shutting down".into())
+                reason: Some("the system is shutting down".into()),
+                cause: None,
             }
         )
     );

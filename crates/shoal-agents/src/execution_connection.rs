@@ -766,12 +766,14 @@ async fn prepare_overload_stop(
         .take_update_hold(stopping.execution_id)
         .await
         .filter(|_| recovering);
+    let cause = Some(protection.cause());
     PreparedStop {
-        cause: Some(protection.cause()),
+        cause,
         control: Control::OverloadStop {
             recover: recovering,
             reason: protection.reason,
             resumes_when: protection.resumes_when,
+            cause,
         },
         recovery: Some(OverloadRecovery {
             recovering,
@@ -793,6 +795,7 @@ fn prepare_restart() -> PreparedStop {
             recover: true,
             reason,
             resumes_when,
+            cause: Some(StopCause::Restart),
         },
         recovery: Some(OverloadRecovery {
             recovering: true,
@@ -811,6 +814,7 @@ fn requested_stop(request: Option<StopRequest>, stopping: Stopping<'_>) -> Contr
             Control::Pause {
                 removed: request.keeps_removed_agents(),
                 shutdown: request.before_shutdown(),
+                cause: Some(request.cause),
                 reason: Some(request.reason),
             }
         }

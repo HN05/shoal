@@ -91,8 +91,8 @@ pub enum ExecutionEvent {
         /// one of its own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         memory: Option<ScopeMemory>,
-        /// What ended the agent, when the wrapper ended it unasked, as a
-        /// signal makes it. The daemon knows the cause of a stop it sent.
+        /// What ended the agent: the cause the daemon's stop carried, or of
+        /// an end the wrapper made unasked, as a signal makes it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cause: Option<crate::stop_causes::StopCause>,
     },
@@ -163,6 +163,10 @@ pub enum Control {
         /// Older wrappers pause as `shoal stop` does.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         shutdown: bool,
+        /// What the stop ends the agent for, which the wrapper keeps in its
+        /// recovery record.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<crate::stop_causes::StopCause>,
     },
     OverloadStop {
         recover: bool,
@@ -171,6 +175,9 @@ pub enum Control {
         /// The condition automatic recovery waits for, completing "once …".
         #[serde(default = "default_resumes_when")]
         resumes_when: String,
+        /// As [`Control::Pause`]'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<crate::stop_causes::StopCause>,
     },
     Resume {
         ports: Vec<crate::model::PortReservation>,

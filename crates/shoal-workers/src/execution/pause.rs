@@ -294,7 +294,8 @@ fn this_wrapper() -> Option<process::identity::Identity> {
         .flatten()
 }
 
-/// Why the daemon stopped a command it expects to be restored.
+/// Why a command stopped that may be restored. Each stop the daemon sent
+/// carries its `cause`, which the agent's recovery record keeps.
 #[derive(Debug)]
 pub(super) enum Halt {
     /// Overload or disk space protection; the reason is saved for `shoal resume`.
@@ -302,6 +303,7 @@ pub(super) enum Halt {
         recover: bool,
         reason: String,
         resumes_when: String,
+        cause: Option<StopCause>,
     },
     /// `shoal stop`, workspace removal, a daemon shutdown or a refused
     /// reattachment; the reason is saved for `shoal resume`.
@@ -309,6 +311,7 @@ pub(super) enum Halt {
         reason: Option<String>,
         /// The removal record of the removed workspace keeps the session.
         removed: bool,
+        cause: Option<StopCause>,
     },
     /// A hangup or terminate signal ended the session the command ran in, as
     /// closing its terminal, logging out or shutting down does, `reached`
@@ -323,7 +326,10 @@ pub(super) enum Halt {
     Killed { oom: bool },
     /// The daemon stopped it before the system shut down; the reason is
     /// saved for `shoal resume`.
-    Shutdown { reason: Option<String> },
+    Shutdown {
+        reason: Option<String>,
+        cause: Option<StopCause>,
+    },
 }
 
 impl Halt {
@@ -354,14 +360,13 @@ impl Halt {
             Self::Protection { reason, .. } => Some(reason),
             Self::Ended { signal, .. } => Some(ended_reason(*signal)),
             Self::Killed { oom } => Some(killed_reason(*oom)),
-            Self::Shutdown { reason } | Self::Pause { reason, .. } => reason.as_deref(),
+            Self::Shutdown { reason, .. } | Self::Pause { reason, .. } => reason.as_deref(),
         }
     }
 
     /// Why the agent stopped, as its recovery record keeps it. The record
-    /// itself names the cause of an end the daemon did not ask for, so the
-    /// stop is known, an OOM kill's restore waiting for memory, even when the
-    /// daemon never hears of it.
+    /// itself names the cause, so the stop is known, and an OOM kill's
+    /// restore waits for memory, even when the daemon never hears of it.
     fn ended(&self) -> recovery::RecordedEnd<'_> {
         recovery::RecordedEnd {
             reason: self.saved_reason(),
@@ -369,8 +374,8 @@ impl Halt {
         }
     }
 
-    /// What ended the agent, when the wrapper ended it unasked; the daemon
-    /// knows the cause of every stop it asked for.
+    /// What ended the agent: the cause of the stop the daemon sent, or of an
+    /// end the wrapper made unasked.
     fn cause(&self) -> Option<StopCause> {
         match self {
             Self::Ended { signal, reached } => Some(StopCause::Signal {
@@ -382,7 +387,9 @@ impl Halt {
                 signal: EndSignal::Kill,
                 reached: SignalTarget::Agent,
             }),
-            Self::Protection { .. } | Self::Pause { .. } | Self::Shutdown { .. } => None,
+            Self::Protection { cause, .. }
+            | Self::Pause { cause, .. }
+            | Self::Shutdown { cause, .. } => *cause,
         }
     }
 
@@ -416,10 +423,11 @@ impl Halt {
             }
             | Self::Shutdown {
                 reason: Some(reason),
+                ..
             } => format!(": {reason}"),
             Self::Ended { signal, .. } => format!(": {}", ended_reason(*signal)),
             Self::Killed { oom } => format!(": {}", killed_reason(*oom)),
-            Self::Pause { reason: None, .. } | Self::Shutdown { reason: None } => String::new(),
+            Self::Pause { reason: None, .. } | Self::Shutdown { reason: None, .. } => String::new(),
         }
     }
 

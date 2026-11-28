@@ -275,6 +275,7 @@ fn pause_reasons_are_optional_on_the_wire() {
             reason: None,
             removed: false,
             shutdown: false,
+            cause: None,
         }
     ));
     let control: Control = serde_json::from_value(json!({"type": "stop"})).unwrap();
@@ -289,6 +290,7 @@ fn pause_reasons_are_optional_on_the_wire() {
         reason: Some("shoal stop".into()),
         removed: false,
         shutdown: false,
+        cause: None,
     })
     .unwrap();
     assert_eq!(wire, json!({"type": "pause", "reason": "shoal stop"}));
@@ -310,6 +312,7 @@ fn wrappers_from_before_shutdown_stops_read_them_as_pauses() {
         reason: Some("the system is shutting down".into()),
         removed: false,
         shutdown: true,
+        cause: None,
     })
     .unwrap();
     assert_eq!(
@@ -361,7 +364,7 @@ fn older_overload_controls_use_a_generic_reason() {
         serde_json::from_value(json!({"type": "overload_stop", "recover": false})).unwrap();
     assert!(matches!(
         control,
-        Control::OverloadStop { recover: false, reason, resumes_when }
+        Control::OverloadStop { recover: false, reason, resumes_when, cause: None }
             if reason == "system overload" && resumes_when == "system load is healthy"
     ));
 }

@@ -7,6 +7,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
         recover: false,
         reason: "free disk space is below 2 GiB".into(),
         resumes_when: "free disk space reaches 5 GiB".into(),
+        cause: None,
     };
     let workspace = SpaceId::from("workspace-id");
     let line = protection.manual_restore(&workspace, &ExecutionId::from("id"));
@@ -19,6 +20,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
+        cause: None,
     };
     let line = stop.manual_restore(&workspace, &ExecutionId::from("id"));
     assert!(line.contains("stopped by shoal stop"), "{line}");
@@ -26,6 +28,7 @@ fn stopped_lines_name_the_cause_and_how_to_restore() {
     let removal = Halt::Pause {
         reason: Some("the workspace is being removed".into()),
         removed: true,
+        cause: None,
     };
     let line = removal.manual_restore(&workspace, &ExecutionId::from("id"));
     assert!(line.contains("shoal restore workspace-id"), "{line}");
@@ -65,6 +68,7 @@ fn only_an_ended_session_kill_or_shutdown_of_an_agent_that_restores_unattended_q
     ));
     let shutdown = Halt::Shutdown {
         reason: Some("the system is shutting down".into()),
+        cause: None,
     };
     assert!(matches!(
         restorer(&recovery(true), &shutdown, false),
@@ -77,6 +81,7 @@ fn only_an_ended_session_kill_or_shutdown_of_an_agent_that_restores_unattended_q
     let stop = Halt::Pause {
         reason: Some("stopped by shoal stop".into()),
         removed: false,
+        cause: None,
     };
     assert!(matches!(
         restorer(&recovery(true), &stop, false),
@@ -84,8 +89,8 @@ fn only_an_ended_session_kill_or_shutdown_of_an_agent_that_restores_unattended_q
     ));
 }
 
-#[test]
-fn the_record_of_an_agent_the_oom_killer_ended_says_so_without_the_daemon() {
+/// The recovery record the wrapper saves of its agent paused for `stop`.
+fn saved_record(stop: &Halt) -> recovery::Record {
     let root = tempfile::tempdir().unwrap();
     let paths = Paths::for_test(root.path());
     let plan = crate::test_support::execution_plan(root.path());
@@ -102,9 +107,24 @@ fn the_record_of_an_agent_the_oom_killer_ended_says_so_without_the_daemon() {
     let mode = Mode::Detached {
         log: root.path().join("log"),
     };
-    let killed = Halt::Killed { oom: true };
-    let path = save_paused_agent(&paths, &plan, &mode, &recovery, &killed, Restorer::User).unwrap();
-    let record = recovery::Record::load(&path).unwrap().unwrap();
+    let path = save_paused_agent(&paths, &plan, &mode, &recovery, stop, Restorer::User).unwrap();
+    recovery::Record::load(&path).unwrap().unwrap()
+}
+
+#[test]
+fn the_record_of_an_agent_the_oom_killer_ended_says_so_without_the_daemon() {
+    let record = saved_record(&Halt::Killed { oom: true });
     assert_eq!(record.cause, Some(StopCause::OomKill));
     assert!(record.oom_killed());
+}
+
+#[test]
+fn the_record_of_a_stop_the_daemon_sent_keeps_its_cause() {
+    let idle = Halt::Protection {
+        recover: true,
+        reason: "idle while the user is away".into(),
+        resumes_when: "an update arrives for it".into(),
+        cause: Some(StopCause::Idle),
+    };
+    assert_eq!(saved_record(&idle).cause, Some(StopCause::Idle));
 }

@@ -167,8 +167,8 @@ pub struct Record {
     /// The earliest time its restore starts, after repeated OOM kills.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub restores_after: Option<crate::time::UnixTime>,
-    /// What ended the agent, when its wrapper ended it unasked, so the stop
-    /// is known even when the daemon never heard of it.
+    /// What ended the agent, as its wrapper saved it, so the stop is known
+    /// even when the daemon never heard of it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<crate::stop_causes::StopCause>,
 }

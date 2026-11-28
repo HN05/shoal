@@ -95,7 +95,7 @@ impl Recovery {
 pub struct Ended<'a> {
     /// The reason `shoal resume` and the restored agent are told.
     pub reason: Option<&'a str>,
-    /// What ended it, when the wrapper ended it unasked.
+    /// What ended it.
     pub cause: Option<shoal_protocol::stop_causes::StopCause>,
 }
 
