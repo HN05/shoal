@@ -46,10 +46,13 @@ SQL_KEYWORD = re.compile(r"\b(?:select|insert|update|delete|from|where|values|jo
                          re.IGNORECASE)
 JOURNAL_SOURCE = re.compile(r"\bjournal_append\s*\(", re.IGNORECASE)
 JSON_OBJECT = re.compile(r"json_object(?=\s*\()", re.IGNORECASE)
-# What SQL reads as no expression: a string, a quoted identifier or a
-# comment, each to the end of the text when it is left open.
-SQL_INERT = re.compile(
-    r"'(?:[^']|'')*(?:'|$)|\"(?:[^\"]|\"\")*(?:\"|$)|`[^`]*(?:`|$)|\[[^\]]*(?:\]|$)"
+# A string, a quoted identifier or a comment, each to the end of the text
+# when it is left open; group `name` is an identifier's word.
+SQL_QUOTED = re.compile(
+    r"'(?:[^']|'')*(?:'|$)"
+    r"|\"(?:(?P<name>\w+)\"|(?:[^\"]|\"\")*(?:\"|$))"
+    r"|`(?:(?P<backticked>\w+)`|[^`]*(?:`|$))"
+    r"|\[(?:(?P<bracketed>\w+)\]|[^\]]*(?:\]|$))"
     r"|--[^\n]*|/\*.*?(?:\*/|$)",
     re.DOTALL)
 # A Rust comment, or a literal with its body as group `raw` or `text`.
@@ -62,7 +65,7 @@ RUST_TOKEN = re.compile(
 RUST_ESCAPE = re.compile(r"\\(x[0-9a-fA-F]{2}|u\{[0-9a-fA-F]{1,6}\}|.)", re.DOTALL)
 # What the escapes that stand for no character of their own stand for; a
 # line continuation is one line break.
-RUST_ESCAPED = {"n": "\n", "r": "\n", "t": " ", "0": " ", "\n": "\n"}
+RUST_ESCAPED = {"n": "\n", "r": "\r", "t": "\t", "0": "\0", "\n": "\n"}
 
 
 @dataclass(frozen=True, order=True)
@@ -83,8 +86,13 @@ def blank(match):
 
 
 def executable(sql):
-    """*sql* with its strings, quoted identifiers and comments blanked."""
-    return SQL_INERT.sub(blank, sql)
+    """*sql* with its strings and comments blanked, and each quoted
+    identifier that is a word left as that word, since SQLite calls
+    `"json_extract"(...)` as it calls `json_extract(...)`."""
+    def unquoted(match):
+        name = match.group("name") or match.group("backticked") or match.group("bracketed")
+        return f" {name} " if name else blank(match)
+    return SQL_QUOTED.sub(unquoted, sql)
 
 
 def call_end(sql, start):
@@ -120,24 +128,36 @@ def sql_problems(sql, path, line_of, statement=True):
 
 
 def rust_literals(source):
-    """(offset, text) of each string literal in Rust *source*, outside
-    comments."""
+    """(text, offsets) of each string literal in Rust *source*, outside
+    comments: its text with each escape decoded, and the offset in *source*
+    of each character of that text."""
     for token in RUST_TOKEN.finditer(source):
         if token.group("raw") is not None:
-            yield token.start("raw"), token.group("raw")
+            start = token.start("raw")
+            yield token.group("raw"), range(start, token.end("raw"))
         elif token.group("text") is not None:
-            yield token.start("text"), RUST_ESCAPE.sub(unescaped, token.group("text"))
+            yield decoded(token.group("text"), token.start("text"))
 
 
-def unescaped(escape):
-    """The character the Rust *escape* stands for, after spaces that pad it
-    to the escape's length, so that offsets stay."""
-    code = escape.group(1)
+def decoded(body, start):
+    """(text, offsets) of the body of a Rust string literal at *start*."""
+    text, offsets, at = [], [], 0
+    for escape in RUST_ESCAPE.finditer(body):
+        text.append(body[at:escape.start()])
+        offsets.extend(range(start + at, start + escape.start()))
+        text.append(escaped(escape.group(1)))
+        offsets.append(start + escape.start())
+        at = escape.end()
+    text.append(body[at:])
+    offsets.extend(range(start + at, start + len(body)))
+    return "".join(text), offsets
+
+
+def escaped(code):
+    """The character the Rust escape `\\{code}` stands for."""
     if code[0] in "xu" and len(code) > 1:
-        character = chr(int(code.strip("xu{}"), 16))
-    else:
-        character = RUST_ESCAPED.get(code, code)
-    return " " * (len(escape.group(0)) - 1) + character
+        return chr(int(code.strip("xu{}"), 16))
+    return RUST_ESCAPED.get(code, code)
 
 
 def file_problems(path, text):
@@ -146,8 +166,8 @@ def file_problems(path, text):
         return text.count("\n", 0, offset) + 1
     if path.endswith(".sql"):
         return sql_problems(text, path, line_at)
-    return [problem for start, body in rust_literals(text)
-            for problem in sql_problems(body, path, lambda offset, start=start: line_at(start + offset),
+    return [problem for body, offsets in rust_literals(text)
+            for problem in sql_problems(body, path, lambda at, offsets=offsets: line_at(offsets[at]),
                                         statement=False)]
 
 

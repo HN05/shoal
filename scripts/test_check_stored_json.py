@@ -66,6 +66,20 @@ class CheckStoredJsonTests(unittest.TestCase):
         self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract"),
                                         ("crates/core/src/lib.rs", 2, "json_set")])
 
+    def test_an_escape_inside_a_name_reads_as_its_character(self):
+        self.write("crates/core/src/lib.rs",
+                   'const Q: &str = "SELECT 1,\\n json_extr\\x61ct(record, \'$.x\') FROM t";\n')
+        self.assertEqual(self.found(), [("crates/core/src/lib.rs", 1, "json_extract")])
+
+    def test_a_quoted_function_name_is_still_the_function(self):
+        self.write("crates/core/tests/queries.sql",
+                   "SELECT \"json_extract\"(record, '$.x'), `json_set` (a, '$.b', 1) FROM t;\n"
+                   "SELECT [json_object](), \"a--b\", json_type(a) FROM \"json_tree\";\n")
+        self.assertEqual(self.found(), [("crates/core/tests/queries.sql", 1, "json_extract"),
+                                        ("crates/core/tests/queries.sql", 1, "json_set"),
+                                        ("crates/core/tests/queries.sql", 2, "json_object"),
+                                        ("crates/core/tests/queries.sql", 2, "json_type")])
+
     def test_an_operator_is_refused_whatever_its_right_operand(self):
         self.write("crates/core/tests/queries.sql",
                    "SELECT record ->> ('kind'), record->>key, record -> 0 FROM t;\n")
